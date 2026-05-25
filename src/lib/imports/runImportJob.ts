@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { extractText } from "@/lib/document/extractText";
+import { generateCourseOutline } from "@/lib/ai/generateCourseOutline";
 
 export async function runImportJob(jobId: string) {
   const job = await db.documentImportJob.findUnique({ where: { id: jobId } });
@@ -17,8 +18,25 @@ export async function runImportJob(jobId: string) {
       where: { id: jobId },
       data: {
         extractedText: extracted.text,
+        status: "GENERATING"
+      }
+    });
+    const course = await db.course.findUnique({
+      where: { id: job.courseId },
+      select: { title: true }
+    });
+    const generated = await generateCourseOutline({
+      courseTitle: course?.title ?? job.originalName,
+      documentText: extracted.text,
+      chunks: extracted.chunks
+    });
+    await db.documentImportJob.update({
+      where: { id: jobId },
+      data: {
+        extractedText: extracted.text,
+        generatedOutline: JSON.stringify(generated.outline),
         status: "READY_FOR_REVIEW",
-        warning: "当前任务已完成文档解析，目录生成将在下一阶段接入。"
+        warning: generated.warning ?? null
       }
     });
   } catch (error) {
