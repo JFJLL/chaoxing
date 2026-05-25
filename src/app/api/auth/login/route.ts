@@ -38,7 +38,8 @@ export async function POST(request: NextRequest) {
 
   const accept = request.headers.get("accept") || "";
   if (accept.includes("text/html")) {
-    return NextResponse.redirect(new URL("/space", request.url), 303);
+    const origin = request.headers.get("origin") || request.nextUrl.origin;
+    return NextResponse.redirect(new URL("/space", origin), 303);
   }
 
   return NextResponse.json({ user });

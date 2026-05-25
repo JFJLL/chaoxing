@@ -6,7 +6,8 @@ export async function POST(request: NextRequest) {
 
   const accept = request.headers.get("accept") || "";
   if (accept.includes("text/html")) {
-    return NextResponse.redirect(new URL("/login", request.url), 303);
+    const origin = request.headers.get("origin") || request.nextUrl.origin;
+    return NextResponse.redirect(new URL("/login", origin), 303);
   }
 
   return NextResponse.json({ ok: true });
