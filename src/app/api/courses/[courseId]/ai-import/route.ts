@@ -16,7 +16,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const { courseId } = await context.params;
   await requireCourseOwner(user, courseId);
 
-  const formData = await request.formData();
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return NextResponse.json({ error: "请使用 multipart/form-data 上传文档" }, { status: 400 });
+  }
   const file = formData.get("file");
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "请上传文档" }, { status: 400 });
