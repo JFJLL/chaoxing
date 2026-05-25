@@ -23,7 +23,7 @@ export default async function SpaceLayout({ children }: { children: ReactNode })
       <SpaceHeader user={user} institutionName={institution?.name ?? "个人空间"} />
       <SpaceSidebar user={user} unreadCount={unreadCount} />
       <main className="pt-20 md:pl-[220px]">
-        <div className="min-h-[calc(100vh-80px)] p-4 md:p-6">
+        <div className="min-h-[calc(100vh-80px)] p-4 pb-24 md:p-6">
           <section className="min-h-[calc(100vh-128px)] rounded-lg bg-white p-5 shadow-panel">{children}</section>
         </div>
       </main>
