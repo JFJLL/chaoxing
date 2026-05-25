@@ -1,0 +1,449 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Institution {
+  id        String   @id @default(cuid())
+  name      String
+  branding  String?
+  users     User[]
+  courses   Course[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id                 String               @id @default(cuid())
+  name               String
+  email              String               @unique
+  avatar             String?
+  role               String
+  institutionId      String
+  institution        Institution          @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  ownedCourses       Course[]             @relation("CourseOwner")
+  enrollments        CourseEnrollment[]
+  importJobs         DocumentImportJob[]
+  sentMessages       Message[]            @relation("SentMessages")
+  receivedMessages   Message[]            @relation("ReceivedMessages")
+  groupMembers       GroupMember[]
+  groupPosts         GroupPost[]
+  groupComments      GroupComment[]
+  groupFiles         GroupFile[]
+  notes              Note[]
+  noteTags           NoteTag[]
+  topicFolders       TopicFolder[]
+  topics             Topic[]
+  driveFiles         DriveFile[]
+  driveShares        DriveShare[]
+  plagiarismChecks   PlagiarismCheck[]
+  liveSessions       LiveSession[]         @relation("LiveHost")
+  liveParticipants   LiveParticipant[]
+  liveChatMessages   LiveChatMessage[]
+  announcements      Announcement[]
+  helpTickets        HelpTicket[]
+  createdAuditLogs   AuditLog[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+}
+
+model Course {
+  id             String              @id @default(cuid())
+  title          String
+  description    String?
+  cover          String?
+  term           String?
+  startDate      DateTime?
+  endDate        DateTime?
+  status         String              @default("ACTIVE")
+  ownerId        String
+  owner          User                @relation("CourseOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  institutionId  String
+  institution    Institution         @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  enrollments    CourseEnrollment[]
+  chapters       Chapter[]
+  resources      Resource[]
+  imports        DocumentImportJob[]
+  announcements  Announcement[]
+  helpTickets    HelpTicket[]
+  notes          Note[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+}
+
+model CourseEnrollment {
+  id          String   @id @default(cuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  progress    Int      @default(0)
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([courseId, userId])
+}
+
+model Chapter {
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title     String
+  summary   String?
+  order     Int
+  lessons   Lesson[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Lesson {
+  id                 String     @id @default(cuid())
+  chapterId          String
+  chapter            Chapter    @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  title              String
+  summary            String?
+  order              Int
+  estimatedMinutes   Int?
+  taskPointCompleted Boolean    @default(false)
+  keyPoints          String?
+  activities         String?
+  assessments        String?
+  resources          Resource[]
+  notes              Note[]
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+}
+
+model Resource {
+  id          String     @id @default(cuid())
+  courseId    String
+  course      Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessonId    String?
+  lesson      Lesson?    @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  title       String
+  type        String
+  url         String?
+  driveFileId String?
+  driveFile   DriveFile? @relation(fields: [driveFileId], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model DocumentImportJob {
+  id              String       @id @default(cuid())
+  courseId        String
+  course          Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status          String       @default("QUEUED")
+  originalName    String
+  filePath        String?
+  mimeType        String?
+  extractedText   String?
+  generatedOutline String?
+  warning         String?
+  errorMessage    String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model InviteCode {
+  id        String         @id @default(cuid())
+  code      String         @unique
+  kind      String
+  targetId  String
+  expiresAt DateTime?
+  maxUses   Int?
+  usedCount Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model TopicFolder {
+  id        String        @id @default(cuid())
+  title     String
+  parentId  String?
+  parent    TopicFolder?  @relation("TopicFolderTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  TopicFolder[] @relation("TopicFolderTree")
+  topics    Topic[]
+  ownerId   String
+  owner     User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  deletedAt DateTime?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model Topic {
+  id          String          @id @default(cuid())
+  title       String
+  description String?
+  folderId    String?
+  folder      TopicFolder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  ownerId     String
+  owner       User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  status      String          @default("DRAFT")
+  sections    TopicSection[]
+  resources   TopicResource[]
+  deletedAt   DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model TopicSection {
+  id        String   @id @default(cuid())
+  topicId   String
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  order     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TopicResource {
+  id          String     @id @default(cuid())
+  topicId     String
+  topic       Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  title       String
+  url         String?
+  driveFileId String?
+  driveFile   DriveFile? @relation(fields: [driveFileId], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Message {
+  id                  String   @id @default(cuid())
+  senderId            String
+  sender              User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId          String
+  receiver            User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  subject             String
+  body                String
+  readAt              DateTime?
+  archivedAt          DateTime?
+  deletedBySenderAt   DateTime?
+  deletedByReceiverAt DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Group {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  isOpen      Boolean       @default(true)
+  members     GroupMember[]
+  posts       GroupPost[]
+  files       GroupFile[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model GroupMember {
+  id        String   @id @default(cuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("member")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([groupId, userId])
+}
+
+model GroupPost {
+  id        String         @id @default(cuid())
+  groupId   String
+  group     Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  comments  GroupComment[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model GroupComment {
+  id        String    @id @default(cuid())
+  postId    String
+  post      GroupPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model GroupFile {
+  id          String     @id @default(cuid())
+  groupId     String
+  group       Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  uploaderId  String
+  uploader    User       @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  driveFileId String?
+  driveFile   DriveFile? @relation(fields: [driveFileId], references: [id], onDelete: SetNull)
+  title       String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Note {
+  id        String    @id @default(cuid())
+  ownerId   String
+  owner     User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  courseId  String?
+  course    Course?   @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  lessonId  String?
+  lesson    Lesson?   @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  title     String
+  body      String
+  tags      NoteTag[]
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model NoteTag {
+  id        String   @id @default(cuid())
+  noteId    String
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DriveFile {
+  id             String          @id @default(cuid())
+  ownerId         String
+  owner           User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  parentId        String?
+  parent          DriveFile?      @relation("DriveTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children        DriveFile[]     @relation("DriveTree")
+  name            String
+  kind            String
+  mimeType        String?
+  size            Int             @default(0)
+  path            String?
+  deletedAt       DateTime?
+  shares          DriveShare[]
+  resources       Resource[]
+  topicResources  TopicResource[]
+  groupFiles      GroupFile[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model DriveShare {
+  id          String    @id @default(cuid())
+  fileId      String
+  file        DriveFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  ownerId     String
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  code        String    @unique
+  expiresAt   DateTime?
+  accessCount Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model PlagiarismCheck {
+  id            String            @id @default(cuid())
+  ownerId        String
+  owner          User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title          String
+  filePath       String?
+  status         String            @default("QUEUED")
+  similarity     Int               @default(0)
+  riskLevel      String?
+  reportJson     String?
+  errorMessage   String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+model LiveSession {
+  id           String             @id @default(cuid())
+  title        String
+  description  String?
+  hostId       String
+  host         User               @relation("LiveHost", fields: [hostId], references: [id], onDelete: Cascade)
+  status       String             @default("SCHEDULED")
+  startsAt     DateTime?
+  endedAt      DateTime?
+  participants LiveParticipant[]
+  messages     LiveChatMessage[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+}
+
+model LiveParticipant {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   LiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime?
+  leftAt    DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([sessionId, userId])
+}
+
+model LiveChatMessage {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   LiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model HelpTicket {
+  id        String   @id @default(cuid())
+  courseId  String?
+  course    Course?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject   String
+  body      String
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  metadata  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
