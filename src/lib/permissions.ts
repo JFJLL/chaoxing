@@ -11,6 +11,10 @@ export function requireTeacher(user: SessionUser) {
   }
 }
 
+export function assertTeacher(user: SessionUser) {
+  requireTeacher(user);
+}
+
 export async function requireCourseAccess(user: SessionUser, courseId: string) {
   const course = await db.course.findFirst({
     where: {

@@ -1,0 +1,88 @@
+"use client";
+
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+
+export function NewCourseDialog() {
+  const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const router = useRouter();
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setSubmitting(true);
+    setError("");
+
+    const response = await fetch("/api/courses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: form.get("title"),
+        coverStyle: form.get("coverStyle"),
+        startsAt: form.get("startsAt") || undefined,
+        endsAt: form.get("endsAt") || undefined
+      })
+    });
+
+    setSubmitting(false);
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      setError(body?.error ?? "新建课程失败");
+      return;
+    }
+
+    setOpen(false);
+    router.refresh();
+  }
+
+  return (
+    <>
+      <Button type="button" onClick={() => setOpen(true)}>
+        <Plus className="h-4 w-4" />
+        新建课程
+      </Button>
+      <Dialog open={open} title="新建课程" onClose={() => setOpen(false)}>
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700">课程名称</span>
+            <Input name="title" required minLength={2} placeholder="请输入课程名称" className="w-full" />
+          </label>
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700">封面风格</span>
+            <select name="coverStyle" className="h-10 w-full rounded-md border border-[var(--cx-border)] bg-white px-3 text-sm">
+              <option value="ai">AI</option>
+              <option value="document">文档</option>
+              <option value="tool">工具</option>
+              <option value="plain">素色</option>
+            </select>
+          </label>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-slate-700">开始日期</span>
+              <Input name="startsAt" type="date" className="w-full" />
+            </label>
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-slate-700">结束日期</span>
+              <Input name="endsAt" type="date" className="w-full" />
+            </label>
+          </div>
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+              取消
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "创建中" : "创建"}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+    </>
+  );
+}
