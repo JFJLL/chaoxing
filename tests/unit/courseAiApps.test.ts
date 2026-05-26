@@ -1,0 +1,63 @@
+import { describe, expect, it } from "vitest";
+import { courseAiApps, enabledCourseAiAppTypes, getCourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
+import { generateCourseAiArtifact } from "@/lib/courseWorkspace/generateAiArtifact";
+import type { AiCoursewarePayload, AiLessonPlanPayload, AiPaperPayload, AiQuestionPayload, CourseAiAppType } from "@/types/courseWorkspace";
+
+const appTypes: CourseAiAppType[] = ["question_generation", "lesson_plan", "courseware", "paper_assembly"];
+
+const input = {
+  courseTitle: "功能体验课",
+  chapters: [
+    {
+      title: "第一章 平台导览",
+      lessons: [
+        { title: "个人空间导航", summary: "认识首页、课程、收件箱和云盘。" },
+        { title: "课程任务点", summary: "理解章节、课时、资料和任务点完成状态。" }
+      ]
+    }
+  ]
+};
+
+describe("course AI apps", () => {
+  it("maps each enabled app type to one definition", () => {
+    expect(enabledCourseAiAppTypes.sort()).toEqual(appTypes.sort());
+    for (const appType of appTypes) {
+      const matches = courseAiApps.filter((app) => app.appType === appType);
+      expect(matches).toHaveLength(1);
+      expect(getCourseAiAppDefinition(appType).enabled).toBe(true);
+    }
+  });
+
+  it("generates question payloads", () => {
+    const payload = generateCourseAiArtifact({ ...input, appType: "question_generation" }) as AiQuestionPayload;
+    expect(payload.questions.length).toBeGreaterThanOrEqual(5);
+    expect(payload.questions[0]?.stem).toContain("个人空间导航");
+  });
+
+  it("generates lesson plan payloads", () => {
+    const payload = generateCourseAiArtifact({ ...input, appType: "lesson_plan" }) as AiLessonPlanPayload;
+    expect(payload.objectives.length).toBeGreaterThan(0);
+    expect(payload.teachingProcess.map((phase) => phase.phase)).toContain("实践");
+  });
+
+  it("generates courseware payloads", () => {
+    const payload = generateCourseAiArtifact({ ...input, appType: "courseware" }) as AiCoursewarePayload;
+    expect(payload.slides.length).toBeGreaterThanOrEqual(5);
+    expect(payload.slides[0]?.title).toBe("功能体验课");
+  });
+
+  it("generates paper assembly payloads", () => {
+    const payload = generateCourseAiArtifact({ ...input, appType: "paper_assembly" }) as AiPaperPayload;
+    expect(payload.title).toContain("功能体验课");
+    expect(payload.sections.length).toBeGreaterThan(0);
+  });
+
+  it("throws a readable error for unsupported app types", () => {
+    expect(() =>
+      generateCourseAiArtifact({
+        ...input,
+        appType: "unknown" as CourseAiAppType
+      })
+    ).toThrow("不支持的 AI 应用类型");
+  });
+});

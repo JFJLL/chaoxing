@@ -38,6 +38,7 @@ model User {
   groupFiles         GroupFile[]
   notes              Note[]
   noteTags           NoteTag[]
+  courseAiArtifacts  CourseAiArtifact[]
   topicFolders       TopicFolder[]
   topics             Topic[]
   driveFiles         DriveFile[]
@@ -72,6 +73,7 @@ model Course {
   chapters       Chapter[]
   resources      Resource[]
   imports        DocumentImportJob[]
+  aiArtifacts    CourseAiArtifact[]
   announcements  Announcement[]
   helpTickets    HelpTicket[]
   notes          Note[]
@@ -164,6 +166,20 @@ model DocumentImportJob {
   errorMessage    String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
+}
+
+model CourseAiArtifact {
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appType   String
+  title     String
+  prompt    String?
+  payload   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model InviteCode {

@@ -1,5 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/lib/passwords";
+import { generateCourseAiArtifact } from "../src/lib/courseWorkspace/generateAiArtifact";
+import type { CourseAiAppType } from "../src/types/courseWorkspace";
 
 const prisma = new PrismaClient();
 
@@ -59,6 +61,7 @@ async function reset() {
   await prisma.topicFolder.deleteMany();
   await prisma.inviteCode.deleteMany();
   await prisma.documentImportJob.deleteMany();
+  await prisma.courseAiArtifact.deleteMany();
   await prisma.helpTicket.deleteMany();
   await prisma.announcement.deleteMany();
   await prisma.lesson.deleteMany();
@@ -419,6 +422,49 @@ async function main() {
       driveFileId: driveFile.id
     }
   });
+
+  const functionalCourseContext = await prisma.course.findUniqueOrThrow({
+    where: { id: functionalCourse.id },
+    include: {
+      chapters: {
+        orderBy: { order: "asc" },
+        include: { lessons: { orderBy: { order: "asc" } } }
+      }
+    }
+  });
+
+  const seededAiApps: Array<{ appType: CourseAiAppType; title: string; prompt: string }> = [
+    { appType: "question_generation", title: "AI出题：平台导览基础题", prompt: "围绕平台导览生成课堂练习题" },
+    { appType: "lesson_plan", title: "AI教案：课程任务点教学设计", prompt: "设计一次课程任务点讲授与实践活动" },
+    { appType: "courseware", title: "AI课件：教师建课流程", prompt: "生成教师建课流程课件" },
+    { appType: "paper_assembly", title: "AI组卷：功能体验课阶段测验", prompt: "组装覆盖平台导览和教师建课的试卷" }
+  ];
+
+  for (const app of seededAiApps) {
+    const payload = generateCourseAiArtifact({
+      appType: app.appType,
+      courseTitle: functionalCourseContext.title,
+      chapters: functionalCourseContext.chapters.map((chapter) => ({
+        title: chapter.title,
+        lessons: chapter.lessons.map((lesson) => ({
+          title: lesson.title,
+          summary: lesson.summary
+        }))
+      })),
+      prompt: app.prompt
+    });
+
+    await prisma.courseAiArtifact.create({
+      data: {
+        courseId: functionalCourse.id,
+        userId: teacher.id,
+        appType: app.appType,
+        title: app.title,
+        prompt: app.prompt,
+        payload: JSON.stringify(payload)
+      }
+    });
+  }
 
   await prisma.driveShare.create({
     data: {
