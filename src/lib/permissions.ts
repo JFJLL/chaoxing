@@ -20,9 +20,9 @@ export async function requireCourseAccess(user: SessionUser, courseId: string) {
     where: {
       id: courseId,
       OR: [
+        ...(user.role === "ADMIN" ? [{}] : []),
         { ownerId: user.id },
-        { enrollments: { some: { userId: user.id } } },
-        { institutionId: user.institutionId, status: "ACTIVE" }
+        { enrollments: { some: { userId: user.id } } }
       ]
     }
   });
@@ -34,12 +34,25 @@ export async function requireCourseAccess(user: SessionUser, courseId: string) {
   return course;
 }
 
+export async function requireCourseEnrollmentOrOwner(user: SessionUser, courseId: string) {
+  return requireCourseAccess(user, courseId);
+}
+
+export function requireAdminOrOwner(user: SessionUser, ownerId: string) {
+  if (user.role !== "ADMIN" && user.id !== ownerId) {
+    throw new Error("无权管理资源");
+  }
+}
+
 export async function requireCourseOwner(user: SessionUser, courseId: string) {
   requireTeacher(user);
   const course = await db.course.findFirst({
     where: {
       id: courseId,
-      ownerId: user.id
+      OR: [
+        ...(user.role === "ADMIN" ? [{}] : []),
+        { ownerId: user.id }
+      ]
     }
   });
 

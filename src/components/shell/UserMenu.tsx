@@ -1,7 +1,19 @@
+"use client";
+
 import { ChevronDown, LogOut, Repeat2, UserCog } from "lucide-react";
+import type { FormEvent } from "react";
 import type { SessionUser } from "@/lib/auth";
 
 export function UserMenu({ user }: { user: SessionUser }) {
+  async function handleLogout(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      headers: { accept: "application/json" }
+    });
+    window.location.assign("/login");
+  }
+
   return (
     <div className="group relative">
       <button
@@ -24,7 +36,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
           <Repeat2 className="h-4 w-4" />
           切换单位/角色
         </button>
-        <form action="/api/auth/logout" method="post">
+        <form action="/api/auth/logout" method="post" onSubmit={handleLogout}>
           <button type="submit" className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">
             <LogOut className="h-4 w-4" />
             退出空间
