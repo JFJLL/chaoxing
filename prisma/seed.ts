@@ -75,8 +75,8 @@ async function main() {
 
   const institution = await prisma.institution.create({
     data: {
-      name: "北京市东城区第一图书馆",
-      branding: "chaoxing-local"
+      name: "文化产院管理学院",
+      branding: "yimei-local"
     }
   });
 

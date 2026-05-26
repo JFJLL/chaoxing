@@ -23,7 +23,8 @@ export default async function LoginPage({ searchParams }: PageProps) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
       <section className="w-full max-w-md rounded-lg bg-white p-8 shadow-panel">
-        <p className="text-sm text-slate-500">账号登录</p>
+        <img src="/logo.png" alt="平台 Logo" className="h-12 w-auto object-contain" />
+        <p className="mt-6 text-sm text-slate-500">账号登录</p>
         <h1 className="mt-2 text-2xl font-semibold text-slate-900">登录个人空间</h1>
         <p className="mt-2 text-sm text-slate-500">使用邮箱和密码访问课程、专题、小组与个人空间。</p>
         <form action="/api/auth/login" method="post" className="mt-6 space-y-4">
@@ -36,7 +37,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
               name="email"
               type="email"
               autoComplete="email"
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-chaoxing-sidebar focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-blue-100"
               placeholder="name@example.local"
               required
             />
@@ -50,7 +51,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
               name="password"
               type="password"
               autoComplete="current-password"
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-chaoxing-sidebar focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-blue-100"
               placeholder="请输入密码"
               required
             />
@@ -62,7 +63,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
           ) : null}
           <button
             type="submit"
-            className="w-full rounded-md bg-chaoxing-sidebar px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700"
+            className="w-full rounded-md bg-yimei-sidebar px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700"
           >
             登录
           </button>

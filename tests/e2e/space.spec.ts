@@ -3,7 +3,7 @@ import { loginAs } from "./helpers";
 
 test("shell navigation and course/topic entry render", async ({ page }) => {
   await loginAs(page, "李素艳");
-  await expect(page.getByText("北京市东城区第一图书馆")).toBeVisible();
+  await expect(page.getByText("文化产院管理学院")).toBeVisible();
   await page.goto("/space/courses");
   await expect(page.getByRole("link", { name: "我学的课" })).toBeVisible();
   await expect(page.getByRole("link", { name: "我教的课" })).toBeVisible();

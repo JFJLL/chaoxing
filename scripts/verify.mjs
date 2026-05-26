@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 const env = {
   ...process.env,
   DATABASE_URL: process.env.DATABASE_URL || "file:./dev.db",
-  SESSION_SECRET: process.env.SESSION_SECRET || "local-test-secret-for-chaoxing"
+  SESSION_SECRET: process.env.SESSION_SECRET || "local-test-secret-for-yimei"
 };
 
 const commands = [

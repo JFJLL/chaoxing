@@ -5,7 +5,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        chaoxing: {
+        yimei: {
           sidebar: "#1f5ea8",
           sidebarActive: "#2d74c8",
           shell: "#eef3f8",
