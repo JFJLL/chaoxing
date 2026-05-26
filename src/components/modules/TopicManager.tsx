@@ -9,6 +9,9 @@ export function TopicManager({ folders, topics }: { folders: Array<{ id: string;
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [q, setQ] = useState("");
+  const visibleFolders = folders.filter((folder) => folder.title.toLowerCase().includes(q.toLowerCase()));
+  const visibleTopics = topics.filter((topic) => `${topic.title} ${topic.description ?? ""}`.toLowerCase().includes(q.toLowerCase()));
   async function create(type: "folder" | "topic") {
     await fetch("/api/topics", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type, title, description }) });
     setTitle("");
@@ -19,8 +22,20 @@ export function TopicManager({ folders, topics }: { folders: Array<{ id: string;
     await fetch(`/api/topics/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
     router.refresh();
   }
+  async function edit(topic: { id: string; title: string; description: string | null; status: string }) {
+    const nextTitle = window.prompt("专题标题", topic.title);
+    if (!nextTitle) return;
+    const nextDescription = window.prompt("专题描述", topic.description ?? "") ?? topic.description ?? "";
+    await fetch(`/api/topics/${topic.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: nextTitle, description: nextDescription }) });
+    router.refresh();
+  }
+  async function remove(id: string) {
+    await fetch(`/api/topics/${id}`, { method: "DELETE" });
+    router.refresh();
+  }
   return (
     <div className="space-y-5">
+      <Input value={q} onChange={(event) => setQ(event.target.value)} placeholder="搜索专题或文件夹" />
       <div className="grid gap-3 md:grid-cols-[1fr_2fr_auto_auto]">
         <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="专题或文件夹名称" />
         <Textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="专题内容" className="min-h-10" />
@@ -30,12 +45,16 @@ export function TopicManager({ folders, topics }: { folders: Array<{ id: string;
       <section>
         <h2 className="font-semibold">全部专题</h2>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
-          {folders.map((folder) => <article key={folder.id} className="rounded-md border border-[var(--cx-border)] p-3">文件夹：{folder.title}</article>)}
-          {topics.map((topic) => (
+          {visibleFolders.map((folder) => <article key={folder.id} className="rounded-md border border-[var(--cx-border)] p-3">文件夹：{folder.title}<Button type="button" variant="danger" className="ml-3 h-8" onClick={() => remove(folder.id)}>删除</Button></article>)}
+          {visibleTopics.map((topic) => (
             <article key={topic.id} className="rounded-md border border-[var(--cx-border)] p-3">
               <p className="font-medium">{topic.title}</p>
               <p className="mt-1 text-sm text-slate-500">{topic.description}</p>
-              <Button type="button" variant="secondary" className="mt-3 h-8" onClick={() => publish(topic.id, topic.status === "PUBLISHED" ? "DRAFT" : "PUBLISHED")}>{topic.status === "PUBLISHED" ? "取消发布" : "发布"}</Button>
+              <div className="mt-3 flex gap-2">
+                <Button type="button" variant="secondary" className="h-8" onClick={() => edit(topic)}>编辑</Button>
+                <Button type="button" variant="secondary" className="h-8" onClick={() => publish(topic.id, topic.status === "PUBLISHED" ? "DRAFT" : "PUBLISHED")}>{topic.status === "PUBLISHED" ? "取消发布" : "发布"}</Button>
+                <Button type="button" variant="danger" className="h-8" onClick={() => remove(topic.id)}>删除</Button>
+              </div>
             </article>
           ))}
         </div>
