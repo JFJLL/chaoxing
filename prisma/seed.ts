@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { hashPassword } from "../src/lib/passwords";
 
 const prisma = new PrismaClient();
 
@@ -78,11 +79,15 @@ async function main() {
     }
   });
 
+  const teacherPassword = await hashPassword("Teacher@2026");
+  const studentPassword = await hashPassword("Student@2026");
+
   const [teacher, secondTeacher, student] = await Promise.all([
     prisma.user.create({
       data: {
         name: "李素艳",
         email: "li.suyan@example.local",
+        passwordHash: teacherPassword,
         avatar: "/avatars/li-suyan.png",
         role: UserRole.TEACHER,
         institutionId: institution.id
@@ -92,6 +97,7 @@ async function main() {
       data: {
         name: "王一帆",
         email: "wang.yifan@example.local",
+        passwordHash: teacherPassword,
         avatar: "/avatars/wang-yifan.png",
         role: UserRole.TEACHER,
         institutionId: institution.id
@@ -101,6 +107,7 @@ async function main() {
       data: {
         name: "学习者",
         email: "student@example.local",
+        passwordHash: studentPassword,
         avatar: "/avatars/student.png",
         role: UserRole.STUDENT,
         institutionId: institution.id
@@ -547,6 +554,9 @@ async function main() {
   console.log(
     "Seeded courses:",
     [aiCourse.title, functionalCourse.title, practiceCourse.title, "文化市场营销学"].join(", ")
+  );
+  console.log(
+    "Dev credentials:\n- li.suyan@example.local / Teacher@2026\n- wang.yifan@example.local / Teacher@2026\n- student@example.local / Student@2026"
   );
 }
 

@@ -9,10 +9,15 @@ export type SessionUser = {
   institutionId: string;
 };
 
-const SESSION_COOKIE = "cx_session";
+export const SESSION_COOKIE = "cx_session";
 
 function getSecret() {
-  return process.env.SESSION_SECRET || "local-dev-secret";
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    throw new Error("SESSION_SECRET is required");
+  }
+
+  return secret;
 }
 
 function sign(payload: string) {
@@ -22,6 +27,20 @@ function sign(payload: string) {
 function encodeSession(user: SessionUser) {
   const payload = Buffer.from(JSON.stringify(user), "utf8").toString("base64url");
   return `${payload}.${sign(payload)}`;
+}
+
+export function createSessionCookieValue(user: SessionUser) {
+  return encodeSession(user);
+}
+
+export function getSessionCookieOptions(maxAge = 60 * 60 * 24 * 7) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge
+  };
 }
 
 function decodeSession(value: string): SessionUser | null {
@@ -60,20 +79,10 @@ export async function requireUser(): Promise<SessionUser> {
 
 export async function setSession(user: SessionUser): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, encodeSession(user), {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7
-  });
+  cookieStore.set(SESSION_COOKIE, encodeSession(user), getSessionCookieOptions());
 }
 
 export async function clearSession(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0
-  });
+  cookieStore.set(SESSION_COOKIE, "", getSessionCookieOptions(0));
 }
