@@ -28,6 +28,7 @@ model User {
   institution        Institution          @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   ownedCourses       Course[]             @relation("CourseOwner")
   enrollments        CourseEnrollment[]
+  courseFolders      CourseFolder[]
   importJobs         DocumentImportJob[]
   sentMessages       Message[]            @relation("SentMessages")
   receivedMessages   Message[]            @relation("ReceivedMessages")
@@ -65,6 +66,8 @@ model Course {
   owner          User                @relation("CourseOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   institutionId  String
   institution    Institution         @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  folderId       String?
+  folder         CourseFolder?       @relation(fields: [folderId], references: [id], onDelete: SetNull)
   enrollments    CourseEnrollment[]
   chapters       Chapter[]
   resources      Resource[]
@@ -74,6 +77,16 @@ model Course {
   notes          Note[]
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
+}
+
+model CourseFolder {
+  id        String   @id @default(cuid())
+  title     String
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  courses   Course[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model CourseEnrollment {

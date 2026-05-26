@@ -1,10 +1,10 @@
-import { FolderPlus, Plus } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { Button } from "@/components/ui/Button";
 import { CourseTabs } from "@/components/courses/CourseTabs";
 import { CourseCard } from "@/components/courses/CourseCard";
 import { NewCourseDialog } from "@/components/courses/NewCourseDialog";
+import { AddCourseDialog } from "@/components/courses/AddCourseDialog";
+import { CourseFolderDialog } from "@/components/courses/CourseFolderDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 type PageProps = {
@@ -45,15 +45,9 @@ export default async function CoursesPage({ searchParams }: PageProps) {
           {activeTab === "taught" ? (
             <NewCourseDialog />
           ) : (
-            <Button type="button">
-              <Plus className="h-4 w-4" />
-              添加课程
-            </Button>
+            <AddCourseDialog />
           )}
-          <Button type="button" variant="secondary">
-            <FolderPlus className="h-4 w-4" />
-            新建文件夹
-          </Button>
+          <CourseFolderDialog />
         </div>
       </header>
 

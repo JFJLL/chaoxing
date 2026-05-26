@@ -65,6 +65,7 @@ async function reset() {
   await prisma.chapter.deleteMany();
   await prisma.courseEnrollment.deleteMany();
   await prisma.course.deleteMany();
+  await prisma.courseFolder.deleteMany();
   await prisma.user.deleteMany();
   await prisma.institution.deleteMany();
 }

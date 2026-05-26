@@ -3,8 +3,9 @@ import { Bot, Hammer, Megaphone } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseAccess, isTeacher } from "@/lib/permissions";
-import { LinkButton, Button } from "@/components/ui/Button";
+import { LinkButton } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { CoursePublishButton } from "@/components/courses/CoursePublishButton";
 
 type PageProps = {
   params: Promise<{ courseId: string }>;
@@ -50,9 +51,7 @@ export default async function CourseOverviewPage({ params }: PageProps) {
                 <Bot className="h-4 w-4" />
                 AI 文档建课
               </LinkButton>
-              <Button type="button" variant="secondary">
-                发布课程
-              </Button>
+              <CoursePublishButton courseId={course.id} status={course.status} />
             </div>
           ) : null}
         </div>
