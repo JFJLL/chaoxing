@@ -20,7 +20,12 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 export async function PUT(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { sessionId } = await context.params;
-  const body = (await request.json()) as { action?: "start" | "end" | "join" | "leave"; title?: string; description?: string };
+  let body: { action?: "start" | "end" | "join" | "leave"; title?: string; description?: string };
+  try {
+    body = (await request.json()) as { action?: "start" | "end" | "join" | "leave"; title?: string; description?: string };
+  } catch {
+    return NextResponse.json({ error: "请求内容无效" }, { status: 400 });
+  }
   if (body.action === "join") {
     await db.liveParticipant.upsert({ where: { sessionId_userId: { sessionId, userId: user.id } }, update: { joinedAt: new Date() }, create: { sessionId, userId: user.id, joinedAt: new Date() } });
     return NextResponse.json({ ok: true });

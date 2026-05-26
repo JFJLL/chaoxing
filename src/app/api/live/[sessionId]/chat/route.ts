@@ -8,7 +8,13 @@ type RouteContext = { params: Promise<{ sessionId: string }> };
 export async function POST(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { sessionId } = await context.params;
-  const body = (await request.json()) as { body: string };
+  let body: { body?: string };
+  try {
+    body = (await request.json()) as { body?: string };
+  } catch {
+    return NextResponse.json({ error: "请求内容无效" }, { status: 400 });
+  }
+  if (!body.body) return NextResponse.json({ error: "请输入聊天内容" }, { status: 400 });
   try {
     await requireLiveParticipantOrHost(user, sessionId);
   } catch {

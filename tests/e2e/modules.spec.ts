@@ -1,63 +1,90 @@
 import { expect, test } from "@playwright/test";
-import { firstTaughtCourseId, loginAs } from "./helpers";
+import { loginAs } from "./helpers";
 
-test("personal-space secondary modules have working local flows", async ({ page }) => {
+test("personal-space secondary modules work through UI flows", async ({ page }) => {
   await loginAs(page, "李素艳");
-  const result = await page.evaluate(async () => {
-    const json = async (url: string, options: RequestInit = {}) => {
-      const response = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
-      return { ok: response.ok, body: await response.json().catch(() => null) };
-    };
-    const contacts = await json("/api/contacts");
-    const student = contacts.body.contacts.find((contact: { name: string }) => contact.name === "学习者");
-    const courses = await json("/api/courses?tab=taught");
-    const course = courses.body.courses[0];
-    const invite = await json("/api/invite", { method: "POST", body: JSON.stringify({ code: "GROUP2026" }) });
-    const topic = await json("/api/topics", { method: "POST", body: JSON.stringify({ type: "topic", title: "E2E 专题", description: "内容" }) });
-    const inbox = await json("/api/inbox", { method: "POST", body: JSON.stringify({ receiverId: student.id, subject: "E2E 消息", body: "内容" }) });
-    const groups = await json("/api/groups");
-    const group = groups.body.groups[0];
-    const post = await json(`/api/groups/${group.id}/posts`, { method: "POST", body: JSON.stringify({ title: "E2E 帖子", body: "内容" }) });
-    const comment = await json(`/api/groups/${group.id}/posts`, { method: "POST", body: JSON.stringify({ postId: post.body.post.id, body: "评论" }) });
-    const note = await json("/api/notes", { method: "POST", body: JSON.stringify({ title: "E2E 笔记", body: "内容", tags: ["E2E"], courseId: course.id }) });
-    const driveForm = new FormData();
-    driveForm.set("file", new File(["云盘内容"], "e2e-drive.md", { type: "text/markdown" }));
-    const driveUpload = await fetch("/api/drive", { method: "POST", body: driveForm });
-    const driveBody = await driveUpload.json();
-    const share = await json(`/api/drive/${driveBody.file.id}/share`, { method: "POST", body: "{}" });
-    const attach = await json("/api/drive", { method: "POST", body: JSON.stringify({ driveFileId: driveBody.file.id, courseId: course.id }) });
-    const plagForm = new FormData();
-    plagForm.set("file", new File(["活动目标 用户分层 宣传渠道 复盘指标"], "e2e-plag.md", { type: "text/markdown" }));
-    const plag = await fetch("/api/plagiarism", { method: "POST", body: plagForm });
-    const plagBody = await plag.json();
-    const live = await json("/api/live", { method: "POST", body: JSON.stringify({ title: "E2E 直播" }) });
-    const start = await json(`/api/live/${live.body.session.id}`, { method: "PUT", body: JSON.stringify({ action: "start" }) });
-    const chat = await json(`/api/live/${live.body.session.id}/chat`, { method: "POST", body: JSON.stringify({ body: "消息" }) });
-    const end = await json(`/api/live/${live.body.session.id}`, { method: "PUT", body: JSON.stringify({ action: "end" }) });
-    return {
-      invite: invite.ok,
-      topic: topic.ok,
-      inbox: inbox.ok,
-      group: post.ok && comment.ok,
-      note: note.ok,
-      contacts: contacts.ok && !!student,
-      drive: driveUpload.ok && share.ok && attach.ok,
-      plagiarism: plag.ok && plagBody.check.status === "COMPLETED",
-      live: live.ok && start.ok && chat.ok && end.ok
-    };
-  });
-  expect(result).toEqual({
-    invite: true,
-    topic: true,
-    inbox: true,
-    group: true,
-    note: true,
-    contacts: true,
-    drive: true,
-    plagiarism: true,
-    live: true
-  });
 
-  const courseId = await firstTaughtCourseId(page);
-  expect(courseId).toBeTruthy();
+  await page.goto("/space/topics");
+  const topicTitle = `UI 专题 ${Date.now()}`;
+  await page.getByPlaceholder("专题或文件夹名称").fill(topicTitle);
+  await page.getByPlaceholder("专题内容").fill("UI 创建专题内容");
+  await page.getByRole("button", { name: "新建专题" }).click();
+  await expect(page.getByText(topicTitle)).toBeVisible();
+
+  await page.goto("/space/inbox");
+  const messageSubject = `UI 消息 ${Date.now()}`;
+  await page.locator("select").first().selectOption({ label: "学习者" });
+  await page.getByPlaceholder("主题").fill(messageSubject);
+  await page.getByPlaceholder("内容").fill("UI 消息内容");
+  await page.getByRole("button", { name: "发送" }).click();
+  await page.getByRole("link", { name: "已发送" }).click();
+  await expect(page.getByText(messageSubject)).toBeVisible();
+
+  await page.goto("/space/groups");
+  const postTitle = `UI 帖子 ${Date.now()}`;
+  await page.getByPlaceholder("帖子标题").first().fill(postTitle);
+  await page.getByPlaceholder("帖子内容").first().fill("UI 帖子内容");
+  await page.getByRole("button", { name: "发布" }).first().click();
+  await expect(page.getByText(postTitle)).toBeVisible();
+
+  await page.goto("/space/notes");
+  const noteTitle = `UI 笔记 ${Date.now()}`;
+  await page.getByPlaceholder("笔记标题").fill(noteTitle);
+  await page.getByPlaceholder("标签，逗号分隔").fill("UI,E2E");
+  await page.getByPlaceholder("笔记内容").fill("UI 笔记内容");
+  await page.getByRole("button", { name: "保存" }).click();
+  await page.getByPlaceholder("搜索笔记").fill(noteTitle);
+  await expect(page.getByText(noteTitle)).toBeVisible();
+  await expect(page.getByText(/UI, E2E|UI,E2E/)).toBeVisible();
+
+  await page.goto("/space/contacts");
+  await page.getByPlaceholder("搜索姓名、邮箱或单位").fill("学习者");
+  await page.getByRole("button", { name: "查看" }).click();
+  await page.getByRole("link", { name: "发消息" }).click();
+  await expect(page).toHaveURL(/\/space\/inbox\?receiverId=/);
+
+  await page.goto("/space/drive");
+  const driveName = `ui-drive-${Date.now()}.md`;
+  await page.locator("input[type=file]").setInputFiles({
+    name: driveName,
+    mimeType: "text/markdown",
+    buffer: Buffer.from("云盘 UI 内容")
+  });
+  await page.getByRole("button", { name: "上传" }).click();
+  await expect(page.getByText(driveName)).toBeVisible();
+  await page.getByRole("button", { name: "分享" }).first().click();
+  await expect(page.getByText(/分享码/)).toBeVisible();
+  await page.getByRole("button", { name: "添加到课程资料" }).first().click();
+
+  await page.goto("/space/plagiarism");
+  const plagName = `ui-plag-${Date.now()}.md`;
+  await page.locator("input[type=file]").setInputFiles({
+    name: plagName,
+    mimeType: "text/markdown",
+    buffer: Buffer.from("活动目标 用户分层 宣传渠道 复盘指标")
+  });
+  await page.getByRole("button", { name: "提交检测" }).click();
+  await expect(page.getByText(plagName)).toBeVisible();
+  await expect(page.getByText(/COMPLETED|相似度/).first()).toBeVisible();
+
+  await page.goto("/space/live");
+  const liveTitle = `UI 直播 ${Date.now()}`;
+  await page.getByPlaceholder("直播标题").fill(liveTitle);
+  await page.getByRole("button", { name: "创建直播" }).click();
+  await expect(page.getByText(liveTitle)).toBeVisible();
+  await page.getByRole("button", { name: "开始" }).first().click();
+  await page.getByPlaceholder("聊天消息").first().fill("UI 直播消息");
+  await page.getByRole("button", { name: "发送" }).first().click();
+  await expect(page.getByText("UI 直播消息")).toBeVisible();
+  await page.getByRole("button", { name: "结束" }).first().click();
+  await expect(page.getByText("ENDED").first()).toBeVisible();
+});
+
+test("students cannot use teacher-only course controls", async ({ page }) => {
+  await loginAs(page, "学习者");
+  await page.goto("/space/courses");
+  await expect(page.getByRole("link", { name: /AI 文档建课/ })).toHaveCount(0);
+  await page.getByRole("link", { name: /进入课程/ }).first().click();
+  await expect(page.getByRole("link", { name: /AI 文档建课/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /课程建设/ })).toHaveCount(0);
 });

@@ -5,13 +5,13 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 15_000 },
   use: {
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: "http://127.0.0.1:3100",
     trace: "on-first-retry"
   },
   webServer: {
-    command: "npm run dev -- --port 3000",
-    url: "http://127.0.0.1:3000/login",
-    reuseExistingServer: true,
+    command: "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && npm run dev -- --port 3100",
+    url: "http://127.0.0.1:3100/login",
+    reuseExistingServer: false,
     timeout: 120_000
   },
   projects: [
