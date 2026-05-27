@@ -17,6 +17,27 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
   const canManage = isTeacher(user) && course.ownerId === user.id;
+  const context = {
+    courseTitle: course.title,
+    chapterCount: course.chapters.length,
+    lessonCount: course.chapters.reduce((sum, chapter) => sum + chapter.lessons.length, 0),
+    resourceCount: course.resources.length,
+    studentCount: course.enrollments.length,
+    announcementCount: course.announcements.length,
+    artifactCounts: {
+      questionGeneration: course.aiArtifacts.filter((artifact) => artifact.appType === "question_generation").length,
+      lessonPlan: course.aiArtifacts.filter((artifact) => artifact.appType === "lesson_plan").length,
+      courseware: course.aiArtifacts.filter((artifact) => artifact.appType === "courseware").length,
+      paperAssembly: course.aiArtifacts.filter((artifact) => artifact.appType === "paper_assembly").length
+    },
+    chapters: course.chapters.map((chapter) => ({ title: chapter.title, lessonCount: chapter.lessons.length })),
+    recentArtifacts: course.aiArtifacts.slice(0, 8).map((artifact) => ({
+      id: artifact.id,
+      title: artifact.title,
+      appType: artifact.appType,
+      createdAt: artifact.createdAt.toISOString()
+    }))
+  };
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="ai-workbench">
@@ -40,7 +61,7 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
             </div>
           </section>
         ) : null}
-        <AiWorkbench courseId={course.id} />
+        <AiWorkbench courseId={course.id} context={context} />
       </div>
     </FanyaCourseShell>
   );

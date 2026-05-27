@@ -31,6 +31,26 @@ test("AI application tab shows requested app cards", async ({ page }) => {
   }
 });
 
+test("AI assistant practice and analytics tabs render local course data", async ({ page }) => {
+  await loginAs(page, "李素艳");
+  await openFirstTaughtCourse(page);
+
+  await page.getByRole("button", { name: "AI助教", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "AI助教" })).toBeVisible();
+  await expect(page.getByText("课程问答助手")).toBeVisible();
+  await expect(page.getByText("课程上下文")).toBeVisible();
+
+  await page.getByRole("button", { name: "AI实践", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "AI实践" })).toBeVisible();
+  await expect(page.getByText("实践任务板")).toBeVisible();
+  await expect(page.getByRole("link", { name: "去 AI出题" })).toBeVisible();
+
+  await page.getByRole("button", { name: "AI学情分析", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "AI学情分析" })).toBeVisible();
+  await expect(page.getByText("AI 产物分布")).toBeVisible();
+  await expect(page.getByText("最近生成")).toBeVisible();
+});
+
 for (const app of [
   { label: "AI出题", preview: "答案：" },
   { label: "AI教案", preview: "教学目标" },
