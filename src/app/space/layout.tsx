@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { SpaceHeader } from "@/components/shell/SpaceHeader";
-import { SpaceSidebar } from "@/components/shell/SpaceSidebar";
+import { SpaceChrome } from "@/components/shell/SpaceChrome";
 
 export default async function SpaceLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
@@ -19,14 +18,8 @@ export default async function SpaceLayout({ children }: { children: ReactNode })
   ]);
 
   return (
-    <div className="min-h-screen bg-[var(--cx-page)]">
-      <SpaceHeader user={user} institutionName={institution?.name ?? "个人空间"} />
-      <SpaceSidebar user={user} unreadCount={unreadCount} />
-      <main className="pt-20 md:pl-[220px]">
-        <div className="min-h-[calc(100vh-80px)] p-4 pb-24 md:p-6">
-          <section className="min-h-[calc(100vh-128px)] rounded-lg bg-white p-5 shadow-panel">{children}</section>
-        </div>
-      </main>
-    </div>
+    <SpaceChrome user={user} institutionName={institution?.name ?? "个人空间"} unreadCount={unreadCount}>
+      {children}
+    </SpaceChrome>
   );
 }
