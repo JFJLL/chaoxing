@@ -29,8 +29,9 @@ describe("course AI apps", () => {
   });
 
   it("generates question payloads", () => {
-    const payload = generateCourseAiArtifact({ ...input, appType: "question_generation" }) as AiQuestionPayload;
-    expect(payload.questions.length).toBeGreaterThanOrEqual(5);
+    const payload = generateCourseAiArtifact({ ...input, appType: "question_generation", prompt: "题型：单选；题量：7；难度：提高" }) as AiQuestionPayload;
+    expect(payload.questions).toHaveLength(7);
+    expect(payload.questions.every((question) => question.type === "single_choice")).toBe(true);
     expect(payload.questions[0]?.stem).toContain("个人空间导航");
   });
 
@@ -41,9 +42,10 @@ describe("course AI apps", () => {
   });
 
   it("generates courseware payloads", () => {
-    const payload = generateCourseAiArtifact({ ...input, appType: "courseware" }) as AiCoursewarePayload;
-    expect(payload.slides.length).toBeGreaterThanOrEqual(5);
+    const payload = generateCourseAiArtifact({ ...input, appType: "courseware", prompt: "页数：9；风格：案例分析" }) as AiCoursewarePayload;
+    expect(payload.slides).toHaveLength(9);
     expect(payload.slides[0]?.title).toBe("功能体验课");
+    expect(payload.slides[0]?.bullets).toContain("案例分析风格");
   });
 
   it("generates paper assembly payloads", () => {

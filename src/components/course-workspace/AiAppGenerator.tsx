@@ -13,6 +13,30 @@ import type {
 import type { CourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
 import { Button } from "@/components/ui/Button";
 
+type GeneratorOptions = {
+  chapter: string;
+  difficulty: string;
+  questionType: string;
+  questionCount: number;
+  lessonMinutes: number;
+  teachingMethod: string;
+  slideCount: number;
+  coursewareStyle: string;
+  paperScore: number;
+};
+
+const defaultOptions: GeneratorOptions = {
+  chapter: "全课程",
+  difficulty: "基础",
+  questionType: "混合",
+  questionCount: 5,
+  lessonMinutes: 65,
+  teachingMethod: "讲授结合实践",
+  slideCount: 8,
+  coursewareStyle: "课堂讲授",
+  paperScore: 100
+};
+
 export type SerializedAiArtifact = {
   id: string;
   appType: string;
@@ -134,6 +158,7 @@ export function AiAppGenerator({
   initialArtifacts: SerializedAiArtifact[];
 }) {
   const [prompt, setPrompt] = useState("");
+  const [options, setOptions] = useState<GeneratorOptions>(defaultOptions);
   const [artifacts, setArtifacts] = useState(initialArtifacts);
   const [selectedId, setSelectedId] = useState(initialArtifacts[0]?.id ?? "");
   const [loading, setLoading] = useState(false);
@@ -141,6 +166,32 @@ export function AiAppGenerator({
 
   const selected = useMemo(() => artifacts.find((artifact) => artifact.id === selectedId) ?? artifacts[0], [artifacts, selectedId]);
   const payload = selected ? parsePayload(selected) : null;
+
+  function updateOption<Key extends keyof GeneratorOptions>(key: Key, value: GeneratorOptions[Key]) {
+    setOptions((current) => ({ ...current, [key]: value }));
+  }
+
+  function structuredPrompt() {
+    const common = [`章节：${options.chapter}`, `难度：${options.difficulty}`];
+    if (app.appType === "question_generation") {
+      return [...common, `题型：${options.questionType}`, `题量：${options.questionCount}`, `补充要求：${prompt || "无"}`].join("；");
+    }
+    if (app.appType === "lesson_plan") {
+      return [...common, `课时：${options.lessonMinutes}`, `教法：${options.teachingMethod}`, `补充要求：${prompt || "无"}`].join("；");
+    }
+    if (app.appType === "courseware") {
+      return [...common, `页数：${options.slideCount}`, `风格：${options.coursewareStyle}`, `补充要求：${prompt || "无"}`].join("；");
+    }
+    return [...common, `总分：${options.paperScore}`, `补充要求：${prompt || "无"}`].join("；");
+  }
+
+  function defaultTitle() {
+    if (prompt) return `${app.title}：${prompt.slice(0, 18)}`;
+    if (app.appType === "question_generation") return `${app.title}：${options.questionType}${options.questionCount}题`;
+    if (app.appType === "lesson_plan") return `${app.title}：${options.lessonMinutes}分钟${options.teachingMethod}`;
+    if (app.appType === "courseware") return `${app.title}：${options.coursewareStyle}${options.slideCount}页`;
+    return `${app.title}：${options.paperScore}分${options.difficulty}卷`;
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -152,8 +203,8 @@ export function AiAppGenerator({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         appType: app.appType,
-        prompt,
-        title: prompt ? `${app.title}：${prompt.slice(0, 18)}` : undefined
+        prompt: structuredPrompt(),
+        title: defaultTitle()
       })
     });
 
@@ -174,15 +225,143 @@ export function AiAppGenerator({
     <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
       <aside className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
         <form onSubmit={submit} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>适用章节</span>
+              <input
+                value={options.chapter}
+                onChange={(event) => updateOption("chapter", event.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+              />
+            </label>
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>难度</span>
+              <select
+                value={options.difficulty}
+                onChange={(event) => updateOption("difficulty", event.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+              >
+                <option>基础</option>
+                <option>提高</option>
+                <option>综合</option>
+                <option>挑战</option>
+              </select>
+            </label>
+          </div>
+
+          {app.appType === "question_generation" ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                <span>题型</span>
+                <select
+                  value={options.questionType}
+                  onChange={(event) => updateOption("questionType", event.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+                >
+                  <option>混合</option>
+                  <option>单选</option>
+                  <option>多选</option>
+                  <option>简答</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                <span>题量</span>
+                <input
+                  type="number"
+                  min={3}
+                  max={12}
+                  value={options.questionCount}
+                  onChange={(event) => updateOption("questionCount", Number(event.target.value))}
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+                />
+              </label>
+            </div>
+          ) : null}
+
+          {app.appType === "lesson_plan" ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                <span>课时分钟</span>
+                <input
+                  type="number"
+                  min={30}
+                  max={180}
+                  value={options.lessonMinutes}
+                  onChange={(event) => updateOption("lessonMinutes", Number(event.target.value))}
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                <span>教法</span>
+                <select
+                  value={options.teachingMethod}
+                  onChange={(event) => updateOption("teachingMethod", event.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+                >
+                  <option>讲授结合实践</option>
+                  <option>任务驱动</option>
+                  <option>案例研讨</option>
+                  <option>翻转课堂</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
+
+          {app.appType === "courseware" ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                <span>页数</span>
+                <input
+                  type="number"
+                  min={5}
+                  max={16}
+                  value={options.slideCount}
+                  onChange={(event) => updateOption("slideCount", Number(event.target.value))}
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                <span>风格</span>
+                <select
+                  value={options.coursewareStyle}
+                  onChange={(event) => updateOption("coursewareStyle", event.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+                >
+                  <option>课堂讲授</option>
+                  <option>案例分析</option>
+                  <option>实训操作</option>
+                  <option>复习总结</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
+
+          {app.appType === "paper_assembly" ? (
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>试卷总分</span>
+              <input
+                type="number"
+                min={30}
+                max={150}
+                value={options.paperScore}
+                onChange={(event) => updateOption("paperScore", Number(event.target.value))}
+                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+              />
+            </label>
+          ) : null}
+
           <div>
             <label htmlFor="ai-app-prompt" className="text-sm font-medium text-slate-700">生成要求</label>
             <textarea
               id="ai-app-prompt"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder={`输入${app.title}要求`}
-              className="mt-2 min-h-32 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-400"
+              placeholder={`补充${app.title}要求`}
+              className="mt-2 min-h-24 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-400"
             />
+          </div>
+          <div className="rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-700">
+            {structuredPrompt()}
           </div>
           {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
           <Button type="submit" className="w-full" disabled={loading}>

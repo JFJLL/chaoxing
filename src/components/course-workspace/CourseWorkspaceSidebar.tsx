@@ -18,7 +18,7 @@ function coverClass(cover?: string | null) {
 
 export function CourseWorkspaceSidebar({ course, activeTab }: Props) {
   return (
-    <aside className="w-full shrink-0 border-r border-slate-100 bg-white/95 p-4 lg:w-[248px]">
+    <aside className="w-full shrink-0 border-r border-slate-100 bg-white p-4 lg:w-[248px]">
       <div className={clsx("overflow-hidden rounded-xl bg-gradient-to-br p-4 text-white shadow-sm", coverClass(course.cover))}>
         <div className="flex items-center justify-between text-xs text-white/85">
           <span className="inline-flex items-center gap-1">
@@ -30,10 +30,10 @@ export function CourseWorkspaceSidebar({ course, activeTab }: Props) {
             链接
           </span>
         </div>
-        <h2 className="mt-12 line-clamp-2 text-base font-semibold leading-6">{course.title}</h2>
+        <h2 className="mt-14 line-clamp-2 text-base font-semibold leading-6">{course.title}</h2>
       </div>
 
-      <nav className="mt-4 space-y-1">
+      <nav className="mt-4 space-y-1.5">
         {courseWorkspaceNav.map((item) => {
           const Icon = item.icon;
           const active = item.id === activeTab;
@@ -43,8 +43,8 @@ export function CourseWorkspaceSidebar({ course, activeTab }: Props) {
               href={`/space/courses/${course.id}/${item.hrefSegment}`}
               aria-current={active ? "page" : undefined}
               className={clsx(
-                "flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition",
-                active ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                "flex h-11 items-center gap-3 rounded-lg px-3 text-sm transition",
+                active ? "bg-[#eef6ff] font-medium text-[#1d63e9]" : "font-normal text-slate-700 hover:bg-slate-50 hover:text-slate-900"
               )}
             >
               <span

@@ -20,7 +20,7 @@ export function FanyaCourseShell({
       <CourseWorkspaceHeader user={user} />
       <div className="flex min-h-[calc(100vh-72px)] flex-col lg:flex-row">
         <CourseWorkspaceSidebar course={course} activeTab={activeTab} />
-        <main className="min-w-0 flex-1 p-5 lg:p-8 xl:p-10">{children}</main>
+        <main className="min-w-0 flex-1 bg-[#f1f8ff] p-5 lg:p-8 xl:p-10">{children}</main>
       </div>
     </div>
   );

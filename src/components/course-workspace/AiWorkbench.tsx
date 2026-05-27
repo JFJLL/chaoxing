@@ -35,14 +35,14 @@ export function AiWorkbench({ courseId }: { courseId: string }) {
               onClick={() => setTopTab(tab)}
               className={clsx(
                 "h-10 rounded-full px-5 text-sm font-medium transition",
-                topTab === tab ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                topTab === tab ? "bg-[#2165f3] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               )}
             >
               {tab}
             </button>
           ))}
         </div>
-        <div className="flex max-w-xl flex-1 items-center gap-2 rounded-full bg-white px-4 py-2 shadow-sm lg:max-w-md">
+        <div className="flex max-w-xl flex-1 items-center gap-2 rounded-full bg-white px-4 py-2 shadow-sm lg:max-w-md xl:max-w-lg">
           <Search className="h-4 w-4 text-slate-400" />
           <input className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="AI智能检索资源" />
           <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white">
@@ -75,7 +75,7 @@ export function AiWorkbench({ courseId }: { courseId: string }) {
                 </button>
               ))}
             </div>
-            <button type="button" className="inline-flex h-9 items-center justify-center gap-1 rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 px-4 text-sm font-medium text-white">
+            <button type="button" className="inline-flex h-9 items-center justify-center gap-1 rounded-full bg-gradient-to-r from-[#2165f3] to-[#08b7d8] px-4 text-sm font-medium text-white">
               AI应用开放平台
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -83,7 +83,7 @@ export function AiWorkbench({ courseId }: { courseId: string }) {
 
           <div className="my-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap gap-2">
-              <button type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium text-white">
+              <button type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-[#2165f3] px-4 text-sm font-medium text-white">
                 <Sparkles className="h-4 w-4" />
                 创建AI应用
               </button>

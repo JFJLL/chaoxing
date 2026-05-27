@@ -22,7 +22,7 @@ test("AI application tab shows requested app cards", async ({ page }) => {
   await loginAs(page, "李素艳");
   await openFirstTaughtCourse(page);
 
-  await expect(page.getByRole("button", { name: "AI应用", exact: true })).toHaveClass(/bg-blue-600/);
+  await expect(page.getByRole("button", { name: "AI应用", exact: true })).toHaveClass(/text-white/);
   for (const label of ["全部应用", "备课中心", "教学神器", "学习助手", "资料科研"]) {
     await expect(page.getByRole("button", { name: label, exact: true }).first()).toBeVisible();
   }
