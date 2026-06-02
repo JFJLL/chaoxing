@@ -11,7 +11,7 @@ test("course card opens Fanya workspace with full sidebar", async ({ page }) => 
   await loginAs(page, "李素艳");
   await openFirstTaughtCourse(page);
 
-  await expect(page.getByText("泛雅")).toBeVisible();
+  await expect(page.getByText("易美")).toBeVisible();
   await expect(page.getByText("李素艳").last()).toBeVisible();
   for (const label of ["AI工作台", "班级活动", "课件", "教案", "课程结构", "资料", "通知", "讨论", "作业", "考试", "题库"]) {
     await expect(page.getByRole("link", { name: label, exact: true })).toBeVisible();
