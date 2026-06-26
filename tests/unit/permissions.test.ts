@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../src/lib/db";
 import type { SessionUser } from "../../src/lib/auth";
-import { requireCourseAccess, requireCourseOwner } from "../../src/lib/permissions";
+import { requireCourseAccess, requireCourseOwner, requireTeacher } from "../../src/lib/permissions";
 import { requireDriveFileOwner, requireDriveFileReadable } from "../../src/lib/modules/drivePermissions";
 import { requireGroupMember, requireGroupOwner } from "../../src/lib/modules/groupPermissions";
 import { requireLiveParticipantOrHost } from "../../src/lib/modules/livePermissions";
@@ -163,5 +163,10 @@ describe("course owner permissions", () => {
     await expect(requireCourseOwner(fixture.teacher, fixture.activeCourseId)).resolves.toMatchObject({
       id: fixture.activeCourseId
     });
+  });
+
+  it("rejects students from teacher-only permissions", async () => {
+    expect(() => requireTeacher(fixture.student)).toThrow("需要教师权限");
+    await expect(requireCourseOwner(fixture.student, fixture.enrolledCourseId)).rejects.toThrow("需要教师权限");
   });
 });

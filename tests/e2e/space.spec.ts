@@ -7,8 +7,8 @@ test("shell navigation and course/topic entry render", async ({ page }) => {
   await page.goto("/space/courses");
   await expect(page.getByRole("link", { name: "我学的课" })).toBeVisible();
   await expect(page.getByRole("link", { name: "我教的课" })).toBeVisible();
-  await page.goto("/space/courses?tab=taught");
   await expect(page.getByRole("button", { name: /新建课程/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "添加课程" })).toHaveCount(0);
   await page.goto("/space/topics");
   await expect(page.getByRole("button", { name: "新建专题" })).toBeVisible();
   await expect(page.getByRole("button", { name: "新建文件夹" })).toBeVisible();
@@ -17,6 +17,8 @@ test("shell navigation and course/topic entry render", async ({ page }) => {
 test("course list actions work through the UI", async ({ page }) => {
   await loginAs(page, "学习者");
   await page.goto("/space/courses");
+  await expect(page.getByRole("link", { name: "我教的课" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /新建课程/ })).toHaveCount(0);
   await page.getByRole("button", { name: "添加课程" }).click();
   await page.getByLabel("课程邀请码").fill("COURSE2026");
   await page.getByRole("button", { name: /^添加$/ }).click();

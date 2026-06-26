@@ -6,6 +6,7 @@ import { NewCourseDialog } from "@/components/courses/NewCourseDialog";
 import { AddCourseDialog } from "@/components/courses/AddCourseDialog";
 import { CourseFolderDialog } from "@/components/courses/CourseFolderDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { isTeacher } from "@/lib/permissions";
 
 type PageProps = {
   searchParams: Promise<{ tab?: string }>;
@@ -13,8 +14,9 @@ type PageProps = {
 
 export default async function CoursesPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const activeTab = params.tab === "taught" ? "taught" : "learned";
   const user = await requireUser();
+  const canTeach = isTeacher(user);
+  const activeTab = canTeach ? (params.tab === "learned" ? "learned" : "taught") : "learned";
 
   const courses =
     activeTab === "taught"
@@ -42,16 +44,17 @@ export default async function CoursesPage({ searchParams }: PageProps) {
           <p className="mt-1 text-sm text-slate-500">管理学习课程与教师课程空间</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {activeTab === "taught" ? (
-            <NewCourseDialog />
-          ) : (
-            <AddCourseDialog />
-          )}
-          <CourseFolderDialog />
+          {canTeach && activeTab === "taught" ? (
+            <>
+              <NewCourseDialog />
+              <CourseFolderDialog />
+            </>
+          ) : null}
+          {!canTeach && activeTab === "learned" ? <AddCourseDialog /> : null}
         </div>
       </header>
 
-      <CourseTabs active={activeTab} />
+      <CourseTabs active={activeTab} canTeach={canTeach} />
 
       {courses.length ? (
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { assertTeacher } from "@/lib/permissions";
+import { assertTeacher, isTeacher } from "@/lib/permissions";
 
 const createCourseSchema = z.object({
   title: z.string().min(2, "课程名称至少 2 个字"),
@@ -13,9 +13,11 @@ const createCourseSchema = z.object({
 
 export async function GET(request: NextRequest) {
   const user = await requireUser();
-  const tab = request.nextUrl.searchParams.get("tab") === "taught" ? "taught" : "learned";
+  const requestedTab = request.nextUrl.searchParams.get("tab");
+  const tab = isTeacher(user) ? (requestedTab === "learned" ? "learned" : "taught") : "learned";
 
   if (tab === "taught") {
+    assertTeacher(user);
     const courses = await db.course.findMany({
       where: { ownerId: user.id },
       include: {

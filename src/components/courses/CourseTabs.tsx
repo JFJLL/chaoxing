@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { clsx } from "clsx";
 
-export function CourseTabs({ active }: { active: "learned" | "taught" }) {
-  const tabs = [
-    { key: "learned", label: "我学的课" },
-    { key: "taught", label: "我教的课" }
-  ] as const;
+export function CourseTabs({ active, canTeach = false }: { active: "learned" | "taught"; canTeach?: boolean }) {
+  const tabs = canTeach
+    ? ([
+        { key: "taught", label: "我教的课" },
+        { key: "learned", label: "我学的课" }
+      ] as const)
+    : ([{ key: "learned", label: "我学的课" }] as const);
 
   return (
     <div className="flex items-center gap-8 border-b border-[var(--cx-border)]">
