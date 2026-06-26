@@ -1,6 +1,6 @@
-import OpenAI from "openai";
 import type { GeneratedCourseOutline } from "@/types/course";
 import { generatedCourseOutlineSchema } from "@/lib/ai/courseOutlineSchema";
+import { createJsonCompletion, resolveAiModelConfig, type AiModelConfig } from "@/lib/ai/modelClient";
 import { buildCourseOutlinePrompt } from "@/lib/ai/prompts";
 
 type GenerateCourseOutlineInput = {
@@ -14,6 +14,8 @@ type GenerateCourseOutlineResult = {
   outline: GeneratedCourseOutline;
   warning?: string;
 };
+
+export { resolveAiModelConfig, type AiModelConfig };
 
 function textLines(input: string) {
   return input
@@ -71,37 +73,25 @@ export function parseOutlineOrFallback(raw: string, input: GenerateCourseOutline
 }
 
 export async function generateCourseOutline(input: GenerateCourseOutlineInput): Promise<GenerateCourseOutlineResult> {
-  if (!process.env.OPENAI_API_KEY) {
+  const config = resolveAiModelConfig(input.model);
+  if (!config) {
     return {
       outline: createFallbackOutline(input),
-      warning: "未配置 OPENAI_API_KEY，已使用本地确定性目录生成。"
+      warning: "未配置 AI_API_KEY/OPENAI_API_KEY/apiKey，已使用本地确定性目录生成。"
     };
   }
 
   try {
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      baseURL: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1"
-    });
-    const completion = await client.chat.completions.create({
-      model: input.model || process.env.OPENAI_MODEL || "gpt-4.1-mini",
-      messages: [
-        {
-          role: "system",
-          content: "你只输出符合约束的 JSON 对象。"
-        },
-        {
-          role: "user",
-          content: buildCourseOutlinePrompt({
-            courseTitle: input.courseTitle,
-            documentText: input.chunks[0] || input.documentText
-          })
-        }
-      ],
-      response_format: { type: "json_object" }
+    const raw = await createJsonCompletion({
+      model: config.model,
+      system: "你只输出符合约束的 JSON 对象。",
+      user: buildCourseOutlinePrompt({
+        courseTitle: input.courseTitle,
+        documentText: input.chunks[0] || input.documentText
+      })
     });
 
-    return parseOutlineOrFallback(completion.choices[0]?.message.content || "", input);
+    return parseOutlineOrFallback(raw || "", input);
   } catch {
     return {
       outline: createFallbackOutline(input),

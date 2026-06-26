@@ -8,7 +8,9 @@ const prisma = new PrismaClient();
 
 describe("import pipeline", () => {
   beforeAll(async () => {
+    process.env.AI_API_KEY = "";
     process.env.OPENAI_API_KEY = "";
+    process.env.apiKey = "";
   });
 
   it("extracts text and creates a generated outline with fallback mode", async () => {
@@ -35,6 +37,6 @@ describe("import pipeline", () => {
     expect(updated.status).toBe("READY_FOR_REVIEW");
     expect(updated.extractedText).toContain("数字阅读服务培训");
     expect(updated.generatedOutline).toContain("chapters");
-    expect(updated.warning).toContain("OPENAI_API_KEY");
+    expect(updated.warning).toContain("AI_API_KEY");
   });
 });

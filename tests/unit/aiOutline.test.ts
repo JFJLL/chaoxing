@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generatedCourseOutlineSchema } from "../../src/lib/ai/courseOutlineSchema";
-import { createFallbackOutline, parseOutlineOrFallback } from "../../src/lib/ai/generateCourseOutline";
+import { createFallbackOutline, parseOutlineOrFallback, resolveAiModelConfig } from "../../src/lib/ai/generateCourseOutline";
+import { buildGeminiGenerateContentUrl } from "../../src/lib/ai/modelClient";
 
 const validOutline = {
   title: "数字阅读服务培训",
@@ -51,5 +52,57 @@ describe("course outline generation schema", () => {
     const result = parseOutlineOrFallback("{not json", input);
     expect(result.warning).toContain("无法解析");
     expect(result.outline).toEqual(createFallbackOutline(input));
+  });
+
+  it("resolves neutral and lowercase AI env names", () => {
+    const previous = {
+      AI_API_KEY: process.env.AI_API_KEY,
+      AI_BASE_URL: process.env.AI_BASE_URL,
+      AI_MODEL: process.env.AI_MODEL,
+      AI_PROVIDER: process.env.AI_PROVIDER,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
+      OPENAI_MODEL: process.env.OPENAI_MODEL,
+      apiKey: process.env.apiKey,
+      baseUrl: process.env.baseUrl,
+      model: process.env.model
+    };
+
+    process.env.AI_API_KEY = "";
+    process.env.AI_BASE_URL = "";
+    process.env.AI_MODEL = "";
+    process.env.AI_PROVIDER = "";
+    process.env.OPENAI_API_KEY = "";
+    process.env.OPENAI_BASE_URL = "";
+    process.env.OPENAI_MODEL = "";
+    process.env.apiKey = "gemini-key";
+    process.env.baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+    process.env.model = "gemini-test";
+
+    expect(resolveAiModelConfig()).toEqual({
+      provider: "gemini",
+      apiKey: "gemini-key",
+      baseURL: "https://generativelanguage.googleapis.com/v1beta",
+      model: "gemini-test"
+    });
+
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  });
+
+  it("builds Gemini native generateContent URLs", () => {
+    const url = buildGeminiGenerateContentUrl({
+      provider: "gemini",
+      apiKey: "gemini-key",
+      baseURL: "https://generativelanguage.googleapis.com/v1beta",
+      model: "models/gemini-2.5-flash"
+    });
+
+    expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=gemini-key");
   });
 });
