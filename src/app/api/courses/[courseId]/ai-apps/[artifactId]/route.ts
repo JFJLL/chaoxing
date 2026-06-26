@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseAccess } from "@/lib/permissions";
+import { isTeacher, requireCourseAccess } from "@/lib/permissions";
 
 type RouteContext = {
   params: Promise<{ courseId: string; artifactId: string }>;
@@ -10,10 +10,11 @@ type RouteContext = {
 export async function GET(_request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId, artifactId } = await context.params;
-  await requireCourseAccess(user, courseId);
+  const course = await requireCourseAccess(user, courseId);
+  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
 
   const artifact = await db.courseAiArtifact.findFirst({
-    where: { id: artifactId, courseId }
+    where: { id: artifactId, courseId, ...(canManage ? {} : { status: "PUBLISHED" }) }
   });
 
   if (!artifact) {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseAccess, requireCourseOwner } from "@/lib/permissions";
+import { isTeacher, requireCourseAccess, requireCourseOwner } from "@/lib/permissions";
 import { enabledCourseAiAppTypes, getCourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
 import { generateCourseAiArtifact } from "@/lib/courseWorkspace/generateAiArtifact";
 
@@ -21,7 +21,8 @@ const createArtifactSchema = z.object({
 export async function GET(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
-  await requireCourseAccess(user, courseId);
+  const course = await requireCourseAccess(user, courseId);
+  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
 
   const appType = request.nextUrl.searchParams.get("appType");
   const parsedAppType = appType ? appTypeSchema.safeParse(appType) : null;
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const artifacts = await db.courseAiArtifact.findMany({
     where: {
       courseId,
+      ...(canManage ? {} : { status: "PUBLISHED" }),
       ...(parsedAppType?.success ? { appType: parsedAppType.data } : {})
     },
     orderBy: { createdAt: "desc" }
