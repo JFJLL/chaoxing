@@ -13,12 +13,15 @@ test("course card opens Fanya workspace with full sidebar", async ({ page }) => 
 
   await expect(page.getByText("易美")).toBeVisible();
   await expect(page.getByText("李素艳").last()).toBeVisible();
+  await expect(page.getByRole("link", { name: "返回课程列表" })).toBeVisible();
   for (const label of ["AI工作台", "班级活动", "课程结构", "课程资料库", "通知", "讨论", "作业", "考试", "题库"]) {
     await expect(page.getByRole("link", { name: label, exact: true })).toBeVisible();
   }
   for (const label of ["课件", "教案", "资料"]) {
     await expect(page.getByRole("link", { name: label, exact: true })).toHaveCount(0);
   }
+  await page.getByRole("link", { name: "返回课程列表" }).click();
+  await expect(page).toHaveURL(/\/space\/courses\?tab=taught/);
 });
 
 test("AI application tab shows requested app cards", async ({ page }) => {

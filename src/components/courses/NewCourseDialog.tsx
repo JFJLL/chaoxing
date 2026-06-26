@@ -37,7 +37,12 @@ export function NewCourseDialog() {
       return;
     }
 
+    const body = (await response.json()) as { course?: { id: string } };
     setOpen(false);
+    if (body.course?.id) {
+      router.push(`/space/courses/${body.course.id}`);
+      return;
+    }
     router.refresh();
   }
 

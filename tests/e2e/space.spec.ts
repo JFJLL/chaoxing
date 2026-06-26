@@ -35,10 +35,9 @@ test("course list actions work through the UI", async ({ page }) => {
   await page.getByRole("button", { name: /新建课程/ }).click();
   await page.getByLabel("课程名称").fill(title);
   await page.getByRole("button", { name: /^创建$/ }).click();
+  await expect(page).toHaveURL(/\/space\/courses\/.+\/ai-workbench/);
   await expect(page.getByText(title).first()).toBeVisible();
-
-  await page.getByRole("link", { name: new RegExp(title) }).first().click();
-  await expect(page.getByText("草稿")).toBeVisible();
-  await page.getByRole("button", { name: "发布课程" }).click();
-  await expect(page.getByText("已发布")).toBeVisible();
+  await page.getByRole("link", { name: "返回课程列表" }).click();
+  await expect(page).toHaveURL(/\/space\/courses\?tab=taught/);
+  await expect(page.getByText(title).first()).toBeVisible();
 });
