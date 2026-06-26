@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { courseAiApps, enabledCourseAiAppTypes, getCourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
 import { generateCourseAiArtifact } from "@/lib/courseWorkspace/generateAiArtifact";
-import type { AiCoursewarePayload, AiLessonPlanPayload, AiPaperPayload, AiQuestionPayload, CourseAiAppType } from "@/types/courseWorkspace";
+import type {
+  AiCoursewarePayload,
+  AiLessonPlanPayload,
+  AiPaperPayload,
+  AiQuestionPayload,
+  CourseAiAppType,
+  HtmlCoursewarePayload
+} from "@/types/courseWorkspace";
 
 const appTypes: CourseAiAppType[] = ["question_generation", "lesson_plan", "courseware", "paper_assembly"];
 
@@ -46,6 +53,13 @@ describe("course AI apps", () => {
     expect(payload.slides).toHaveLength(9);
     expect(payload.slides[0]?.title).toBe("功能体验课");
     expect(payload.slides[0]?.bullets).toContain("案例分析风格");
+  });
+
+  it("generates playable HTML courseware payloads", () => {
+    const payload = generateCourseAiArtifact({ ...input, appType: "html_courseware", prompt: "页数：5；风格：课堂播放" }) as HtmlCoursewarePayload;
+    expect(payload.slideCount).toBe(5);
+    expect(payload.html).toContain("<!doctype html>");
+    expect(payload.html).toContain("ArrowRight");
   });
 
   it("generates paper assembly payloads", () => {

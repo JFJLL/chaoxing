@@ -4,7 +4,8 @@ import type {
   AiPaperPayload,
   AiQuestionPayload,
   CourseAiAppType,
-  CourseAiArtifactPayload
+  CourseAiArtifactPayload,
+  HtmlCoursewarePayload
 } from "@/types/courseWorkspace";
 
 type ChapterInput = {
@@ -169,6 +170,59 @@ function generatePaper(input: GenerateCourseAiArtifactInput): AiPaperPayload {
   };
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function generateHtmlCourseware(input: GenerateCourseAiArtifactInput): HtmlCoursewarePayload {
+  const slides = generateCourseware(input).slides;
+  const htmlSlides = slides
+    .map(
+      (slide, index) => `<section class="slide" data-slide="${index}">
+  <p class="count">${index + 1} / ${slides.length}</p>
+  <h1>${escapeHtml(slide.title)}</h1>
+  <ul>${slide.bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul>
+</section>`
+    )
+    .join("\n");
+
+  return {
+    html: `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(input.courseTitle)}</title>
+  <style>
+    body{margin:0;background:#111827;color:#f8fafc;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .slide{display:none;min-height:100vh;box-sizing:border-box;padding:8vh 10vw}
+    .slide.active{display:flex;flex-direction:column;justify-content:center}
+    .count{color:#93c5fd;font-size:18px}
+    h1{font-size:56px;line-height:1.1;margin:0 0 32px}
+    li{font-size:28px;line-height:1.7}
+  </style>
+</head>
+<body>
+${htmlSlides}
+<script>
+let current=0;
+const slides=[...document.querySelectorAll(".slide")];
+function show(index){current=Math.max(0,Math.min(slides.length-1,index));slides.forEach((slide,i)=>slide.classList.toggle("active",i===current));}
+document.addEventListener("keydown",(event)=>{if(event.key==="ArrowRight"||event.key===" "){show(current+1)}if(event.key==="ArrowLeft"){show(current-1)}});
+show(0);
+</script>
+</body>
+</html>`,
+    slideCount: slides.length,
+    theme: optionText(input.prompt, "风格", "课堂讲授"),
+    generatedAt: new Date().toISOString()
+  };
+}
+
 export function generateCourseAiArtifact(input: GenerateCourseAiArtifactInput): CourseAiArtifactPayload {
   switch (input.appType) {
     case "question_generation":
@@ -179,6 +233,8 @@ export function generateCourseAiArtifact(input: GenerateCourseAiArtifactInput): 
       return generateCourseware(input);
     case "paper_assembly":
       return generatePaper(input);
+    case "html_courseware":
+      return generateHtmlCourseware(input);
     default: {
       const exhaustive: never = input.appType;
       throw new Error(`不支持的 AI 应用类型：${exhaustive}`);

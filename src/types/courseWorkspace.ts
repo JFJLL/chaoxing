@@ -1,4 +1,4 @@
-export type CourseAiAppType = "question_generation" | "lesson_plan" | "courseware" | "paper_assembly";
+export type CourseAiAppType = "question_generation" | "lesson_plan" | "courseware" | "paper_assembly" | "html_courseware";
 
 export type CourseWorkspaceTab =
   | "ai-workbench"
@@ -40,8 +40,17 @@ export type AiPaperPayload = {
   sections: Array<{ name: string; score: number; questionIds: string[] }>;
 };
 
+export type HtmlCoursewarePayload = {
+  html: string;
+  slideCount: number;
+  sourceMapId?: string;
+  theme?: string;
+  generatedAt: string;
+};
+
 export type CourseAiArtifactPayload =
   | AiQuestionPayload
   | AiLessonPlanPayload
   | AiCoursewarePayload
-  | AiPaperPayload;
+  | AiPaperPayload
+  | HtmlCoursewarePayload;
