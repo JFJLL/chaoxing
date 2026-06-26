@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BookOpen, Bot, Hammer, User } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
+import { CourseDeleteButton } from "@/components/courses/CourseDeleteButton";
 
 type CourseCardProps = {
   course: {
@@ -81,6 +82,7 @@ export function CourseCard({ course, mode }: CourseCardProps) {
                 <Bot className="h-4 w-4" />
                 AI 文档建课
               </LinkButton>
+              <CourseDeleteButton courseId={course.id} title={course.title} />
             </>
           ) : null}
         </div>

@@ -40,4 +40,11 @@ test("course list actions work through the UI", async ({ page }) => {
   await page.getByRole("link", { name: "返回课程列表" }).click();
   await expect(page).toHaveURL(/\/space\/courses\?tab=taught/);
   await expect(page.getByText(title).first()).toBeVisible();
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain(title);
+    await dialog.accept();
+  });
+  await page.getByRole("button", { name: `删除课程 ${title}` }).click();
+  await expect(page.getByText(title)).toHaveCount(0);
 });
