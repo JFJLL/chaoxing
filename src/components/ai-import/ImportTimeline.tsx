@@ -4,7 +4,8 @@ import { LinkButton } from "@/components/ui/Button";
 const steps = [
   { key: "QUEUED", label: "文档上传" },
   { key: "EXTRACTING", label: "内容解析" },
-  { key: "GENERATING", label: "目录生成" },
+  { key: "STRUCTURING", label: "目录生成" },
+  { key: "MAPPING", label: "知识导图" },
   { key: "READY_FOR_REVIEW", label: "等待确认" },
   { key: "APPLIED", label: "已应用" }
 ];
@@ -13,8 +14,10 @@ const rank: Record<string, number> = {
   QUEUED: 0,
   EXTRACTING: 1,
   GENERATING: 2,
-  READY_FOR_REVIEW: 3,
-  APPLIED: 4
+  STRUCTURING: 2,
+  MAPPING: 3,
+  READY_FOR_REVIEW: 4,
+  APPLIED: 5
 };
 
 export function ImportTimeline({
@@ -45,7 +48,7 @@ export function ImportTimeline({
 
   const current = rank[status] ?? 0;
   return (
-    <ol className="grid gap-3 md:grid-cols-5">
+    <ol className="grid gap-3 md:grid-cols-6">
       {steps.map((step, index) => {
         const done = index <= current;
         return (

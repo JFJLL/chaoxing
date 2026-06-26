@@ -38,5 +38,13 @@ describe("import pipeline", () => {
     expect(updated.extractedText).toContain("数字阅读服务培训");
     expect(updated.generatedOutline).toContain("chapters");
     expect(updated.warning).toContain("AI_API_KEY");
+
+    const map = await prisma.courseKnowledgeMap.findFirst({
+      where: { sourceJobId: job.id },
+      include: { nodes: true, edges: true }
+    });
+    expect(map?.status).toBe("DRAFT");
+    expect(map?.nodes.length).toBeGreaterThan(0);
+    expect(map?.edges.length).toBeGreaterThan(0);
   });
 });
