@@ -13,8 +13,11 @@ test("course card opens Fanya workspace with full sidebar", async ({ page }) => 
 
   await expect(page.getByText("易美")).toBeVisible();
   await expect(page.getByText("李素艳").last()).toBeVisible();
-  for (const label of ["AI工作台", "班级活动", "课件", "教案", "课程结构", "资料", "通知", "讨论", "作业", "考试", "题库"]) {
+  for (const label of ["AI工作台", "班级活动", "课程结构", "课程资料库", "通知", "讨论", "作业", "考试", "题库"]) {
     await expect(page.getByRole("link", { name: label, exact: true })).toBeVisible();
+  }
+  for (const label of ["课件", "教案", "资料"]) {
+    await expect(page.getByRole("link", { name: label, exact: true })).toHaveCount(0);
   }
 });
 
@@ -81,10 +84,8 @@ test("course sidebar tabs route and update active state", async ({ page }) => {
   const tabs = [
     { label: "AI工作台", path: "ai-workbench", heading: "AI应用" },
     { label: "班级活动", path: "activities", heading: "班级活动" },
-    { label: "课件", path: "courseware", heading: "课件" },
-    { label: "教案", path: "lesson-plans", heading: "教案" },
     { label: "课程结构", path: "structure", heading: "课程结构" },
-    { label: "资料", path: "resources", heading: "资料" },
+    { label: "课程资料库", path: "resources", heading: "课程资料库" },
     { label: "通知", path: "notices", heading: "通知" },
     { label: "讨论", path: "discussions", heading: "讨论" },
     { label: "作业", path: "assignments", heading: "作业" },
@@ -97,5 +98,11 @@ test("course sidebar tabs route and update active state", async ({ page }) => {
     await expect(page).toHaveURL(new RegExp(`/space/courses/.+/${tab.path}`));
     await expect(page.getByRole("link", { name: tab.label, exact: true })).toHaveAttribute("aria-current", "page");
     await expect(page.getByText(tab.heading).first()).toBeVisible();
+  }
+
+  await page.getByRole("link", { name: "课程资料库", exact: true }).click();
+  for (const label of ["课件资料", "案例库", "项目库", "知网接口", "其他资料"]) {
+    await expect(page.getByRole("link", { name: label, exact: true })).toHaveCount(0);
+    await expect(page.getByText(label).first()).toBeVisible();
   }
 });

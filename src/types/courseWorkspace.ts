@@ -3,8 +3,6 @@ export type CourseAiAppType = "question_generation" | "lesson_plan" | "coursewar
 export type CourseWorkspaceTab =
   | "ai-workbench"
   | "activities"
-  | "courseware"
-  | "lesson-plans"
   | "structure"
   | "resources"
   | "notices"
