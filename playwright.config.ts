@@ -9,7 +9,7 @@ export default defineConfig({
     trace: "on-first-retry"
   },
   webServer: {
-    command: "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && npm run dev -- --port 3100",
+    command: "npm run dev -- --port 3100",
     env: {
       ...process.env,
       AI_API_KEY: "",
