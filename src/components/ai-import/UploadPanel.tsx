@@ -45,7 +45,7 @@ export function UploadPanel({ courseId }: { courseId: string }) {
         <div className="flex-1">
           <h2 className="font-semibold text-slate-900">上传课程文档</h2>
           <p className="mt-1 text-sm text-slate-500">支持 DOCX、PDF、TXT、Markdown</p>
-          <p className="text-sm text-slate-500">系统会先解析文档，再生成课程目录，确认后才写入课程</p>
+          <p className="text-sm text-slate-500">提交后进入解析队列，生成结果确认后才写入课程</p>
           <label className="mt-5 flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-[var(--cx-border)] bg-slate-50 p-5 text-center hover:bg-slate-100">
             <input className="sr-only" type="file" accept=".docx,.pdf,.txt,.md" onChange={onFileChange} disabled={submitting} />
             <span className="text-sm font-medium text-slate-700">{file ? file.name : "选择文档"}</span>
@@ -53,7 +53,7 @@ export function UploadPanel({ courseId }: { courseId: string }) {
           </label>
           {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
           <Button type="submit" className="mt-5" disabled={!file || submitting}>
-            {submitting ? "解析中" : "开始生成目录"}
+            {submitting ? "提交任务中" : "提交解析任务"}
           </Button>
         </div>
       </div>

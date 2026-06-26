@@ -10,6 +10,12 @@ export default defineConfig({
   },
   webServer: {
     command: "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && npm run dev -- --port 3100",
+    env: {
+      ...process.env,
+      AI_API_KEY: "",
+      OPENAI_API_KEY: "",
+      apiKey: ""
+    },
     url: "http://127.0.0.1:3100/login",
     reuseExistingServer: false,
     timeout: 120_000

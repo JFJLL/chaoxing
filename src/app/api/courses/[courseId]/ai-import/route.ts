@@ -3,13 +3,39 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseOwner } from "@/lib/permissions";
 import { assertSupportedUpload, storeImportFile } from "@/lib/storage";
-import { runImportJob } from "@/lib/imports/runImportJob";
+import { enqueueImportJob, getImportQueueSnapshot } from "@/lib/imports/importQueue";
 
 export const runtime = "nodejs";
 
 type RouteContext = {
   params: Promise<{ courseId: string }>;
 };
+
+export async function GET(_request: NextRequest, context: RouteContext) {
+  const user = await requireUser();
+  const { courseId } = await context.params;
+  await requireCourseOwner(user, courseId);
+
+  const jobs = await db.documentImportJob.findMany({
+    where: { courseId },
+    orderBy: { createdAt: "desc" },
+    take: 20
+  });
+  const snapshot = getImportQueueSnapshot();
+  const pendingPositions = new Map(snapshot.pendingJobs.map((jobId, index) => [jobId, index + 1]));
+
+  return NextResponse.json({
+    jobs: jobs.map((job) => ({
+      ...job,
+      generatedOutline: job.generatedOutline ? JSON.parse(job.generatedOutline) : null,
+      queuePosition: job.status === "QUEUED" ? (pendingPositions.get(job.id) ?? null) : null
+    })),
+    queue: {
+      activeWorkers: snapshot.activeWorkers,
+      pendingCount: snapshot.pendingJobs.length
+    }
+  });
+}
 
 export async function POST(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
@@ -49,7 +75,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     data: { filePath }
   });
 
-  await runImportJob(job.id);
+  enqueueImportJob(job.id);
 
-  return NextResponse.json({ jobId: job.id });
+  return NextResponse.json({ jobId: job.id, status: "QUEUED" }, { status: 202 });
 }
