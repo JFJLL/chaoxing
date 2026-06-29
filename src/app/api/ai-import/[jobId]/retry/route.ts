@@ -15,7 +15,11 @@ export async function POST(_request: Request, context: RouteContext) {
   if (!job) {
     return NextResponse.json({ error: "导入任务不存在" }, { status: 404 });
   }
-  await requireCourseOwner(user, job.courseId);
+  try {
+    await requireCourseOwner(user, job.courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
+  }
   if (job.status !== "FAILED") {
     return NextResponse.json({ error: "只有失败任务可以重试" }, { status: 400 });
   }

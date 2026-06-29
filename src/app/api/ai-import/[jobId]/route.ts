@@ -23,7 +23,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   if (!job) {
     return NextResponse.json({ error: "导入任务不存在" }, { status: 404 });
   }
-  await requireCourseOwner(user, job.courseId);
+  try {
+    await requireCourseOwner(user, job.courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
+  }
   const snapshot = getImportQueueSnapshot();
   const queueIndex = snapshot.pendingJobs.findIndex((id) => id === job.id);
 
@@ -43,7 +47,11 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   if (!job) {
     return NextResponse.json({ error: "导入任务不存在" }, { status: 404 });
   }
-  await requireCourseOwner(user, job.courseId);
+  try {
+    await requireCourseOwner(user, job.courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
+  }
 
   await db.$transaction(async (tx) => {
     await tx.courseKnowledgeMap.deleteMany({ where: { sourceJobId: job.id, status: { not: "PUBLISHED" } } });

@@ -44,10 +44,10 @@ export function UploadPanel({ courseId }: { courseId: string }) {
         </div>
         <div className="flex-1">
           <h2 className="font-semibold text-slate-900">上传课程文档</h2>
-          <p className="mt-1 text-sm text-slate-500">支持 DOCX、PDF、TXT、Markdown</p>
+          <p className="mt-1 text-sm text-slate-500">支持 DOCX、PDF、PPTX、TXT、Markdown</p>
           <p className="text-sm text-slate-500">提交后进入解析队列，生成结果确认后才写入课程</p>
           <label className="mt-5 flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-[var(--cx-border)] bg-slate-50 p-5 text-center hover:bg-slate-100">
-            <input className="sr-only" type="file" accept=".docx,.pdf,.txt,.md" onChange={onFileChange} disabled={submitting} />
+            <input className="sr-only" type="file" accept=".docx,.pdf,.pptx,.txt,.md" onChange={onFileChange} disabled={submitting} />
             <span className="text-sm font-medium text-slate-700">{file ? file.name : "选择文档"}</span>
             {file ? <span className="mt-1 text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB</span> : null}
           </label>

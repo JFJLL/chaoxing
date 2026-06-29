@@ -17,7 +17,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (!job) {
     return NextResponse.json({ error: "导入任务不存在" }, { status: 404 });
   }
-  await requireCourseOwner(user, job.courseId);
+  try {
+    await requireCourseOwner(user, job.courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
+  }
 
   const body = (await request.json()) as { outline?: unknown };
   const outline = generatedCourseOutlineSchema.parse(body.outline);

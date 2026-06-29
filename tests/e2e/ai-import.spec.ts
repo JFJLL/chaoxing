@@ -47,3 +47,27 @@ test("teacher uploads a document, publishes map and HTML courseware, then applie
   await expect(page.getByRole("heading", { name: "HTML课件", exact: true })).toBeVisible();
   await expect(page.frameLocator("iframe").getByText(/1 \/ \d+/)).toBeVisible();
 });
+
+test("student cannot call teacher import and generation APIs", async ({ page }) => {
+  await loginAs(page, "李素艳");
+  const courseId = await firstTaughtCourseId(page);
+  await page.context().clearCookies();
+  await loginAs(page, "学习者");
+
+  const statuses = await page.evaluate(async (id) => {
+    const formData = new FormData();
+    formData.set("file", new File(["# 学生上传"], "student.md", { type: "text/markdown" }));
+    const [list, upload, html] = await Promise.all([
+      fetch(`/api/courses/${id}/ai-import`),
+      fetch(`/api/courses/${id}/ai-import`, { method: "POST", body: formData }),
+      fetch(`/api/courses/${id}/html-courseware`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mapId: "map-from-student" })
+      })
+    ]);
+    return { list: list.status, upload: upload.status, html: html.status };
+  }, courseId);
+
+  expect(statuses).toEqual({ list: 403, upload: 403, html: 403 });
+});

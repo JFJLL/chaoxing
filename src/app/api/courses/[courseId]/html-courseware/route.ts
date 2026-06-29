@@ -34,7 +34,11 @@ export async function GET(_request: Request, context: RouteContext) {
 export async function POST(request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  try {
+    await requireCourseOwner(user, courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
+  }
   const body = (await request.json().catch(() => ({}))) as { mapId?: string; title?: string };
   if (!body.mapId) {
     return NextResponse.json({ error: "请选择知识导图" }, { status: 400 });

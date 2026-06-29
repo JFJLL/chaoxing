@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseOwner } from "@/lib/permissions";
-import { assertSupportedUpload, storeImportFile } from "@/lib/storage";
+import { assertSupportedUpload, assertUploadSize, storeImportFile } from "@/lib/storage";
 import { enqueueImportJob, getImportQueueSnapshot } from "@/lib/imports/importQueue";
 
 export const runtime = "nodejs";
@@ -14,7 +14,11 @@ type RouteContext = {
 export async function GET(_request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  try {
+    await requireCourseOwner(user, courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
+  }
 
   const jobs = await db.documentImportJob.findMany({
     where: { courseId },
@@ -40,7 +44,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 export async function POST(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  try {
+    await requireCourseOwner(user, courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
+  }
 
   let formData: FormData;
   try {
@@ -53,7 +61,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "请上传文档" }, { status: 400 });
   }
 
-  assertSupportedUpload(file.name);
+  try {
+    assertSupportedUpload(file.name);
+    assertUploadSize(file.size);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "文件不符合上传要求" }, { status: 400 });
+  }
+
   const job = await db.documentImportJob.create({
     data: {
       courseId,

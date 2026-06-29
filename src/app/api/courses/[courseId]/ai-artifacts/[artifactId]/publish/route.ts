@@ -10,7 +10,11 @@ type RouteContext = {
 export async function POST(_request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId, artifactId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  try {
+    await requireCourseOwner(user, courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
+  }
 
   const artifact = await db.courseAiArtifact.findFirst({
     where: { id: artifactId, courseId }

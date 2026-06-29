@@ -3,6 +3,7 @@ import { extname } from "path";
 import { buildExtractedDocument } from "@/lib/document/normalizeText";
 import { extractDocx } from "@/lib/document/extractDocx";
 import { extractPdf } from "@/lib/document/extractPdf";
+import { extractPptx } from "@/lib/document/extractPptx";
 
 export type ExtractedDocument = {
   text: string;
@@ -20,6 +21,10 @@ export async function extractText(filePath: string, mimeType?: string | null): P
 
   if (extension === ".pdf" || mimeType === "application/pdf") {
     return extractPdf(filePath);
+  }
+
+  if (extension === ".pptx" || mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation") {
+    return extractPptx(filePath);
   }
 
   if (extension === ".txt" || extension === ".md" || mimeType?.startsWith("text/")) {
