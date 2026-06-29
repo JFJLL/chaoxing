@@ -1,10 +1,15 @@
-import { mkdir, writeFile } from "fs/promises";
-import { extname, join } from "path";
+import { createHash, createHmac, randomUUID } from "crypto";
+import { mkdir, unlink, writeFile } from "fs/promises";
+import { basename, extname, join } from "path";
 
 const SUPPORTED_EXTENSIONS = new Set([".docx", ".pdf", ".pptx", ".txt", ".md"]);
 
 export function getUploadDir() {
   return process.env.UPLOAD_DIR || "./.uploads";
+}
+
+function importStorageProvider() {
+  return (process.env.IMPORT_STORAGE_PROVIDER || "local").toLowerCase();
 }
 
 export function assertSupportedUpload(fileName: string) {
@@ -41,15 +46,197 @@ export function assertCourseUploadQuota(currentBytes: number, nextBytes: number)
   }
 }
 
+export function maxInstitutionUploadBytes() {
+  const value = Number(process.env.MAX_INSTITUTION_UPLOAD_MB || 10_240);
+  const sizeMb = Number.isFinite(value) && value > 0 ? value : 10_240;
+  return sizeMb * 1024 * 1024;
+}
+
+export function assertInstitutionUploadQuota(currentBytes: number, nextBytes: number) {
+  const maxBytes = maxInstitutionUploadBytes();
+  if (currentBytes + nextBytes > maxBytes) {
+    throw new Error(`学校上传总量不能超过 ${Math.floor(maxBytes / 1024 / 1024)}MB`);
+  }
+}
+
 export async function storeImportFile(input: {
   jobId: string;
   fileName: string;
   bytes: Buffer;
 }) {
   const extension = assertSupportedUpload(input.fileName);
+  if (importStorageProvider() === "s3") {
+    return storeImportFileToS3({ ...input, extension });
+  }
+
   const uploadDir = getUploadDir();
   await mkdir(uploadDir, { recursive: true });
   const filePath = join(uploadDir, `${input.jobId}${extension}`);
   await writeFile(filePath, input.bytes);
   return filePath;
+}
+
+function requiredEnv(name: string) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required when IMPORT_STORAGE_PROVIDER=s3`);
+  return value;
+}
+
+function sha256Hex(input: Buffer | string) {
+  return createHash("sha256").update(input).digest("hex");
+}
+
+function hmac(key: Buffer | string, value: string) {
+  return createHmac("sha256", key).update(value).digest();
+}
+
+function hmacHex(key: Buffer | string, value: string) {
+  return createHmac("sha256", key).update(value).digest("hex");
+}
+
+function amzDateParts(date = new Date()) {
+  const iso = date.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  return { amzDate: iso, dateStamp: iso.slice(0, 8) };
+}
+
+function encodeS3Path(value: string) {
+  return value
+    .split("/")
+    .map((segment) => encodeURIComponent(segment).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`))
+    .join("/");
+}
+
+function signingKey(secret: string, dateStamp: string, region: string) {
+  const dateKey = hmac(`AWS4${secret}`, dateStamp);
+  const regionKey = hmac(dateKey, region);
+  const serviceKey = hmac(regionKey, "s3");
+  return hmac(serviceKey, "aws4_request");
+}
+
+function s3Config() {
+  return {
+    endpoint: new URL(requiredEnv("S3_ENDPOINT")),
+    region: process.env.S3_REGION || "auto",
+    bucket: requiredEnv("S3_BUCKET"),
+    accessKeyId: requiredEnv("S3_ACCESS_KEY_ID"),
+    secretAccessKey: requiredEnv("S3_SECRET_ACCESS_KEY"),
+    prefix: (process.env.S3_PREFIX || "imports").replace(/^\/+|\/+$/g, "")
+  };
+}
+
+function s3ObjectUrl(bucket: string, key: string, endpoint: URL) {
+  const url = new URL(endpoint.toString());
+  url.pathname = `${endpoint.pathname.replace(/\/$/, "")}/${bucket}/${key}`.replace(/\/{2,}/g, "/");
+  url.search = "";
+  return url;
+}
+
+function s3Authorization(input: {
+  method: "GET" | "PUT";
+  url: URL;
+  bodyHash: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  region: string;
+  now?: Date;
+}) {
+  const { amzDate, dateStamp } = amzDateParts(input.now);
+  const canonicalUri = encodeS3Path(input.url.pathname);
+  const canonicalHeaders = `host:${input.url.host}\nx-amz-content-sha256:${input.bodyHash}\nx-amz-date:${amzDate}\n`;
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+  const canonicalRequest = `${input.method}\n${canonicalUri}\n\n${canonicalHeaders}\n${signedHeaders}\n${input.bodyHash}`;
+  const credentialScope = `${dateStamp}/${input.region}/s3/aws4_request`;
+  const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${sha256Hex(canonicalRequest)}`;
+  const signature = hmacHex(signingKey(input.secretAccessKey, dateStamp, input.region), stringToSign);
+  return {
+    authorization: `AWS4-HMAC-SHA256 Credential=${input.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
+    amzDate
+  };
+}
+
+function s3Key(jobId: string, extension: string) {
+  const { prefix } = s3Config();
+  return `${prefix}/${jobId}${extension}`;
+}
+
+async function storeImportFileToS3(input: { jobId: string; fileName: string; bytes: Buffer; extension: string }) {
+  const config = s3Config();
+  const key = s3Key(input.jobId, input.extension);
+  const url = s3ObjectUrl(config.bucket, key, config.endpoint);
+  const bodyHash = sha256Hex(input.bytes);
+  const signed = s3Authorization({
+    method: "PUT",
+    url,
+    bodyHash,
+    accessKeyId: config.accessKeyId,
+    secretAccessKey: config.secretAccessKey,
+    region: config.region
+  });
+  const response = await fetch(url, {
+    method: "PUT",
+    body: new Uint8Array(input.bytes),
+    headers: {
+      Authorization: signed.authorization,
+      "x-amz-content-sha256": bodyHash,
+      "x-amz-date": signed.amzDate,
+      "content-type": "application/octet-stream"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`对象存储上传失败：${response.status}`);
+  }
+
+  return `s3://${config.bucket}/${key}`;
+}
+
+function parseS3Uri(uri: string) {
+  const match = uri.match(/^s3:\/\/([^/]+)\/(.+)$/);
+  if (!match) throw new Error("对象存储地址无效");
+  return { bucket: match[1], key: match[2] };
+}
+
+async function downloadS3Object(uri: string) {
+  const config = s3Config();
+  const { bucket, key } = parseS3Uri(uri);
+  const url = s3ObjectUrl(bucket, key, config.endpoint);
+  const bodyHash = sha256Hex("");
+  const signed = s3Authorization({
+    method: "GET",
+    url,
+    bodyHash,
+    accessKeyId: config.accessKeyId,
+    secretAccessKey: config.secretAccessKey,
+    region: config.region
+  });
+  const response = await fetch(url, {
+    headers: {
+      Authorization: signed.authorization,
+      "x-amz-content-sha256": bodyHash,
+      "x-amz-date": signed.amzDate
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`对象存储下载失败：${response.status}`);
+  }
+
+  const cacheDir = join(getUploadDir(), "cache");
+  await mkdir(cacheDir, { recursive: true });
+  const filePath = join(cacheDir, `${randomUUID()}-${basename(key)}`);
+  await writeFile(filePath, Buffer.from(await response.arrayBuffer()));
+  return filePath;
+}
+
+export async function withImportFilePath<T>(filePath: string, callback: (localPath: string) => Promise<T>) {
+  if (!filePath.startsWith("s3://")) {
+    return callback(filePath);
+  }
+
+  const localPath = await downloadS3Object(filePath);
+  try {
+    return await callback(localPath);
+  } finally {
+    await unlink(localPath).catch(() => undefined);
+  }
 }

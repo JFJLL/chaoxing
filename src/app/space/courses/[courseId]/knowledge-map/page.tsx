@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
+import { KnowledgeMapGraph } from "@/components/course-workspace/KnowledgeMapGraph";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
@@ -27,7 +28,8 @@ export default async function KnowledgeMapPage({ params }: PageProps) {
           <p className="mt-5 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">暂无已发布知识导图。</p>
         ) : (
           <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="space-y-3">
+            <div className="space-y-4">
+              <KnowledgeMapGraph nodes={map.nodes} edges={map.edges} />
               {map.nodes.map((node) => (
                 <article key={node.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                   <div className="flex items-center justify-between gap-3">

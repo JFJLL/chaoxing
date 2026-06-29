@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { extractText } from "@/lib/document/extractText";
 import { generateCourseOutline } from "@/lib/ai/generateCourseOutline";
 import { createKnowledgeMapDraft } from "@/lib/knowledgeMap/generateKnowledgeMap";
+import { withImportFilePath } from "@/lib/storage";
 
 export async function runImportJob(jobId: string) {
   const job = await db.documentImportJob.findUnique({ where: { id: jobId } });
@@ -14,7 +15,7 @@ export async function runImportJob(jobId: string) {
       where: { id: jobId },
       data: { status: "EXTRACTING", currentStage: "文档解析", errorMessage: null, startedAt: new Date(), finishedAt: null }
     });
-    const extracted = await extractText(job.filePath, job.mimeType);
+    const extracted = await withImportFilePath(job.filePath, (localPath) => extractText(localPath, job.mimeType));
     await db.documentImportJob.update({
       where: { id: jobId },
       data: {

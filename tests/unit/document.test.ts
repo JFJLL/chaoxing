@@ -4,7 +4,14 @@ import { join } from "path";
 import { deflateRawSync } from "zlib";
 import { extractText } from "../../src/lib/document/extractText";
 import { buildExtractedDocument, normalizeText, splitIntoChunks } from "../../src/lib/document/normalizeText";
-import { assertCourseUploadQuota, assertSupportedUpload, assertUploadSize } from "../../src/lib/storage";
+import {
+  assertCourseUploadQuota,
+  assertInstitutionUploadQuota,
+  assertSupportedUpload,
+  assertUploadSize,
+  storeImportFile,
+  withImportFilePath
+} from "../../src/lib/storage";
 
 function zipEntry(name: string, content: string) {
   const nameBuffer = Buffer.from(name, "utf8");
@@ -87,5 +94,44 @@ describe("document text normalization", () => {
     expect(() => assertCourseUploadQuota(1024 * 1024, 900 * 1024)).not.toThrow();
     expect(() => assertCourseUploadQuota(1024 * 1024, 2 * 1024 * 1024)).toThrow("课程上传总量不能超过 2MB");
     process.env.MAX_COURSE_UPLOAD_MB = previousCourseQuota;
+  });
+
+  it("enforces institution upload quota", () => {
+    const previousInstitutionQuota = process.env.MAX_INSTITUTION_UPLOAD_MB;
+    process.env.MAX_INSTITUTION_UPLOAD_MB = "3";
+    expect(() => assertInstitutionUploadQuota(2 * 1024 * 1024, 900 * 1024)).not.toThrow();
+    expect(() => assertInstitutionUploadQuota(2 * 1024 * 1024, 2 * 1024 * 1024)).toThrow("学校上传总量不能超过 3MB");
+    process.env.MAX_INSTITUTION_UPLOAD_MB = previousInstitutionQuota;
+  });
+
+  it("stores import files locally by default", async () => {
+    const previousProvider = process.env.IMPORT_STORAGE_PROVIDER;
+    process.env.IMPORT_STORAGE_PROVIDER = "local";
+    const filePath = await storeImportFile({
+      jobId: `local-${Date.now()}`,
+      fileName: "course.md",
+      bytes: Buffer.from("# 本地存储")
+    });
+    await withImportFilePath(filePath, async (localPath) => {
+      const extracted = await extractText(localPath, "text/markdown");
+      expect(extracted.text).toContain("本地存储");
+    });
+    process.env.IMPORT_STORAGE_PROVIDER = previousProvider;
+  });
+
+  it("requires S3 configuration when S3 import storage is enabled", async () => {
+    const previousProvider = process.env.IMPORT_STORAGE_PROVIDER;
+    const previousEndpoint = process.env.S3_ENDPOINT;
+    process.env.IMPORT_STORAGE_PROVIDER = "s3";
+    process.env.S3_ENDPOINT = "";
+    await expect(
+      storeImportFile({
+        jobId: "missing-s3-config",
+        fileName: "course.md",
+        bytes: Buffer.from("# S3")
+      })
+    ).rejects.toThrow("S3_ENDPOINT is required");
+    process.env.IMPORT_STORAGE_PROVIDER = previousProvider;
+    process.env.S3_ENDPOINT = previousEndpoint;
   });
 });

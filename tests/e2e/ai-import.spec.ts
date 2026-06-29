@@ -42,6 +42,7 @@ test("teacher uploads a document, publishes map and HTML courseware, then applie
   await loginAs(page, "学习者");
   await page.goto(`/space/courses/${courseId}/knowledge-map`);
   await expect(page.getByRole("heading", { name: "知识导图", exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "课程知识导图" })).toBeVisible();
   await expect(page.getByText(/个节点/).first()).toBeVisible();
   await page.goto(`/space/courses/${courseId}/html-courseware`);
   await expect(page.getByRole("heading", { name: "HTML课件", exact: true })).toBeVisible();

@@ -7,6 +7,17 @@ let activeWorkers = 0;
 
 const RECOVERABLE_ACTIVE_STATUSES = ["EXTRACTING", "STRUCTURING", "MAPPING"];
 
+function importQueueProvider() {
+  return (process.env.IMPORT_QUEUE_PROVIDER || "in-process").toLowerCase();
+}
+
+function assertSupportedQueueProvider() {
+  const provider = importQueueProvider();
+  if (provider !== "in-process") {
+    throw new Error(`IMPORT_QUEUE_PROVIDER=${provider} is not supported in this build; use in-process or add a Redis/BullMQ worker`);
+  }
+}
+
 function maxImportWorkers() {
   const value = Number(process.env.MAX_IMPORT_WORKERS || 2);
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 2;
@@ -31,6 +42,7 @@ function drainImportQueue() {
 }
 
 export function enqueueImportJob(jobId: string) {
+  assertSupportedQueueProvider();
   if (scheduledJobs.has(jobId) || pendingJobs.includes(jobId)) return;
   scheduledJobs.add(jobId);
   pendingJobs.push(jobId);
@@ -44,6 +56,7 @@ function staleJobCutoff() {
 }
 
 export async function recoverImportJobsFromDatabase(courseId?: string) {
+  assertSupportedQueueProvider();
   const staleCutoff = staleJobCutoff();
   const staleJobs = await db.documentImportJob.findMany({
     where: {
@@ -77,6 +90,7 @@ export async function recoverImportJobsFromDatabase(courseId?: string) {
 }
 
 export function getImportQueueSnapshot() {
+  assertSupportedQueueProvider();
   return {
     activeWorkers,
     pendingJobs: [...pendingJobs]

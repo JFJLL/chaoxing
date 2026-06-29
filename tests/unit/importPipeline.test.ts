@@ -3,7 +3,7 @@ import { join } from "path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { runImportJob } from "../../src/lib/imports/runImportJob";
-import { recoverImportJobsFromDatabase } from "../../src/lib/imports/importQueue";
+import { enqueueImportJob, recoverImportJobsFromDatabase } from "../../src/lib/imports/importQueue";
 
 const prisma = new PrismaClient();
 
@@ -84,5 +84,12 @@ describe("import pipeline", () => {
     expect(recovered).toBeGreaterThanOrEqual(1);
     const updated = await waitForJobStatus(job.id, "READY_FOR_REVIEW");
     expect(updated.extractedText).toContain("恢复测试");
+  });
+
+  it("fails fast for unsupported queue providers", () => {
+    const previousProvider = process.env.IMPORT_QUEUE_PROVIDER;
+    process.env.IMPORT_QUEUE_PROVIDER = "redis";
+    expect(() => enqueueImportJob("job-without-redis-worker")).toThrow("IMPORT_QUEUE_PROVIDER=redis is not supported");
+    process.env.IMPORT_QUEUE_PROVIDER = previousProvider;
   });
 });
