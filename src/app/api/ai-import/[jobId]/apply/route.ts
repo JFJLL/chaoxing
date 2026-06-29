@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireCourseOwner } from "@/lib/permissions";
 import { generatedCourseOutlineSchema } from "@/lib/ai/courseOutlineSchema";
 import { applyOutlineToCourse } from "@/lib/imports/applyOutline";
+import { createKnowledgeMapDraft } from "@/lib/knowledgeMap/generateKnowledgeMap";
 
 type RouteContext = {
   params: Promise<{ jobId: string }>;
@@ -23,6 +24,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   await db.$transaction(async (tx) => {
     await applyOutlineToCourse({ courseId: job.courseId, outline, actorId: user.id, tx });
+    await tx.courseKnowledgeMap.deleteMany({ where: { sourceJobId: job.id, status: { not: "PUBLISHED" } } });
+    await createKnowledgeMapDraft({ courseId: job.courseId, sourceJobId: job.id, outline, tx });
     await tx.documentImportJob.update({
       where: { id: job.id },
       data: {

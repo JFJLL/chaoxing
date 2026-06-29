@@ -5,7 +5,9 @@ import {
   Folder,
   LayoutList,
   MessageCircle,
+  Network,
   PenLine,
+  Presentation,
   ScrollText,
   Volume2
 } from "lucide-react";
@@ -20,6 +22,8 @@ export const courseWorkspaceNav: Array<{
   { id: "ai-workbench", label: "AI工作台", hrefSegment: "ai-workbench", icon: Bot },
   { id: "activities", label: "班级活动", hrefSegment: "activities", icon: CalendarDays },
   { id: "structure", label: "课程结构", hrefSegment: "structure", icon: LayoutList },
+  { id: "knowledge-map", label: "知识导图", hrefSegment: "knowledge-map", icon: Network },
+  { id: "html-courseware", label: "HTML课件", hrefSegment: "html-courseware", icon: Presentation },
   {
     id: "resources",
     label: "课程资料库",

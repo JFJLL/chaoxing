@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { firstTaughtCourseId, loginAs } from "./helpers";
 
-test("teacher uploads a document, reviews generated outline, and applies it", async ({ page }) => {
+test("teacher uploads a document, publishes map and HTML courseware, then applies outline", async ({ page }) => {
   await loginAs(page, "李素艳");
   const courseId = await firstTaughtCourseId(page);
   await page.goto(`/space/courses/${courseId}/ai-import`);
@@ -24,8 +24,26 @@ test("teacher uploads a document, reviews generated outline, and applies it", as
   );
   await page.reload();
   await expect(page.getByText("等待确认").first()).toBeVisible();
+  await expect(page.getByText(/个节点/)).toBeVisible();
+
+  await page.getByRole("button", { name: "发布导图" }).click();
+  await expect(page.getByRole("button", { name: "导图已发布" })).toBeVisible();
+  await page.getByRole("button", { name: "生成HTML课件" }).click();
+  await expect(page.getByRole("button", { name: "发布课件" })).toBeVisible();
+  await page.getByRole("button", { name: "发布课件" }).click();
+  await expect(page.getByRole("link", { name: "播放课件" })).toBeVisible();
+
   await page.getByRole("button", { name: /应用到课程/ }).click();
   await expect(page).toHaveURL(new RegExp(`/space/courses/${courseId}/builder`));
   const values = await page.locator("input").evaluateAll((items) => items.map((item) => (item as HTMLInputElement).value));
   expect(values.some((value) => /数字阅读服务培训|服务认知/.test(value))).toBe(true);
+
+  await page.context().clearCookies();
+  await loginAs(page, "学习者");
+  await page.goto(`/space/courses/${courseId}/knowledge-map`);
+  await expect(page.getByRole("heading", { name: "知识导图", exact: true })).toBeVisible();
+  await expect(page.getByText(/个节点/).first()).toBeVisible();
+  await page.goto(`/space/courses/${courseId}/html-courseware`);
+  await expect(page.getByRole("heading", { name: "HTML课件", exact: true })).toBeVisible();
+  await expect(page.frameLocator("iframe").getByText(/1 \/ \d+/)).toBeVisible();
 });

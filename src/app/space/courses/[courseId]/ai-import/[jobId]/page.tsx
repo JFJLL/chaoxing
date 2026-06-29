@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireCourseOwner } from "@/lib/permissions";
 import { ImportTimeline } from "@/components/ai-import/ImportTimeline";
 import { OutlineReviewEditor } from "@/components/ai-import/OutlineReviewEditor";
+import { ImportJobManager } from "@/components/ai-import/ImportJobManager";
 import type { GeneratedCourseOutline } from "@/types/course";
 
 type PageProps = {
@@ -16,11 +17,23 @@ export default async function AiImportReviewPage({ params }: PageProps) {
   await requireCourseOwner(user, courseId);
   const job = await db.documentImportJob.findFirst({
     where: { id: jobId, courseId },
-    include: { course: true }
+    include: {
+      course: true,
+      knowledgeMaps: {
+        orderBy: { updatedAt: "desc" },
+        include: { nodes: true, edges: true }
+      },
+      aiArtifacts: {
+        where: { appType: "html_courseware" },
+        orderBy: { createdAt: "desc" }
+      }
+    }
   });
 
   if (!job) notFound();
   const outline = job.generatedOutline ? (JSON.parse(job.generatedOutline) as GeneratedCourseOutline) : null;
+  const latestMap = job.knowledgeMaps[0];
+  const latestHtmlArtifact = job.aiArtifacts[0];
 
   return (
     <div className="space-y-6">
@@ -31,6 +44,34 @@ export default async function AiImportReviewPage({ params }: PageProps) {
       </header>
       <ImportTimeline status={job.status} errorMessage={job.errorMessage} retryHref={`/space/courses/${courseId}/ai-import`} />
       {job.warning ? <p className="rounded-md bg-orange-50 p-3 text-sm text-orange-700">{job.warning}</p> : null}
+      <ImportJobManager
+        courseId={courseId}
+        jobId={job.id}
+        status={job.status}
+        map={
+          latestMap
+            ? {
+                id: latestMap.id,
+                title: latestMap.title,
+                summary: latestMap.summary,
+                status: latestMap.status,
+                nodes: latestMap.nodes.map((node) => ({ id: node.id, label: node.label, type: node.type })),
+                edges: latestMap.edges.map((edge) => ({ id: edge.id, type: edge.type }))
+              }
+            : null
+        }
+        htmlArtifact={
+          latestHtmlArtifact
+            ? {
+                id: latestHtmlArtifact.id,
+                title: latestHtmlArtifact.title,
+                status: latestHtmlArtifact.status,
+                createdAt: latestHtmlArtifact.createdAt.toISOString(),
+                publishedAt: latestHtmlArtifact.publishedAt?.toISOString() ?? null
+              }
+            : null
+        }
+      />
       {outline ? <OutlineReviewEditor jobId={job.id} courseId={courseId} initialOutline={outline} /> : null}
     </div>
   );

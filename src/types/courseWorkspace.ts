@@ -4,6 +4,8 @@ export type CourseWorkspaceTab =
   | "ai-workbench"
   | "activities"
   | "structure"
+  | "knowledge-map"
+  | "html-courseware"
   | "resources"
   | "notices"
   | "discussions"
