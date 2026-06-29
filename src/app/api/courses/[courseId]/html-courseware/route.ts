@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseAccess, requireCourseOwner } from "@/lib/permissions";
-import { generateCourseAiArtifact } from "@/lib/courseWorkspace/generateAiArtifact";
-import type { HtmlCoursewarePayload } from "@/types/courseWorkspace";
+import { generateHtmlCoursewareWithAi } from "@/lib/courseWorkspace/generateAiArtifact";
 
 type RouteContext = {
   params: Promise<{ courseId: string }>;
@@ -83,12 +82,12 @@ export async function POST(request: Request, context: RouteContext) {
         lessons: chapter.lessons.map((lesson) => ({ title: lesson.title, summary: lesson.summary }))
       }));
 
-  const payload = generateCourseAiArtifact({
+  const payload = await generateHtmlCoursewareWithAi({
     appType: "html_courseware",
     courseTitle: course.title,
     chapters,
     prompt: "页数：8；风格：课堂播放"
-  }) as HtmlCoursewarePayload;
+  });
   payload.sourceMapId = map.id;
 
   const artifact = await db.courseAiArtifact.create({

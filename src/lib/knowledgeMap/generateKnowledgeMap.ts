@@ -25,10 +25,18 @@ function nodeId() {
   return randomUUID();
 }
 
-function buildKnowledgeMapDraft(outline: GeneratedCourseOutline) {
+export function buildKnowledgeMapDraft(outline: GeneratedCourseOutline) {
   const nodes: KnowledgeMapNodeDraft[] = [];
   const edges: KnowledgeMapEdgeDraft[] = [];
   const rootId = nodeId();
+  const addNode = (node: Omit<KnowledgeMapNodeDraft, "id">) => {
+    const id = nodeId();
+    nodes.push({ id, ...node });
+    return id;
+  };
+  const addEdge = (edge: KnowledgeMapEdgeDraft) => {
+    edges.push(edge);
+  };
 
   nodes.push({
     id: rootId,
@@ -42,26 +50,52 @@ function buildKnowledgeMapDraft(outline: GeneratedCourseOutline) {
     })
   });
 
+  outline.learningObjectives.forEach((objective, objectiveIndex) => {
+    const objectiveId = addNode({
+      label: objective,
+      type: "objective",
+      summary: `课程完成后应能够：${objective}`,
+      order: objectiveIndex + 1,
+      metadata: JSON.stringify({ courseTitle: outline.title })
+    });
+    addEdge({
+      sourceId: rootId,
+      targetId: objectiveId,
+      type: "outcome",
+      label: "学习目标",
+      weight: 1
+    });
+  });
+
+  let previousChapterId: string | null = null;
+  let previousLessonId: string | null = null;
+
   outline.chapters.forEach((chapter) => {
-    const chapterId = nodeId();
-    nodes.push({
-      id: chapterId,
+    const chapterId = addNode({
       label: chapter.title,
       type: "chapter",
       summary: chapter.summary,
       order: chapter.order
     });
-    edges.push({
+    addEdge({
       sourceId: rootId,
       targetId: chapterId,
       type: "contains",
-      label: "包含"
+      label: "模块"
     });
+    if (previousChapterId) {
+      addEdge({
+        sourceId: previousChapterId,
+        targetId: chapterId,
+        type: "precedes",
+        label: "后续章节",
+        weight: 0.55
+      });
+    }
+    previousChapterId = chapterId;
 
     chapter.lessons.forEach((lesson) => {
-      const lessonId = nodeId();
-      nodes.push({
-        id: lessonId,
+      const lessonId = addNode({
         label: lesson.title,
         type: "lesson",
         summary: lesson.summary,
@@ -72,29 +106,105 @@ function buildKnowledgeMapDraft(outline: GeneratedCourseOutline) {
           assessments: lesson.assessmentPrompts
         })
       });
-      edges.push({
+      addEdge({
         sourceId: chapterId,
         targetId: lessonId,
         type: "contains",
-        label: "包含"
+        label: "课时"
       });
+      if (previousLessonId) {
+        addEdge({
+          sourceId: previousLessonId,
+          targetId: lessonId,
+          type: "precedes",
+          label: "先修",
+          weight: 0.45
+        });
+      }
+      previousLessonId = lessonId;
+
+      let previousConceptId: string | null = null;
+      const conceptIds: string[] = [];
 
       lesson.keyPoints.forEach((keyPoint, keyPointIndex) => {
-        const conceptId = nodeId();
-        nodes.push({
-          id: conceptId,
+        const conceptId = addNode({
           label: keyPoint,
           type: "concept",
           summary: lesson.summary,
           order: keyPointIndex + 1,
           metadata: JSON.stringify({ lessonTitle: lesson.title })
         });
-        edges.push({
+        conceptIds.push(conceptId);
+        addEdge({
           sourceId: lessonId,
           targetId: conceptId,
           type: "contains",
-          label: "知识点"
+          label: "核心概念",
+          weight: 0.9
         });
+        if (previousConceptId) {
+          addEdge({
+            sourceId: previousConceptId,
+            targetId: conceptId,
+            type: "relates",
+            label: "递进",
+            weight: 0.35,
+            metadata: JSON.stringify({ lessonTitle: lesson.title })
+          });
+        }
+        previousConceptId = conceptId;
+      });
+
+      lesson.suggestedActivities.slice(0, 3).forEach((activity, activityIndex) => {
+        const activityId = addNode({
+          label: activity,
+          type: "activity",
+          summary: `通过活动巩固“${lesson.title}”。`,
+          order: activityIndex + 1,
+          metadata: JSON.stringify({ lessonTitle: lesson.title, chapterTitle: chapter.title })
+        });
+        addEdge({
+          sourceId: lessonId,
+          targetId: activityId,
+          type: "practice",
+          label: "实践活动",
+          weight: 0.7
+        });
+        if (conceptIds.length) {
+          addEdge({
+            sourceId: conceptIds[activityIndex % conceptIds.length],
+            targetId: activityId,
+            type: "applies",
+            label: "应用",
+            weight: 0.55
+          });
+        }
+      });
+
+      lesson.assessmentPrompts.slice(0, 2).forEach((assessment, assessmentIndex) => {
+        const assessmentId = addNode({
+          label: assessment,
+          type: "assessment",
+          summary: `用于检查“${lesson.title}”的掌握情况。`,
+          order: assessmentIndex + 1,
+          metadata: JSON.stringify({ lessonTitle: lesson.title, chapterTitle: chapter.title })
+        });
+        addEdge({
+          sourceId: lessonId,
+          targetId: assessmentId,
+          type: "checks",
+          label: "检测",
+          weight: 0.7
+        });
+        if (conceptIds.length) {
+          addEdge({
+            sourceId: assessmentId,
+            targetId: conceptIds[assessmentIndex % conceptIds.length],
+            type: "evaluates",
+            label: "评价",
+            weight: 0.5
+          });
+        }
       });
     });
   });
