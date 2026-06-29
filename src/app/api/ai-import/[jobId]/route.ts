@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseOwner } from "@/lib/permissions";
-import { getImportQueueSnapshot } from "@/lib/imports/importQueue";
+import { getImportQueueSnapshot, recoverImportJobsFromDatabase } from "@/lib/imports/importQueue";
 
 type RouteContext = {
   params: Promise<{ jobId: string }>;
@@ -28,6 +28,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }
+  await recoverImportJobsFromDatabase(job.courseId);
   const snapshot = getImportQueueSnapshot();
   const queueIndex = snapshot.pendingJobs.findIndex((id) => id === job.id);
 

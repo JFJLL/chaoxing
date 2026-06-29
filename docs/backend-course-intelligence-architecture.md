@@ -417,7 +417,7 @@ Backend must support the UI split through separate permission behavior, not just
 
 Current implementation status:
 
-- Done locally: role-based course entry cleanup, neutral AI/Gemini adapter, in-process async import queue, upload size guard, PDF/DOCX/PPTX/text/Markdown extraction, knowledge map data model, draft knowledge map generation, teacher publish APIs, student published read APIs, teacher import task retry/delete, teacher-side knowledge map publish controls, HTML courseware draft generation/publish controls, and student-facing knowledge map/HTML playback pages.
+- Done locally: role-based course entry cleanup, neutral AI/Gemini adapter, in-process async import queue with database recovery, single-file and per-course upload quota guards, PDF/DOCX/PPTX/text/Markdown extraction, knowledge map data model, draft knowledge map generation, teacher publish APIs, student published read APIs, teacher import task retry/delete, teacher-side knowledge map publish controls, HTML courseware draft generation/publish controls, and student-facing knowledge map/HTML playback pages.
 - Verified locally: `npm run typecheck`, `npm run test`, `npm run build`, and `npm run test:e2e -- tests/e2e/ai-import.spec.ts`.
 - Still pending for production: Redis/BullMQ queue, PostgreSQL production migration, object storage adapter, per-school storage quota policy, richer knowledge map editor, and broader permission/status-transition regression tests.
 

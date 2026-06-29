@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseOwner } from "@/lib/permissions";
+import { recoverImportJobsFromDatabase } from "@/lib/imports/importQueue";
 import { UploadPanel } from "@/components/ai-import/UploadPanel";
 import { ImportTimeline } from "@/components/ai-import/ImportTimeline";
 
@@ -13,6 +14,7 @@ export default async function AiImportPage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
   await requireCourseOwner(user, courseId);
+  await recoverImportJobsFromDatabase(courseId);
   const course = await db.course.findUnique({
     where: { id: courseId },
     include: {

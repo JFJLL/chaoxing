@@ -4,7 +4,7 @@ import { join } from "path";
 import { deflateRawSync } from "zlib";
 import { extractText } from "../../src/lib/document/extractText";
 import { buildExtractedDocument, normalizeText, splitIntoChunks } from "../../src/lib/document/normalizeText";
-import { assertSupportedUpload, assertUploadSize } from "../../src/lib/storage";
+import { assertCourseUploadQuota, assertSupportedUpload, assertUploadSize } from "../../src/lib/storage";
 
 function zipEntry(name: string, content: string) {
   const nameBuffer = Buffer.from(name, "utf8");
@@ -79,5 +79,13 @@ describe("document text normalization", () => {
     process.env.MAX_FILE_SIZE_MB = "1";
     expect(() => assertUploadSize(2 * 1024 * 1024)).toThrow("文件不能超过 1MB");
     process.env.MAX_FILE_SIZE_MB = previousMaxFileSize;
+  });
+
+  it("enforces course upload quota", () => {
+    const previousCourseQuota = process.env.MAX_COURSE_UPLOAD_MB;
+    process.env.MAX_COURSE_UPLOAD_MB = "2";
+    expect(() => assertCourseUploadQuota(1024 * 1024, 900 * 1024)).not.toThrow();
+    expect(() => assertCourseUploadQuota(1024 * 1024, 2 * 1024 * 1024)).toThrow("课程上传总量不能超过 2MB");
+    process.env.MAX_COURSE_UPLOAD_MB = previousCourseQuota;
   });
 });

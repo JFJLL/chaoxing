@@ -28,6 +28,19 @@ export function assertUploadSize(size: number) {
   }
 }
 
+export function maxCourseUploadBytes() {
+  const value = Number(process.env.MAX_COURSE_UPLOAD_MB || 1024);
+  const sizeMb = Number.isFinite(value) && value > 0 ? value : 1024;
+  return sizeMb * 1024 * 1024;
+}
+
+export function assertCourseUploadQuota(currentBytes: number, nextBytes: number) {
+  const maxBytes = maxCourseUploadBytes();
+  if (currentBytes + nextBytes > maxBytes) {
+    throw new Error(`课程上传总量不能超过 ${Math.floor(maxBytes / 1024 / 1024)}MB`);
+  }
+}
+
 export async function storeImportFile(input: {
   jobId: string;
   fileName: string;

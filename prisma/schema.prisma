@@ -160,6 +160,7 @@ model DocumentImportJob {
   status           String               @default("QUEUED")
   originalName     String
   filePath         String?
+  fileSize         Int                  @default(0)
   mimeType         String?
   extractedText    String?
   generatedOutline String?

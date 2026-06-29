@@ -1,0 +1,1 @@
+ALTER TABLE "DocumentImportJob" ADD COLUMN "fileSize" INTEGER NOT NULL DEFAULT 0;
