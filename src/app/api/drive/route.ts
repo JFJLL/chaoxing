@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
           path
         }
       });
-      return NextResponse.json({ file: record }, { status: 201 });
+      return NextResponse.json({ file: record, storage: path.startsWith("oss://") ? "oss" : "local" }, { status: 201 });
     } catch (error) {
       return errorResponse(error, "上传失败");
     }

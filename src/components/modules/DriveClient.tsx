@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, FolderPlus, Pencil, Share2, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -18,9 +18,14 @@ type DriveClientFile = {
 export function DriveClient({ files, courses, canManage = false }: { files: DriveClientFile[]; courses: Array<{ id: string; title: string }>; canManage?: boolean }) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [visibleFiles, setVisibleFiles] = useState(files);
   const [selectedFileName, setSelectedFileName] = useState("");
   const [status, setStatus] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setVisibleFiles(files);
+  }, [files]);
 
   async function request(url: string, init: RequestInit, successText?: string) {
     setStatus(null);
@@ -49,13 +54,20 @@ export function DriveClient({ files, courses, canManage = false }: { files: Driv
 
   async function createFolder(formData: FormData) {
     await run(async () => {
-      await request("/api/drive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: formData.get("name") }) }, "文件夹已创建");
+      const body = await request("/api/drive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: formData.get("name") }) }, "文件夹已创建");
+      if (body?.file) setVisibleFiles((current) => [body.file, ...current]);
     });
   }
 
   async function upload(formData: FormData) {
     await run(async () => {
-      await request("/api/drive", { method: "POST", body: formData }, "文件已上传");
+      const body = await request("/api/drive", { method: "POST", body: formData });
+      if (body?.file) setVisibleFiles((current) => [body.file, ...current]);
+      setStatus(
+        body?.storage === "oss"
+          ? { tone: "success", text: "文件已上传至 OSS" }
+          : { tone: "error", text: "文件已上传到本地存储，未写入 OSS。请检查服务器 DRIVE_STORAGE_PROVIDER 是否为 oss，并用 pm2 restart cuc --update-env 重启。" }
+      );
       setSelectedFileName("");
       if (fileInputRef.current) fileInputRef.current.value = "";
     });
@@ -66,9 +78,17 @@ export function DriveClient({ files, courses, canManage = false }: { files: Driv
   async function rename(id: string, currentName: string) {
     const name = window.prompt("重命名", currentName);
     if (!name) return;
-    await run(async () => { await request(`/api/drive/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }, "已重命名"); });
+    await run(async () => {
+      await request(`/api/drive/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }, "已重命名");
+      setVisibleFiles((current) => current.map((file) => file.id === id ? { ...file, name } : file));
+    });
   }
-  async function remove(id: string) { await run(async () => { await request(`/api/drive/${id}`, { method: "DELETE" }, "已删除"); }); }
+  async function remove(id: string) {
+    await run(async () => {
+      await request(`/api/drive/${id}`, { method: "DELETE" }, "已删除");
+      setVisibleFiles((current) => current.filter((file) => file.id !== id));
+    });
+  }
   return (
     <div className="space-y-5">
       {canManage ? (
@@ -100,7 +120,7 @@ export function DriveClient({ files, courses, canManage = false }: { files: Driv
       ) : null}
       {status ? <p className={`rounded-md px-3 py-2 text-sm ${status.tone === "error" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{status.text}</p> : null}
       <div className="space-y-3">
-        {files.map((file) => (
+        {visibleFiles.map((file) => (
           <article key={file.id} className="flex flex-wrap items-center gap-3 rounded-md border border-[var(--cx-border)] p-3">
             <span className="font-medium">{file.kind === "folder" ? "文件夹" : "文件"}：{file.name}</span>
             {file.courseTitle ? <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{file.courseTitle}</span> : null}
@@ -117,7 +137,7 @@ export function DriveClient({ files, courses, canManage = false }: { files: Driv
             ) : null}
           </article>
         ))}
-        {!files.length ? <p className="rounded-md border border-dashed border-[var(--cx-border)] p-6 text-sm text-slate-500">{canManage ? "暂无文件。" : "暂无已发布课程资料。"}</p> : null}
+        {!visibleFiles.length ? <p className="rounded-md border border-dashed border-[var(--cx-border)] p-6 text-sm text-slate-500">{canManage ? "暂无文件。" : "暂无已发布课程资料。"}</p> : null}
       </div>
     </div>
   );
