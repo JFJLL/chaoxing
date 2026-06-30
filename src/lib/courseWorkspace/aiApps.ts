@@ -20,6 +20,7 @@ export const courseAiApps: CourseAiAppDefinition[] = [
   { key: "program-test", title: "程序题自测", description: "实时评估编程技能，提升代码水平", category: "教学神器", color: "orange", enabled: false },
   { key: "ai-writing-review", title: "AI写作批阅", description: "基于人工智能技术，自动对学生的写作内容进行评分和反馈", category: "教学神器", color: "orange", enabled: false },
   { key: "ai-courseware", appType: "courseware", title: "AI课件", description: "轻松一点，即刻创建专业级教学PPT", category: "备课中心", color: "purple", enabled: true },
+  { key: "ai-html-courseware", appType: "html_courseware", title: "HTML课件", description: "使用当前 Gemini 能力生成可播放的互动课堂课件", category: "备课中心", color: "blue", enabled: true },
   { key: "formula-recognition", title: "公式识别", description: "识别图片和文档中的公式内容", category: "教学神器", color: "green", enabled: false },
   { key: "smart-numbering", title: "智能编号", description: "自动整理题目和材料编号", category: "教学神器", color: "blue", enabled: false },
   { key: "homework-check", title: "作业查重", description: "辅助发现作业中的重复内容", category: "教学神器", color: "green", enabled: false }

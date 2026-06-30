@@ -21,6 +21,7 @@ export type AiWorkbenchContext = {
     lessonPlan: number;
     courseware: number;
     paperAssembly: number;
+    htmlCourseware: number;
   };
   chapters: Array<{ title: string; lessonCount: number }>;
   recentArtifacts: Array<{ id: string; title: string; appType: string; createdAt: string }>;
@@ -71,7 +72,7 @@ function AiTutorPanel({ context }: { context: AiWorkbenchContext }) {
                 <span className="shrink-0 text-slate-400">{chapter.lessonCount} 课时</span>
               </div>
             ))}
-            {!context.chapters.length ? <p className="text-sm text-slate-500">暂无课程目录，可通过课程建设补充。</p> : null}
+            {!context.chapters.length ? <p className="text-sm text-slate-500">暂无课程目录，可通过 AI文档建课补充。</p> : null}
           </div>
         </aside>
       </div>
@@ -128,7 +129,8 @@ function AiLearningAnalyticsPanel({ context }: { context: AiWorkbenchContext }) 
     context.artifactCounts.questionGeneration +
     context.artifactCounts.lessonPlan +
     context.artifactCounts.courseware +
-    context.artifactCounts.paperAssembly;
+    context.artifactCounts.paperAssembly +
+    context.artifactCounts.htmlCourseware;
   const metrics = [
     { label: "学生数", value: context.studentCount, icon: GraduationCap },
     { label: "章节数", value: context.chapterCount, icon: BookOpenCheck },
@@ -165,7 +167,8 @@ function AiLearningAnalyticsPanel({ context }: { context: AiWorkbenchContext }) 
               ["AI出题", context.artifactCounts.questionGeneration],
               ["AI教案", context.artifactCounts.lessonPlan],
               ["AI课件", context.artifactCounts.courseware],
-              ["AI组卷", context.artifactCounts.paperAssembly]
+              ["AI组卷", context.artifactCounts.paperAssembly],
+              ["HTML课件", context.artifactCounts.htmlCourseware]
             ].map(([label, value]) => (
               <div key={label} className="grid grid-cols-[72px_minmax(0,1fr)_36px] items-center gap-3 text-sm">
                 <span className="text-slate-600">{label}</span>
@@ -259,7 +262,7 @@ export function AiWorkbench({ courseId, context, canManage = false }: { courseId
               ))}
             </div>
             <button type="button" className="inline-flex h-9 items-center justify-center gap-1 rounded-full bg-gradient-to-r from-[#2165f3] to-[#08b7d8] px-4 text-sm font-medium text-white">
-              AI应用开放平台
+              AI能力管理
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>

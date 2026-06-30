@@ -1,4 +1,4 @@
-import { Bot, Hammer } from "lucide-react";
+import { Bot } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { isTeacher } from "@/lib/permissions";
@@ -22,7 +22,6 @@ export default async function StructurePage({ params }: PageProps) {
         actions={
           canManage ? (
             <div className="flex flex-wrap gap-2">
-              <LinkButton href={`/space/courses/${course.id}/builder`} variant="secondary"><Hammer className="h-4 w-4" />课程建设</LinkButton>
               <LinkButton href={`/space/courses/${course.id}/ai-import`} variant="secondary"><Bot className="h-4 w-4" />AI 文档建课</LinkButton>
             </div>
           ) : null

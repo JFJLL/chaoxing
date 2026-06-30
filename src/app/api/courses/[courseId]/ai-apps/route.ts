@@ -4,13 +4,13 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isTeacher, requireCourseAccess, requireCourseOwner } from "@/lib/permissions";
 import { enabledCourseAiAppTypes, getCourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
-import { generateCourseAiArtifact } from "@/lib/courseWorkspace/generateAiArtifact";
+import { generateCourseAiArtifact, generateHtmlCoursewareWithAi } from "@/lib/courseWorkspace/generateAiArtifact";
 
 type RouteContext = {
   params: Promise<{ courseId: string }>;
 };
 
-const appTypeSchema = z.enum(["question_generation", "lesson_plan", "courseware", "paper_assembly"]);
+const appTypeSchema = z.enum(["question_generation", "lesson_plan", "courseware", "paper_assembly", "html_courseware"]);
 
 const createArtifactSchema = z.object({
   appType: appTypeSchema,
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const app = getCourseAiAppDefinition(parsed.data.appType);
-  const payload = generateCourseAiArtifact({
+  const artifactInput = {
     appType: parsed.data.appType,
     courseTitle: course.title,
     chapters: course.chapters.map((chapter) => ({
@@ -84,7 +84,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       lessons: chapter.lessons.map((lesson) => ({ title: lesson.title, summary: lesson.summary }))
     })),
     prompt: parsed.data.prompt
-  });
+  };
+  const payload =
+    parsed.data.appType === "html_courseware"
+      ? await generateHtmlCoursewareWithAi(artifactInput)
+      : generateCourseAiArtifact(artifactInput);
 
   const artifact = await db.courseAiArtifact.create({
     data: {

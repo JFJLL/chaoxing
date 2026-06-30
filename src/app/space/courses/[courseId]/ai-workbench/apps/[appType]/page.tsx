@@ -14,7 +14,7 @@ type PageProps = {
 };
 
 function parseAppType(value: string): CourseAiAppType | null {
-  if (value === "question_generation" || value === "lesson_plan" || value === "courseware" || value === "paper_assembly") {
+  if (value === "question_generation" || value === "lesson_plan" || value === "courseware" || value === "paper_assembly" || value === "html_courseware") {
     return value;
   }
   return null;
@@ -43,7 +43,7 @@ export default async function AiAppDetailPage({ params }: PageProps) {
           <div>
             <Link href={`/space/courses/${course.id}/ai-workbench`} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-blue-700">
               <ArrowLeft className="h-4 w-4" />
-              AI工作台
+              备课中心
             </Link>
             <h1 className="mt-3 text-2xl font-semibold text-slate-900">{app.title}</h1>
             <p className="mt-1 text-sm text-slate-500">{app.description}</p>

@@ -11,7 +11,7 @@ import type {
   HtmlCoursewarePayload
 } from "@/types/courseWorkspace";
 
-const appTypes: CourseAiAppType[] = ["question_generation", "lesson_plan", "courseware", "paper_assembly"];
+const appTypes: CourseAiAppType[] = ["question_generation", "lesson_plan", "courseware", "paper_assembly", "html_courseware"];
 
 const input = {
   courseTitle: "功能体验课",

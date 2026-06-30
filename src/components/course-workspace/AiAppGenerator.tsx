@@ -8,7 +8,8 @@ import type {
   AiPaperPayload,
   AiQuestionPayload,
   CourseAiAppType,
-  CourseAiArtifactPayload
+  CourseAiArtifactPayload,
+  HtmlCoursewarePayload
 } from "@/types/courseWorkspace";
 import type { CourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
 import { Button } from "@/components/ui/Button";
@@ -131,6 +132,22 @@ function Preview({ appType, payload }: { appType: CourseAiAppType; payload: Cour
     );
   }
 
+  if (appType === "html_courseware") {
+    const data = payload as HtmlCoursewarePayload;
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+          <p className="text-sm text-slate-500">课件页数</p>
+          <p className="mt-1 text-3xl font-semibold text-slate-900">{data.slideCount}</p>
+          <p className="mt-2 text-sm text-slate-500">风格：{data.theme ?? "课堂播放"}</p>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-slate-100">
+          <iframe title="HTML课件预览" srcDoc={data.html} className="h-[520px] w-full bg-white" />
+        </div>
+      </div>
+    );
+  }
+
   const data = payload as AiPaperPayload;
   return (
     <div className="space-y-3">
@@ -179,7 +196,7 @@ export function AiAppGenerator({
     if (app.appType === "lesson_plan") {
       return [...common, `课时：${options.lessonMinutes}`, `教法：${options.teachingMethod}`, `补充要求：${prompt || "无"}`].join("；");
     }
-    if (app.appType === "courseware") {
+    if (app.appType === "courseware" || app.appType === "html_courseware") {
       return [...common, `页数：${options.slideCount}`, `风格：${options.coursewareStyle}`, `补充要求：${prompt || "无"}`].join("；");
     }
     return [...common, `总分：${options.paperScore}`, `补充要求：${prompt || "无"}`].join("；");
@@ -189,7 +206,7 @@ export function AiAppGenerator({
     if (prompt) return `${app.title}：${prompt.slice(0, 18)}`;
     if (app.appType === "question_generation") return `${app.title}：${options.questionType}${options.questionCount}题`;
     if (app.appType === "lesson_plan") return `${app.title}：${options.lessonMinutes}分钟${options.teachingMethod}`;
-    if (app.appType === "courseware") return `${app.title}：${options.coursewareStyle}${options.slideCount}页`;
+    if (app.appType === "courseware" || app.appType === "html_courseware") return `${app.title}：${options.coursewareStyle}${options.slideCount}页`;
     return `${app.title}：${options.paperScore}分${options.difficulty}卷`;
   }
 
@@ -307,7 +324,7 @@ export function AiAppGenerator({
             </div>
           ) : null}
 
-          {app.appType === "courseware" ? (
+          {app.appType === "courseware" || app.appType === "html_courseware" ? (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               <label className="space-y-1 text-sm font-medium text-slate-700">
                 <span>页数</span>

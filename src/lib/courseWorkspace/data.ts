@@ -27,7 +27,10 @@ export async function loadCourseWorkspace(user: SessionUser, courseId: string) {
         where: canManage ? {} : { status: "PUBLISHED" },
         orderBy: { createdAt: "desc" }
       },
-      enrollments: true
+      enrollments: {
+        orderBy: { createdAt: "asc" },
+        include: { user: true }
+      }
     }
   });
 

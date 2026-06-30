@@ -2,7 +2,10 @@ export type CourseAiAppType = "question_generation" | "lesson_plan" | "coursewar
 
 export type CourseWorkspaceTab =
   | "ai-workbench"
+  | "pre-class"
   | "activities"
+  | "after-class"
+  | "analytics"
   | "structure"
   | "knowledge-map"
   | "html-courseware"
