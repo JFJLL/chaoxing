@@ -19,8 +19,7 @@ function isStandaloneCourseWorkspace(pathname: string) {
     return false;
   }
 
-  const courseSubroute = segments[3];
-  return courseSubroute !== "builder" && courseSubroute !== "ai-import";
+  return true;
 }
 
 export function SpaceChrome({ user, institutionName, unreadCount, children }: SpaceChromeProps) {

@@ -45,3 +45,61 @@ textarea,
 select {
   font: inherit;
 }
+
+.cx-route-progress {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 9999;
+  height: 3px;
+  pointer-events: none;
+  opacity: 0;
+  transform: scaleX(0.18);
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--cx-blue), #20b486, #60a5fa);
+  box-shadow: 0 0 18px rgba(86, 105, 201, 0.38);
+  transition:
+    opacity 120ms ease,
+    transform 900ms cubic-bezier(0.2, 0.72, 0.2, 1);
+}
+
+.cx-route-progress[data-active="true"] {
+  opacity: 1;
+  transform: scaleX(0.86);
+}
+
+a[data-cx-pending="true"],
+button[data-cx-pending="true"],
+[role="button"][data-cx-pending="true"],
+input[type="submit"][data-cx-pending="true"] {
+  cursor: progress;
+  opacity: 0.76;
+  pointer-events: none;
+  transform: translateY(1px);
+}
+
+a[data-cx-pending="true"],
+button[data-cx-pending="true"],
+[role="button"][data-cx-pending="true"] {
+  position: relative;
+}
+
+a[data-cx-pending="true"]::after,
+button[data-cx-pending="true"]::after,
+[role="button"][data-cx-pending="true"]::after {
+  content: "";
+  width: 0.72em;
+  height: 0.72em;
+  margin-left: 0.45rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  animation: cx-spin 650ms linear infinite;
+}
+
+@keyframes cx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -22,7 +22,7 @@ export async function requireCourseAccess(user: SessionUser, courseId: string) {
       OR: [
         ...(user.role === "ADMIN" ? [{}] : []),
         { ownerId: user.id },
-        { enrollments: { some: { userId: user.id } } }
+        { status: "ACTIVE", enrollments: { some: { userId: user.id } } }
       ]
     }
   });

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
+import { isTeacher } from "@/lib/permissions";
 import { getCourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
 import type { CourseAiAppType } from "@/types/courseWorkspace";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
@@ -30,6 +31,9 @@ export default async function AiAppDetailPage({ params }: PageProps) {
   const app = { ...appDefinition, appType: appDefinition.appType };
 
   const course = await loadCourseWorkspace(user, courseId);
+  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  if (!canManage) redirect(`/space/courses/${course.id}/resources`);
+
   const artifacts = course.aiArtifacts.filter((artifact) => artifact.appType === appType);
 
   return (

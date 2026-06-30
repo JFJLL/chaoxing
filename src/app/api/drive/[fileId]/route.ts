@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { streamDriveFile } from "@/lib/modules/driveFiles";
 import { requireDriveFileOwner, requireDriveFileReadable } from "@/lib/modules/drivePermissions";
+import { requireTeacher } from "@/lib/permissions";
 
 type RouteContext = { params: Promise<{ fileId: string }> };
 
@@ -23,6 +24,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const { fileId } = await context.params;
   const body = (await request.json()) as { name?: string; parentId?: string | null };
   try {
+    requireTeacher(user);
     const file = await requireDriveFileOwner(user, fileId);
     if (body.parentId) await requireDriveFileOwner(user, body.parentId);
     const updated = await db.driveFile.update({
@@ -39,6 +41,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { fileId } = await context.params;
   try {
+    requireTeacher(user);
     const file = await requireDriveFileOwner(user, fileId);
     await db.driveFile.update({
       where: { id: file.id },

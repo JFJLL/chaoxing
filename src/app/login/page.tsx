@@ -7,12 +7,6 @@ const ERROR_MESSAGES = {
   invalid_form: "请输入有效邮箱和密码"
 } as const;
 
-const DEV_CREDENTIALS = [
-  { label: "教师账号 1", email: "li.suyan@example.local", password: "Teacher@2026" },
-  { label: "教师账号 2", email: "wang.yifan@example.local", password: "Teacher@2026" },
-  { label: "学生账号", email: "student@example.local", password: "Student@2026" }
-];
-
 export default async function LoginPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const error =
@@ -68,20 +62,6 @@ export default async function LoginPage({ searchParams }: PageProps) {
             登录
           </button>
         </form>
-        {process.env.NODE_ENV !== "production" ? (
-          <div className="mt-6 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-            <p className="font-medium text-slate-800">开发环境账号</p>
-            <ul className="mt-3 space-y-2">
-              {DEV_CREDENTIALS.map((credential) => (
-                <li key={credential.email}>
-                  <span className="block text-slate-900">{credential.label}</span>
-                  <span className="block">{credential.email}</span>
-                  <span className="block">密码：{credential.password}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
       </section>
     </main>
   );

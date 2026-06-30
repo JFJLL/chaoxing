@@ -5,6 +5,7 @@ import { requireCourseOwner } from "@/lib/permissions";
 import { ChapterTree } from "@/components/courses/ChapterTree";
 import type { CourseDirectoryNode } from "@/types/course";
 import { LinkButton } from "@/components/ui/Button";
+import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 
 type PageProps = {
   params: Promise<{ courseId: string }>;
@@ -52,17 +53,21 @@ export default async function CourseBuilderPage({ params }: PageProps) {
   }));
 
   return (
-    <div className="space-y-5">
-      <header className="flex flex-col gap-3 border-b border-[var(--cx-border)] pb-5 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-sm text-slate-500">课程建设</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">{course.title}</h1>
+    <FanyaCourseShell user={user} course={course} activeTab="structure">
+      <section className="rounded-[28px] bg-white p-6 shadow-sm lg:p-8">
+        <div className="space-y-5">
+          <header className="flex flex-col gap-3 border-b border-[var(--cx-border)] pb-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm text-slate-500">课程建设</p>
+              <h1 className="mt-1 text-2xl font-semibold text-slate-900">{course.title}</h1>
+            </div>
+            <LinkButton href={`/space/courses/${courseId}/ai-import`} variant="secondary">
+              AI 文档建课
+            </LinkButton>
+          </header>
+          <ChapterTree courseId={courseId} initialChapters={chapters} />
         </div>
-        <LinkButton href={`/space/courses/${courseId}/ai-import`} variant="secondary">
-          AI 文档建课
-        </LinkButton>
-      </header>
-      <ChapterTree courseId={courseId} initialChapters={chapters} />
-    </div>
+      </section>
+    </FanyaCourseShell>
   );
 }

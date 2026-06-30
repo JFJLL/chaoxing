@@ -16,7 +16,7 @@ export default async function CoursesPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const user = await requireUser();
   const canTeach = isTeacher(user);
-  const activeTab = canTeach ? (params.tab === "learned" ? "learned" : "taught") : "learned";
+  const activeTab = canTeach ? "taught" : "learned";
 
   const courses =
     activeTab === "taught"
@@ -27,7 +27,7 @@ export default async function CoursesPage({ searchParams }: PageProps) {
         })
       : (
           await db.courseEnrollment.findMany({
-            where: { userId: user.id },
+            where: { userId: user.id, course: { status: "ACTIVE" } },
             include: { course: { include: { owner: true } } },
             orderBy: { updatedAt: "desc" }
           })

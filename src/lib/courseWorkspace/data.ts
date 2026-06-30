@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth";
-import { requireCourseAccess } from "@/lib/permissions";
+import { isTeacher, requireCourseAccess } from "@/lib/permissions";
 
 export async function loadCourseWorkspace(user: SessionUser, courseId: string) {
-  await requireCourseAccess(user, courseId);
+  const accessibleCourse = await requireCourseAccess(user, courseId);
+  const canManage = isTeacher(user) && (user.role === "ADMIN" || accessibleCourse.ownerId === user.id);
 
   const course = await db.course.findUnique({
     where: { id: courseId },
@@ -23,6 +24,7 @@ export async function loadCourseWorkspace(user: SessionUser, courseId: string) {
         include: { author: true }
       },
       aiArtifacts: {
+        where: canManage ? {} : { status: "PUBLISHED" },
         orderBy: { createdAt: "desc" }
       },
       enrollments: true

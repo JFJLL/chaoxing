@@ -194,8 +194,9 @@ function AiLearningAnalyticsPanel({ context }: { context: AiWorkbenchContext }) 
   );
 }
 
-export function AiWorkbench({ courseId, context }: { courseId: string; context: AiWorkbenchContext }) {
-  const [topTab, setTopTab] = useState<(typeof topTabs)[number]>("AI应用");
+export function AiWorkbench({ courseId, context, canManage = false }: { courseId: string; context: AiWorkbenchContext; canManage?: boolean }) {
+  const visibleTopTabs = canManage ? topTabs : topTabs.filter((tab) => tab === "AI助教" || tab === "AI学情分析");
+  const [topTab, setTopTab] = useState<(typeof topTabs)[number]>(canManage ? "AI应用" : "AI助教");
   const [category, setCategory] = useState<(typeof categories)[number]>("全部应用");
   const [keyword, setKeyword] = useState("");
 
@@ -213,7 +214,7 @@ export function AiWorkbench({ courseId, context }: { courseId: string; context: 
     <div className="space-y-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="inline-flex w-fit rounded-full bg-white p-1 shadow-sm">
-          {topTabs.map((tab) => (
+          {visibleTopTabs.map((tab) => (
             <button
               key={tab}
               type="button"
@@ -237,9 +238,9 @@ export function AiWorkbench({ courseId, context }: { courseId: string; context: 
       </div>
 
       {topTab === "AI助教" ? <AiTutorPanel context={context} /> : null}
-      {topTab === "AI实践" ? <AiPracticePanel courseId={courseId} context={context} /> : null}
+      {canManage && topTab === "AI实践" ? <AiPracticePanel courseId={courseId} context={context} /> : null}
       {topTab === "AI学情分析" ? <AiLearningAnalyticsPanel context={context} /> : null}
-      {topTab === "AI应用" ? (
+      {canManage && topTab === "AI应用" ? (
         <section className="rounded-[28px] bg-white p-5 shadow-sm lg:p-7">
           <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap gap-2">

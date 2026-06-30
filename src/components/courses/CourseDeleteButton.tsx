@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
+import { clsx } from "clsx";
 import { Button } from "@/components/ui/Button";
 
-export function CourseDeleteButton({ courseId, title }: { courseId: string; title: string }) {
+export function CourseDeleteButton({ courseId, title, className }: { courseId: string; title: string; className?: string }) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
@@ -32,7 +33,7 @@ export function CourseDeleteButton({ courseId, title }: { courseId: string; titl
   }
 
   return (
-    <div className="space-y-1">
+    <div className={clsx("space-y-1", className)}>
       <Button
         type="button"
         variant="danger"

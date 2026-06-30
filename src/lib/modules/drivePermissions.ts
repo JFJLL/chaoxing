@@ -13,10 +13,21 @@ export async function requireDriveFileReadable(user: SessionUser, fileId: string
       id: fileId,
       deletedAt: null,
       OR: [
+        ...(user.role === "ADMIN" ? [{}] : []),
         { ownerId: user.id },
         {
           shares: {
             some: activeShareWhere()
+          }
+        },
+        {
+          resources: {
+            some: {
+              course: {
+                status: "ACTIVE",
+                enrollments: { some: { userId: user.id } }
+              }
+            }
           }
         }
       ]

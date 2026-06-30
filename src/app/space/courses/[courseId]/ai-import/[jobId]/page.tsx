@@ -6,6 +6,7 @@ import { ImportTimeline } from "@/components/ai-import/ImportTimeline";
 import { OutlineReviewEditor } from "@/components/ai-import/OutlineReviewEditor";
 import { ImportJobManager } from "@/components/ai-import/ImportJobManager";
 import type { GeneratedCourseOutline } from "@/types/course";
+import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 
 type PageProps = {
   params: Promise<{ courseId: string; jobId: string }>;
@@ -36,43 +37,47 @@ export default async function AiImportReviewPage({ params }: PageProps) {
   const latestHtmlArtifact = job.aiArtifacts[0];
 
   return (
-    <div className="space-y-6">
-      <header className="border-b border-[var(--cx-border)] pb-5">
-        <p className="text-sm text-slate-500">{job.course.title}</p>
-        <h1 className="mt-1 text-2xl font-semibold text-slate-900">AI 文档建课</h1>
-        <p className="mt-1 text-sm text-slate-500">{job.originalName}</p>
-      </header>
-      <ImportTimeline status={job.status} errorMessage={job.errorMessage} retryHref={`/space/courses/${courseId}/ai-import`} />
-      {job.warning ? <p className="rounded-md bg-orange-50 p-3 text-sm text-orange-700">{job.warning}</p> : null}
-      <ImportJobManager
-        courseId={courseId}
-        jobId={job.id}
-        status={job.status}
-        map={
-          latestMap
-            ? {
-                id: latestMap.id,
-                title: latestMap.title,
-                summary: latestMap.summary,
-                status: latestMap.status,
-                nodes: latestMap.nodes.map((node) => ({ id: node.id, label: node.label, type: node.type })),
-                edges: latestMap.edges.map((edge) => ({ id: edge.id, type: edge.type }))
-              }
-            : null
-        }
-        htmlArtifact={
-          latestHtmlArtifact
-            ? {
-                id: latestHtmlArtifact.id,
-                title: latestHtmlArtifact.title,
-                status: latestHtmlArtifact.status,
-                createdAt: latestHtmlArtifact.createdAt.toISOString(),
-                publishedAt: latestHtmlArtifact.publishedAt?.toISOString() ?? null
-              }
-            : null
-        }
-      />
-      {outline ? <OutlineReviewEditor jobId={job.id} courseId={courseId} initialOutline={outline} /> : null}
-    </div>
+    <FanyaCourseShell user={user} course={job.course} activeTab="ai-workbench">
+      <section className="rounded-[28px] bg-white p-6 shadow-sm lg:p-8">
+        <div className="space-y-6">
+          <header className="border-b border-[var(--cx-border)] pb-5">
+            <p className="text-sm text-slate-500">{job.course.title}</p>
+            <h1 className="mt-1 text-2xl font-semibold text-slate-900">AI 文档建课</h1>
+            <p className="mt-1 text-sm text-slate-500">{job.originalName}</p>
+          </header>
+          <ImportTimeline status={job.status} errorMessage={job.errorMessage} retryHref={`/space/courses/${courseId}/ai-import`} />
+          {job.warning ? <p className="rounded-md bg-orange-50 p-3 text-sm text-orange-700">{job.warning}</p> : null}
+          <ImportJobManager
+            courseId={courseId}
+            jobId={job.id}
+            status={job.status}
+            map={
+              latestMap
+                ? {
+                    id: latestMap.id,
+                    title: latestMap.title,
+                    summary: latestMap.summary,
+                    status: latestMap.status,
+                    nodes: latestMap.nodes.map((node) => ({ id: node.id, label: node.label, type: node.type })),
+                    edges: latestMap.edges.map((edge) => ({ id: edge.id, type: edge.type }))
+                  }
+                : null
+            }
+            htmlArtifact={
+              latestHtmlArtifact
+                ? {
+                    id: latestHtmlArtifact.id,
+                    title: latestHtmlArtifact.title,
+                    status: latestHtmlArtifact.status,
+                    createdAt: latestHtmlArtifact.createdAt.toISOString(),
+                    publishedAt: latestHtmlArtifact.publishedAt?.toISOString() ?? null
+                  }
+                : null
+            }
+          />
+          {outline ? <OutlineReviewEditor jobId={job.id} courseId={courseId} initialOutline={outline} /> : null}
+        </div>
+      </section>
+    </FanyaCourseShell>
   );
 }

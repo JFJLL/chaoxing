@@ -1,6 +1,7 @@
 import { Bot, Hammer } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
+import { isTeacher } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { CourseModulePanel } from "@/components/course-workspace/CourseModulePanel";
 import { LinkButton } from "@/components/ui/Button";
@@ -11,17 +12,20 @@ export default async function StructurePage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
+  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="structure">
       <CourseModulePanel
         title="课程结构"
-        description="按章、课时查看课程目录，并保留原课程建设入口。"
+        description="按章、课时查看课程目录。"
         actions={
-          <div className="flex flex-wrap gap-2">
-            <LinkButton href={`/space/courses/${course.id}/builder`} variant="secondary"><Hammer className="h-4 w-4" />课程建设</LinkButton>
-            <LinkButton href={`/space/courses/${course.id}/ai-import`} variant="secondary"><Bot className="h-4 w-4" />AI 文档建课</LinkButton>
-          </div>
+          canManage ? (
+            <div className="flex flex-wrap gap-2">
+              <LinkButton href={`/space/courses/${course.id}/builder`} variant="secondary"><Hammer className="h-4 w-4" />课程建设</LinkButton>
+              <LinkButton href={`/space/courses/${course.id}/ai-import`} variant="secondary"><Bot className="h-4 w-4" />AI 文档建课</LinkButton>
+            </div>
+          ) : null
         }
       >
         <div className="space-y-4">
@@ -38,7 +42,7 @@ export default async function StructurePage({ params }: PageProps) {
               </div>
             </article>
           ))}
-          {!course.chapters.length ? <p className="text-sm text-slate-500">暂无课程目录，可进入课程建设维护。</p> : null}
+          {!course.chapters.length ? <p className="text-sm text-slate-500">暂无课程目录。</p> : null}
         </div>
       </CourseModulePanel>
     </FanyaCourseShell>

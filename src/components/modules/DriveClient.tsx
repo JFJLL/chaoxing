@@ -4,7 +4,16 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
-export function DriveClient({ files, courses }: { files: Array<{ id: string; name: string; kind: string; size: number; shares?: Array<{ code: string }> }>; courses: Array<{ id: string; title: string }> }) {
+type DriveClientFile = {
+  id: string;
+  name: string;
+  kind: string;
+  size: number;
+  courseTitle?: string;
+  shares?: Array<{ code: string }>;
+};
+
+export function DriveClient({ files, courses, canManage = false }: { files: DriveClientFile[]; courses: Array<{ id: string; title: string }>; canManage?: boolean }) {
   const router = useRouter();
   async function createFolder(formData: FormData) { await fetch("/api/drive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: formData.get("name") }) }); router.refresh(); }
   async function upload(formData: FormData) { await fetch("/api/drive", { method: "POST", body: formData }); router.refresh(); }
@@ -19,8 +28,32 @@ export function DriveClient({ files, courses }: { files: Array<{ id: string; nam
   async function remove(id: string) { await fetch(`/api/drive/${id}`, { method: "DELETE" }); router.refresh(); }
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 md:grid-cols-2"><form action={createFolder} className="flex gap-2"><Input name="name" placeholder="新文件夹" /><Button type="submit">新建文件夹</Button></form><form action={upload} className="flex gap-2"><input name="file" type="file" className="rounded-md border p-2" /><Button type="submit">上传</Button></form></div>
-      <div className="space-y-3">{files.map((file) => <article key={file.id} className="flex flex-wrap items-center gap-3 rounded-md border border-[var(--cx-border)] p-3"><span className="font-medium">{file.kind === "folder" ? "文件夹" : "文件"}：{file.name}</span><span className="text-sm text-slate-500">{file.size} bytes</span>{file.shares?.[0] ? <span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">分享码 {file.shares[0].code}</span> : null}{file.kind === "file" ? <a href={`/api/drive/${file.id}?download=1`} className="text-[var(--cx-blue)]">下载</a> : null}<Button type="button" variant="secondary" className="h-8" onClick={() => rename(file.id, file.name)}>重命名</Button><Button type="button" variant="secondary" className="h-8" onClick={() => share(file.id)}>分享</Button>{courses[0] ? <Button type="button" variant="secondary" className="h-8" onClick={() => attach(file.id, courses[0].id)}>添加到课程资料</Button> : null}<Button type="button" variant="danger" className="h-8" onClick={() => remove(file.id)}>删除</Button></article>)}</div>
+      {canManage ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          <form action={createFolder} className="flex gap-2"><Input name="name" placeholder="新文件夹" /><Button type="submit">新建文件夹</Button></form>
+          <form action={upload} className="flex gap-2"><input name="file" type="file" className="rounded-md border p-2" /><Button type="submit">上传</Button></form>
+        </div>
+      ) : null}
+      <div className="space-y-3">
+        {files.map((file) => (
+          <article key={file.id} className="flex flex-wrap items-center gap-3 rounded-md border border-[var(--cx-border)] p-3">
+            <span className="font-medium">{file.kind === "folder" ? "文件夹" : "文件"}：{file.name}</span>
+            {file.courseTitle ? <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{file.courseTitle}</span> : null}
+            <span className="text-sm text-slate-500">{file.size} bytes</span>
+            {canManage && file.shares?.[0] ? <span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">分享码 {file.shares[0].code}</span> : null}
+            {file.kind === "file" ? <a href={`/api/drive/${file.id}?download=1`} className="text-[var(--cx-blue)]">下载</a> : null}
+            {canManage ? (
+              <>
+                <Button type="button" variant="secondary" className="h-8" onClick={() => rename(file.id, file.name)}>重命名</Button>
+                <Button type="button" variant="secondary" className="h-8" onClick={() => share(file.id)}>分享</Button>
+                {courses[0] ? <Button type="button" variant="secondary" className="h-8" onClick={() => attach(file.id, courses[0].id)}>添加到课程资料</Button> : null}
+                <Button type="button" variant="danger" className="h-8" onClick={() => remove(file.id)}>删除</Button>
+              </>
+            ) : null}
+          </article>
+        ))}
+        {!files.length ? <p className="rounded-md border border-dashed border-[var(--cx-border)] p-6 text-sm text-slate-500">{canManage ? "暂无文件。" : "暂无已发布课程资料。"}</p> : null}
+      </div>
     </div>
   );
 }

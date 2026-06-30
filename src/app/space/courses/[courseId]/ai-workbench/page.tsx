@@ -61,7 +61,7 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
             </div>
           </section>
         ) : null}
-        <AiWorkbench courseId={course.id} context={context} />
+        <AiWorkbench courseId={course.id} context={context} canManage={canManage} />
       </div>
     </FanyaCourseShell>
   );

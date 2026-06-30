@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, Bot, Hammer, User } from "lucide-react";
+import { BookOpen, User } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { CourseDeleteButton } from "@/components/courses/CourseDeleteButton";
@@ -67,24 +67,12 @@ export function CourseCard({ course, mode }: CourseCardProps) {
           <p className="text-sm text-slate-500">学生 {course.enrollments?.length ?? 0} 人</p>
         )}
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex items-center gap-2">
           <LinkButton href={`/space/courses/${course.id}`} variant="secondary" className="h-9 px-3">
             <BookOpen className="h-4 w-4" />
             进入课程
           </LinkButton>
-          {mode === "taught" ? (
-            <>
-              <LinkButton href={`/space/courses/${course.id}/builder`} variant="secondary" className="h-9 px-3">
-                <Hammer className="h-4 w-4" />
-                课程建设
-              </LinkButton>
-              <LinkButton href={`/space/courses/${course.id}/ai-import`} variant="primary" className="h-9 px-3">
-                <Bot className="h-4 w-4" />
-                AI 文档建课
-              </LinkButton>
-              <CourseDeleteButton courseId={course.id} title={course.title} />
-            </>
-          ) : null}
+          {mode === "taught" ? <CourseDeleteButton courseId={course.id} title={course.title} className="ml-auto" /> : null}
         </div>
       </div>
     </article>

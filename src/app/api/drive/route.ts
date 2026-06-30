@@ -1,17 +1,19 @@
-import { mkdir, writeFile } from "fs/promises";
-import { join } from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { isTeacher, requireCourseOwner, requireTeacher } from "@/lib/permissions";
 import { requireDriveFileOwner, requireDriveFileReadable } from "@/lib/modules/drivePermissions";
-import { getUploadDir } from "@/lib/storage";
+import { storeDriveFile } from "@/lib/modules/driveFiles";
 
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   const user = await requireUser();
   const parentId = request.nextUrl.searchParams.get("parentId");
+  if (!isTeacher(user)) {
+    return NextResponse.json({ error: "需要教师权限" }, { status: 403 });
+  }
+
   const files = await db.driveFile.findMany({
     where: { ownerId: user.id, parentId: parentId || null, deletedAt: null },
     orderBy: [{ kind: "asc" }, { name: "asc" }]
@@ -21,6 +23,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const user = await requireUser();
+  try {
+    requireTeacher(user);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "需要教师权限" }, { status: 403 });
+  }
+
   const contentType = request.headers.get("content-type") || "";
   if (contentType.includes("multipart/form-data")) {
     const form = await request.formData();
@@ -30,11 +38,12 @@ export async function POST(request: NextRequest) {
     if (typeof parentId === "string" && parentId) {
       await requireDriveFileOwner(user, parentId);
     }
-    const dir = join(getUploadDir(), "drive");
-    await mkdir(dir, { recursive: true });
-    const idPrefix = `${Date.now()}-${file.name}`;
-    const filePath = join(dir, idPrefix);
-    await writeFile(filePath, Buffer.from(await file.arrayBuffer()));
+    const path = await storeDriveFile({
+      ownerId: user.id,
+      fileName: file.name,
+      bytes: Buffer.from(await file.arrayBuffer()),
+      mimeType: file.type || null
+    });
     const record = await db.driveFile.create({
       data: {
         ownerId: user.id,
@@ -43,7 +52,7 @@ export async function POST(request: NextRequest) {
         kind: "file",
         mimeType: file.type || null,
         size: file.size,
-        path: filePath
+        path
       }
     });
     return NextResponse.json({ file: record }, { status: 201 });

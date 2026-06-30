@@ -3,10 +3,7 @@ import { clsx } from "clsx";
 
 export function CourseTabs({ active, canTeach = false }: { active: "learned" | "taught"; canTeach?: boolean }) {
   const tabs = canTeach
-    ? ([
-        { key: "taught", label: "我教的课" },
-        { key: "learned", label: "我学的课" }
-      ] as const)
+    ? ([{ key: "taught", label: "我教的课" }] as const)
     : ([{ key: "learned", label: "我学的课" }] as const);
 
   return (

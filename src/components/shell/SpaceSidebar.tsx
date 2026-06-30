@@ -20,19 +20,20 @@ import type { SessionUser } from "@/lib/auth";
 
 const navItems = [
   { href: "/space", label: "首页", icon: Home },
-  { href: "/space/topics", label: "专题创作", icon: Lightbulb },
+  { href: "/space/topics", label: "专题创作", icon: Lightbulb, hidden: true },
   { href: "/space/courses", label: "课程", icon: BookOpen },
   { href: "/space/inbox", label: "收件箱", icon: Inbox },
-  { href: "/space/groups", label: "小组", icon: Users },
+  { href: "/space/groups", label: "小组", icon: Users, hidden: true },
   { href: "/space/notes", label: "笔记", icon: NotebookPen },
-  { href: "/space/contacts", label: "通讯录", icon: Contact },
-  { href: "/space/drive", label: "云盘", icon: Cloud },
-  { href: "/space/plagiarism", label: "论文检测", icon: FileCheck2 },
-  { href: "/space/live", label: "个人直播间", icon: Radio }
+  { href: "/space/contacts", label: "通讯录", icon: Contact, hidden: true },
+  { href: "/space/drive", label: "云盘", icon: Cloud, teacherOnly: true },
+  { href: "/space/plagiarism", label: "论文检测", icon: FileCheck2, hidden: true },
+  { href: "/space/live", label: "个人直播间", icon: Radio, hidden: true }
 ];
 
 export function SpaceSidebar({ user, unreadCount = 0 }: { user: SessionUser; unreadCount?: number }) {
   const pathname = usePathname();
+  const visibleNavItems = navItems.filter((item) => !item.hidden && (!item.teacherOnly || user.role === "TEACHER" || user.role === "ADMIN"));
 
   return (
     <>
@@ -49,7 +50,7 @@ export function SpaceSidebar({ user, unreadCount = 0 }: { user: SessionUser; unr
           </div>
         </div>
         <nav className="space-y-1 p-3">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = pathname === item.href || (item.href !== "/space" && pathname.startsWith(item.href));
             const Icon = item.icon;
             return (
@@ -79,7 +80,7 @@ export function SpaceSidebar({ user, unreadCount = 0 }: { user: SessionUser; unr
         </button>
       </aside>
       <nav className="fixed bottom-0 left-0 right-0 z-30 flex h-16 items-center gap-1 overflow-x-auto border-t border-[var(--cx-border)] bg-white px-2 shadow-lg md:hidden">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const active = pathname === item.href || (item.href !== "/space" && pathname.startsWith(item.href));
           const Icon = item.icon;
           return (
