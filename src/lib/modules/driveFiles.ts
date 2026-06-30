@@ -34,7 +34,7 @@ function encodeObjectKey(key: string) {
 
 function ossObjectUrl(bucket: string, key: string, endpoint: URL) {
   const url = new URL(endpoint.toString());
-  url.host = `${bucket}.${endpoint.host}`;
+  url.host = endpoint.hostname.startsWith(`${bucket}.`) ? endpoint.host : `${bucket}.${endpoint.host}`;
   url.pathname = `/${encodeObjectKey(key)}`;
   url.search = "";
   return url;
@@ -90,7 +90,8 @@ async function uploadDriveFileToOss(input: { ownerId: string; fileName: string; 
   });
 
   if (!response.ok) {
-    throw new Error(`阿里云 OSS 上传失败：${response.status}`);
+    const detail = await response.text().catch(() => "");
+    throw new Error(`阿里云 OSS 上传失败：${response.status}${detail ? ` ${detail.slice(0, 180)}` : ""}`);
   }
 
   return `oss://${config.bucket}/${key}`;
@@ -123,7 +124,8 @@ async function downloadDriveFileFromOss(uri: string, contentType: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`阿里云 OSS 下载失败：${response.status}`);
+    const detail = await response.text().catch(() => "");
+    throw new Error(`阿里云 OSS 下载失败：${response.status}${detail ? ` ${detail.slice(0, 180)}` : ""}`);
   }
 
   return Buffer.from(await response.arrayBuffer());
