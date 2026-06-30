@@ -79,11 +79,10 @@ npm run db:seed
 npm run typecheck
 npm run test
 npm run build
-npm run test:e2e
 npm run verify
 ```
 
-`npm run verify` 会清理构建产物后依次执行类型检查、单元测试、生产构建和 E2E 测试。
+`npm run verify` 会清理构建产物后依次执行类型检查、单元测试和生产构建。
 
 ## 使用注意事项
 

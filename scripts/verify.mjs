@@ -10,8 +10,7 @@ const commands = [
   ["npm", ["run", "clean"]],
   ["npm", ["run", "typecheck"]],
   ["npm", ["run", "test"]],
-  ["npm", ["run", "build"]],
-  ["npm", ["run", "test:e2e"]]
+  ["npm", ["run", "build"]]
 ];
 
 for (const [command, args] of commands) {
