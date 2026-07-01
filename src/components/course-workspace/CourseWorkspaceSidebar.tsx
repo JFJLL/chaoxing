@@ -7,6 +7,7 @@ import type { CourseWorkspaceTab } from "@/types/courseWorkspace";
 type Props = {
   course: { id: string; title: string; cover?: string | null };
   activeTab: CourseWorkspaceTab;
+  canManage: boolean;
 };
 
 function coverClass(cover?: string | null) {
@@ -16,7 +17,9 @@ function coverClass(cover?: string | null) {
   return "from-blue-500 to-cyan-400";
 }
 
-export function CourseWorkspaceSidebar({ course, activeTab }: Props) {
+export function CourseWorkspaceSidebar({ course, activeTab, canManage }: Props) {
+  const visibleNav = canManage ? courseWorkspaceNav : courseWorkspaceNav.filter((item) => item.id !== "ai-workbench");
+
   return (
     <aside className="w-full shrink-0 border-r border-slate-100 bg-white p-4 lg:w-[248px]">
       <div className={clsx("overflow-hidden rounded-xl bg-gradient-to-br p-4 text-white shadow-sm", coverClass(course.cover))}>
@@ -34,7 +37,7 @@ export function CourseWorkspaceSidebar({ course, activeTab }: Props) {
       </div>
 
       <nav className="mt-4 space-y-1.5">
-        {courseWorkspaceNav.map((item) => {
+        {visibleNav.map((item) => {
           const Icon = item.icon;
           const active = item.id === activeTab;
           return (

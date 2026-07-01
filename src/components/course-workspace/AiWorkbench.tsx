@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BarChart3, BookOpenCheck, Bot, ChevronRight, ClipboardCheck, FileText, GraduationCap, MessageCircle, Search, Sparkles, Target, Wand2 } from "lucide-react";
+import { BarChart3, BookOpenCheck, Bot, ClipboardCheck, FileText, GraduationCap, MessageCircle, Search, Sparkles, Target, Wand2 } from "lucide-react";
 import { clsx } from "clsx";
 import { AiAppGrid } from "@/components/course-workspace/AiAppGrid";
 import { courseAiApps } from "@/lib/courseWorkspace/aiApps";
 
 const topTabs = ["AI助教", "AI应用", "AI实践", "AI学情分析"] as const;
-const categories = ["全部应用", "备课中心", "教学神器", "学习助手", "资料科研"] as const;
+const categories = ["全部备课工具", "备课中心", "教学神器"] as const;
+const prepToolTitles = new Set(["AI教案", "AI课件", "HTML课件", "AI出题"]);
 
 export type AiWorkbenchContext = {
   courseTitle: string;
@@ -200,13 +201,14 @@ function AiLearningAnalyticsPanel({ context }: { context: AiWorkbenchContext }) 
 export function AiWorkbench({ courseId, context, canManage = false }: { courseId: string; context: AiWorkbenchContext; canManage?: boolean }) {
   const visibleTopTabs = canManage ? topTabs : topTabs.filter((tab) => tab === "AI助教" || tab === "AI学情分析");
   const [topTab, setTopTab] = useState<(typeof topTabs)[number]>(canManage ? "AI应用" : "AI助教");
-  const [category, setCategory] = useState<(typeof categories)[number]>("全部应用");
+  const [category, setCategory] = useState<(typeof categories)[number]>("全部备课工具");
   const [keyword, setKeyword] = useState("");
 
   const apps = useMemo(
     () =>
       courseAiApps.filter((app) => {
-        const matchCategory = category === "全部应用" || app.category === category;
+        if (!prepToolTitles.has(app.title)) return false;
+        const matchCategory = category === "全部备课工具" || app.category === category;
         const matchKeyword = !keyword || app.title.includes(keyword) || app.description.includes(keyword);
         return matchCategory && matchKeyword;
       }),
@@ -246,6 +248,10 @@ export function AiWorkbench({ courseId, context, canManage = false }: { courseId
       {canManage && topTab === "AI应用" ? (
         <section className="rounded-[28px] bg-white p-5 shadow-sm lg:p-7">
           <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-950">备课 AI 工具</h2>
+              <p className="mt-1 text-sm text-slate-500">围绕教案、课件、互动课件和练习题组织常用 AI 能力。</p>
+            </div>
             <div className="flex flex-wrap gap-2">
               {categories.map((item) => (
                 <button
@@ -261,20 +267,12 @@ export function AiWorkbench({ courseId, context, canManage = false }: { courseId
                 </button>
               ))}
             </div>
-            <button type="button" className="inline-flex h-9 items-center justify-center gap-1 rounded-full bg-gradient-to-r from-[#2165f3] to-[#08b7d8] px-4 text-sm font-medium text-white">
-              AI能力管理
-              <ChevronRight className="h-4 w-4" />
-            </button>
           </div>
 
           <div className="my-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-[#2165f3] px-4 text-sm font-medium text-white">
-                <Sparkles className="h-4 w-4" />
-                创建AI应用
-              </button>
-              <button type="button" className="h-9 rounded-md border border-slate-200 bg-white px-4 text-sm text-slate-600">全部应用</button>
-              <button type="button" className="h-9 rounded-md border border-slate-200 bg-white px-4 text-sm text-slate-600">批量管理</button>
+            <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-sm text-blue-700">
+              <Sparkles className="h-4 w-4" />
+              当前展示教师备课高频工具
             </div>
             <label className="flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm text-slate-500">
               <Search className="h-4 w-4" />

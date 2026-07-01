@@ -1,4 +1,4 @@
-import { BarChart3, Bot, GraduationCap, ListChecks, UsersRound } from "lucide-react";
+import { BarChart3, BookOpenCheck, Bot, ClipboardCheck, GraduationCap, ListChecks, Radio, UsersRound } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { isTeacher } from "@/lib/permissions";
@@ -26,6 +26,12 @@ export default async function AnalyticsPage({ params }: PageProps) {
     { label: "课程课时", value: course.chapters.reduce((sum, chapter) => sum + chapter.lessons.length, 0), icon: ListChecks },
     { label: "AI产物", value: aiArtifacts, icon: Bot }
   ];
+  const analysisBlocks = [
+    { title: "预习情况", value: `${progress}%`, description: "课前阅读、预习练习和教材阅读的综合完成度。", icon: BookOpenCheck },
+    { title: "课堂参与", value: "待接入", description: "签到、投票、抢答、分组研讨和 AI陪练参与情况。", icon: Radio },
+    { title: "作业考试", value: course.aiArtifacts.filter((artifact) => artifact.appType === "paper_assembly").length, description: "作业任务、阶段测验和 AI组卷产物。", icon: ClipboardCheck },
+    { title: "AI学习记录", value: aiArtifacts, description: "AI助教、AI题库、AI课件等学习与生成记录。", icon: Bot }
+  ];
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="analytics">
@@ -45,6 +51,28 @@ export default async function AnalyticsPage({ params }: PageProps) {
             );
           })}
         </div>
+
+        <section className="mt-5 rounded-2xl border border-slate-100 p-5">
+          <div>
+            <h2 className="font-semibold text-slate-900">学情维度</h2>
+            <p className="mt-1 text-sm text-slate-500">前端先按预习、课堂、课后和 AI学习四类展示，后续可接入真实行为数据。</p>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {analysisBlocks.map((block) => {
+              const Icon = block.icon;
+              return (
+                <article key={block.title} className="rounded-xl bg-slate-50 p-4">
+                  <Icon className="h-5 w-5 text-[#2165f3]" />
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-900">{block.title}</h3>
+                    <span className="text-sm font-semibold text-blue-700">{block.value}</span>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">{block.description}</p>
+                </article>
+              );
+            })}
+          </div>
+        </section>
 
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
           <section className="rounded-2xl border border-slate-100 p-5">

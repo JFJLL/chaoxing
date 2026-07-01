@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { isTeacher } from "@/lib/permissions";
@@ -6,7 +7,7 @@ import { AiWorkbench } from "@/components/course-workspace/AiWorkbench";
 import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { CoursePublishButton } from "@/components/courses/CoursePublishButton";
-import { Bot, Database, FileText, FolderOpen, LibraryBig, MessageCircle, Network, Presentation, Video } from "lucide-react";
+import { Bot, BrainCircuit, CircleHelp, Database, FileText, FolderOpen, LibraryBig, ListTree, MessageCircle, Network, Presentation, Route, Video } from "lucide-react";
 
 type PageProps = {
   params: Promise<{ courseId: string }>;
@@ -17,7 +18,8 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
   const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
-  const prepEntries = [
+  if (!canManage) redirect(`/space/courses/${course.id}/pre-class`);
+  const primaryPrepEntries = [
     {
       title: "AI文档建课",
       description: "上传教案后生成大纲、课程目录、知识图谱、能力图谱和问题图谱。",
@@ -29,12 +31,6 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
       description: "基于教案或知识大纲生成课堂 PPT 内容。",
       href: `/space/courses/${course.id}/ai-workbench/apps/courseware`,
       icon: Presentation
-    },
-    {
-      title: "HTML课件",
-      description: "沿用当前 AI 能力生成可播放的互动课堂课件。",
-      href: `/space/courses/${course.id}/html-courseware`,
-      icon: FileText
     },
     {
       title: "课程资料库",
@@ -55,11 +51,20 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
       icon: MessageCircle
     }
   ];
+  const documentOutputs = [
+    { title: "课程大纲", description: "提炼课程目标和教学范围", icon: ListTree },
+    { title: "课程目录", description: "生成章节、课时和学习顺序", icon: Route },
+    { title: "知识图谱", description: "梳理知识点之间的关系", icon: Network },
+    { title: "能力图谱", description: "对应能力目标和实践要求", icon: BrainCircuit },
+    { title: "问题图谱", description: "沉淀课堂提问和检测问题", icon: CircleHelp }
+  ];
   const libraryEntries = [
-    { title: "资料库", description: "教材、参考资料和教师上传材料", icon: FolderOpen },
-    { title: "案例库", description: "课程案例和课堂分析材料", icon: LibraryBig },
-    { title: "项目库", description: "课程项目与实践任务素材", icon: Database },
-    { title: "慕课 / 参考视频", description: "外部课程与参考视频接入位", icon: Video }
+    { title: "知识图谱", description: "课程知识结构", href: `/space/courses/${course.id}/knowledge-map`, icon: Network },
+    { title: "HTML课件", description: "互动课堂课件", href: `/space/courses/${course.id}/html-courseware`, icon: FileText },
+    { title: "案例库", description: "课程案例材料", href: `/space/courses/${course.id}/resources#cases`, icon: LibraryBig },
+    { title: "项目库", description: "实践任务素材", href: `/space/courses/${course.id}/resources#projects`, icon: Database },
+    { title: "知网接口", description: "文献接入位", href: `/space/courses/${course.id}/resources#cnki`, icon: FolderOpen },
+    { title: "慕课 / 参考视频", description: "外部课程与视频", href: `/space/courses/${course.id}/resources#other-materials`, icon: Video }
   ];
   const context = {
     courseTitle: course.title,
@@ -109,8 +114,8 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
               <h2 className="text-xl font-semibold text-slate-950">备课资源与 AI 能力</h2>
               <p className="text-sm text-slate-500">把文档建课、课件生成、资料库和 AI 助教收敛到课程备课中心。</p>
             </div>
-            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {prepEntries.map((entry) => {
+            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {primaryPrepEntries.map((entry) => {
                 const Icon = entry.icon;
                 return (
                   <a key={entry.title} href={entry.href} className="rounded-2xl border border-slate-100 bg-slate-50 p-5 transition hover:border-blue-100 hover:bg-blue-50/50">
@@ -121,15 +126,31 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
                 );
               })}
             </div>
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/70 p-5">
+              <h3 className="font-semibold text-blue-950">AI文档建课输出</h3>
+              <p className="mt-1 text-sm text-blue-800">上传教案后，前端明确展示五类生成结果，便于教师判断下一步备课动作。</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-5">
+                {documentOutputs.map((entry) => {
+                  const Icon = entry.icon;
+                  return (
+                    <div key={entry.title} className="rounded-xl bg-white px-4 py-3">
+                      <Icon className="h-5 w-5 text-blue-600" />
+                      <p className="mt-2 text-sm font-semibold text-slate-900">{entry.title}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">{entry.description}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {libraryEntries.map((entry) => {
                 const Icon = entry.icon;
                 return (
-                  <div key={entry.title} className="rounded-2xl border border-slate-100 p-4">
+                  <a key={entry.title} href={entry.href} className="rounded-2xl border border-slate-100 p-4 transition hover:border-blue-100 hover:bg-blue-50/40">
                     <Icon className="h-5 w-5 text-slate-500" />
                     <p className="mt-3 text-sm font-semibold text-slate-900">{entry.title}</p>
                     <p className="mt-1 text-xs leading-5 text-slate-500">{entry.description}</p>
-                  </div>
+                  </a>
                 );
               })}
             </div>

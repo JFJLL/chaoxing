@@ -9,7 +9,7 @@ import { LinkButton } from "@/components/ui/Button";
 type PageProps = { params: Promise<{ courseId: string }> };
 
 const activities = [
-  { title: "AI陪练", description: "基于当前课程任务模拟访谈、问答或课堂练习场景。", icon: Bot },
+  { title: "AI陪练", description: "基于当前课程任务模拟访谈、问答或课堂练习场景。", icon: Bot, hrefSegment: "ai-coach" },
   { title: "签到", description: "课堂到课确认与学习状态收集", icon: CheckCircle2 },
   { title: "投票", description: "快速收集学生观点并形成课堂反馈", icon: Vote },
   { title: "抢答", description: "围绕知识点组织即时互动", icon: Radio },
@@ -46,11 +46,20 @@ export default async function ActivitiesPage({ params }: PageProps) {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {activities.map((activity) => {
             const Icon = activity.icon;
-            return (
-              <article key={activity.title} className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
+            const content = (
+              <>
                 <Icon className="h-8 w-8 text-blue-600" />
                 <h2 className="mt-4 font-semibold text-slate-900">{activity.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">{activity.description}</p>
+              </>
+            );
+            return activity.hrefSegment ? (
+              <a key={activity.title} href={`/space/courses/${course.id}/${activity.hrefSegment}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-5 transition hover:border-blue-100 hover:bg-blue-50/50">
+                {content}
+              </a>
+            ) : (
+              <article key={activity.title} className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
+                {content}
               </article>
             );
           })}
