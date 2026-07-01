@@ -78,28 +78,3 @@ input[type="submit"][data-cx-pending="true"] {
   pointer-events: none;
   transform: translateY(1px);
 }
-
-a[data-cx-pending="true"],
-button[data-cx-pending="true"],
-[role="button"][data-cx-pending="true"] {
-  position: relative;
-}
-
-a[data-cx-pending="true"]::after,
-button[data-cx-pending="true"]::after,
-[role="button"][data-cx-pending="true"]::after {
-  content: "";
-  width: 0.72em;
-  height: 0.72em;
-  margin-left: 0.45rem;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 999px;
-  animation: cx-spin 650ms linear infinite;
-}
-
-@keyframes cx-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}

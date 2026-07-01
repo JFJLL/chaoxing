@@ -32,7 +32,7 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
     },
     {
       title: "HTML课件",
-      description: "沿用当前 Gemini 能力生成可播放的互动课堂课件。",
+      description: "沿用当前 AI 能力生成可播放的互动课堂课件。",
       href: `/space/courses/${course.id}/html-courseware`,
       icon: FileText
     },

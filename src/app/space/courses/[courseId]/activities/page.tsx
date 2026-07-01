@@ -72,7 +72,7 @@ export default async function ActivitiesPage({ params }: PageProps) {
           <aside className="rounded-2xl bg-blue-50 p-5 text-sm text-blue-800">
             <WalletCards className="h-6 w-6" />
             <p className="mt-3 font-semibold">课堂积分</p>
-            <p className="mt-2 leading-6">当前班级学习者：{course.enrollments.length} 人。积分消耗先按本地 Gemini 使用额度展示，后续接入充值规则时再替换计费口径。</p>
+            <p className="mt-2 leading-6">当前班级学习者：{course.enrollments.length} 人。</p>
           </aside>
         </div>
       </CourseModulePanel>
