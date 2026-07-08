@@ -1,4 +1,4 @@
-import { Bot, BriefcaseBusiness, FileText, FolderOpen, LibraryBig, Video } from "lucide-react";
+import { Bot, BriefcaseBusiness, Database, FileText, FolderOpen, LibraryBig, Video } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { isTeacher } from "@/lib/permissions";
@@ -102,6 +102,24 @@ export default async function ResourcesPage({ params }: PageProps) {
             <div className="grid gap-3 md:grid-cols-2">
               {moocVideoResources.map((resource) => <ResourceCard key={resource.id} resource={resource} icon="video" />)}
               {!moocVideoResources.length ? <EmptyLibraryState label="慕课 / 参考视频" /> : null}
+            </div>
+          </section>
+
+          <section id="cnki" className="scroll-mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Database className="h-5 w-5 text-[#5669c9]" />
+                  <h2 className="text-lg font-semibold text-slate-900">知网接口</h2>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-500">保留课程内的 CNKI 文献检索接入位，可承接机构授权后的论文、期刊、学位论文和参考文献同步。</p>
+              </div>
+              <Badge tone="blue">接口入口</Badge>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {["期刊论文", "学位论文", "参考文献"].map((item) => (
+                <div key={item} className="rounded-xl bg-white p-4 text-sm font-medium text-slate-700 shadow-sm">{item}</div>
+              ))}
             </div>
           </section>
         </div>

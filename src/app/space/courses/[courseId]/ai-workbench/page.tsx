@@ -7,7 +7,7 @@ import { AiWorkbench } from "@/components/course-workspace/AiWorkbench";
 import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { CoursePublishButton } from "@/components/courses/CoursePublishButton";
-import { Bot, Database, FileText, FolderOpen, LibraryBig, MessageCircle, Network, Presentation, Video } from "lucide-react";
+import { Bot, FileText, FolderOpen, MessageCircle, Network, Presentation } from "lucide-react";
 
 type PageProps = {
   params: Promise<{ courseId: string }>;
@@ -40,7 +40,7 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
     },
     {
       title: "课程资料库",
-      description: "统一管理教材、参考资料、案例、项目和视频材料。",
+      description: "统一管理课件资料、案例库、项目库和慕课 / 参考视频。",
       href: `/space/courses/${course.id}/resources`,
       icon: FolderOpen
     },
@@ -56,12 +56,6 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
       href: `/space/courses/${course.id}/ai-workbench`,
       icon: MessageCircle
     }
-  ];
-  const libraryEntries = [
-    { title: "课件资料", description: "教材、课件和教师上传材料", icon: FolderOpen },
-    { title: "案例库", description: "课程案例和课堂分析材料", icon: LibraryBig },
-    { title: "项目库", description: "课程项目与实践任务素材", icon: Database },
-    { title: "慕课 / 参考视频", description: "外部课程与参考视频接入位", icon: Video }
   ];
   const context = {
     courseTitle: course.title,
@@ -120,18 +114,6 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
                     <h3 className="mt-4 font-semibold text-slate-950">{entry.title}</h3>
                     <p className="mt-2 text-sm leading-6 text-slate-600">{entry.description}</p>
                   </a>
-                );
-              })}
-            </div>
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {libraryEntries.map((entry) => {
-                const Icon = entry.icon;
-                return (
-                  <div key={entry.title} className="rounded-2xl border border-slate-100 p-4">
-                    <Icon className="h-5 w-5 text-slate-500" />
-                    <p className="mt-3 text-sm font-semibold text-slate-900">{entry.title}</p>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">{entry.description}</p>
-                  </div>
                 );
               })}
             </div>
