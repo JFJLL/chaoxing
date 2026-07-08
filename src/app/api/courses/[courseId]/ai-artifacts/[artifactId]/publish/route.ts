@@ -7,6 +7,8 @@ type RouteContext = {
   params: Promise<{ courseId: string; artifactId: string }>;
 };
 
+const multiPublishAppTypes = new Set(["question_generation", "paper_assembly"]);
+
 export async function POST(_request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId, artifactId } = await context.params;
@@ -24,10 +26,12 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 
   const published = await db.$transaction(async (tx) => {
-    await tx.courseAiArtifact.updateMany({
-      where: { courseId, appType: artifact.appType, status: "PUBLISHED", id: { not: artifactId } },
-      data: { status: "ARCHIVED" }
-    });
+    if (!multiPublishAppTypes.has(artifact.appType)) {
+      await tx.courseAiArtifact.updateMany({
+        where: { courseId, appType: artifact.appType, status: "PUBLISHED", id: { not: artifactId } },
+        data: { status: "ARCHIVED" }
+      });
+    }
     return tx.courseAiArtifact.update({
       where: { id: artifactId },
       data: { status: "PUBLISHED", publishedAt: new Date() }

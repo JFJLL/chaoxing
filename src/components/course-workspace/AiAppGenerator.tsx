@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { CheckCircle2, Loader2, Send, Sparkles } from "lucide-react";
 import type {
   AiCoursewarePayload,
   AiLessonPlanPayload,
@@ -44,8 +44,12 @@ export type SerializedAiArtifact = {
   title: string;
   prompt: string | null;
   payload: string;
+  status: string;
+  publishedAt?: Date | string | null;
   createdAt: Date | string;
 };
+
+const publishableAppTypes = new Set<CourseAiAppType>(["question_generation", "paper_assembly"]);
 
 function parsePayload(artifact: SerializedAiArtifact): CourseAiArtifactPayload | null {
   try {
@@ -179,10 +183,12 @@ export function AiAppGenerator({
   const [artifacts, setArtifacts] = useState(initialArtifacts);
   const [selectedId, setSelectedId] = useState(initialArtifacts[0]?.id ?? "");
   const [loading, setLoading] = useState(false);
+  const [publishingId, setPublishingId] = useState("");
   const [error, setError] = useState("");
 
   const selected = useMemo(() => artifacts.find((artifact) => artifact.id === selectedId) ?? artifacts[0], [artifacts, selectedId]);
   const payload = selected ? parsePayload(selected) : null;
+  const canPublishToStudents = publishableAppTypes.has(app.appType);
 
   function updateOption<Key extends keyof GeneratorOptions>(key: Key, value: GeneratorOptions[Key]) {
     setOptions((current) => ({ ...current, [key]: value }));
@@ -236,6 +242,32 @@ export function AiAppGenerator({
     setArtifacts((current) => [body.artifact, ...current]);
     setSelectedId(body.artifact.id);
     setPrompt("");
+  }
+
+  async function publishToStudents() {
+    if (!selected) return;
+    setPublishingId(selected.id);
+    setError("");
+
+    const response = await fetch(`/api/courses/${courseId}/ai-artifacts/${selected.id}/publish`, {
+      method: "POST"
+    });
+    const body = await response.json().catch(() => null) as { artifact?: SerializedAiArtifact; error?: string } | null;
+    setPublishingId("");
+
+    if (!response.ok || !body?.artifact) {
+      setError(body?.error ?? "发布失败");
+      return;
+    }
+
+    setArtifacts((current) =>
+      current.map((artifact) => {
+        if (artifact.id === body.artifact?.id) return body.artifact;
+        if (!publishableAppTypes.has(app.appType) && artifact.status === "PUBLISHED" && artifact.appType === body.artifact?.appType) return { ...artifact, status: "ARCHIVED" };
+        return artifact;
+      })
+    );
+    setSelectedId(body.artifact.id);
   }
 
   return (
@@ -400,7 +432,10 @@ export function AiAppGenerator({
                 }`}
               >
                 <span className="line-clamp-1 font-medium">{artifact.title}</span>
-                <span className="mt-1 block text-xs text-slate-400">{new Date(artifact.createdAt).toLocaleString("zh-CN", { hour12: false })}</span>
+                <span className="mt-1 flex items-center justify-between gap-2 text-xs text-slate-400">
+                  <span>{new Date(artifact.createdAt).toLocaleString("zh-CN", { hour12: false })}</span>
+                  {artifact.status === "PUBLISHED" ? <span className="text-emerald-600">已发布</span> : null}
+                </span>
               </button>
             ))}
             {!artifacts.length ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">暂无生成记录</p> : null}
@@ -409,9 +444,25 @@ export function AiAppGenerator({
       </aside>
 
       <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-        <div className="mb-5 border-b border-slate-100 pb-4">
-          <p className="text-sm text-slate-500">结果预览</p>
-          <h2 className="mt-1 text-xl font-semibold text-slate-900">{selected?.title ?? app.title}</h2>
+        <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-sm text-slate-500">结果预览</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-semibold text-slate-900">{selected?.title ?? app.title}</h2>
+              {selected?.status === "PUBLISHED" ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  学生端可见
+                </span>
+              ) : null}
+            </div>
+          </div>
+          {canPublishToStudents && selected ? (
+            <Button type="button" variant="secondary" onClick={publishToStudents} disabled={publishingId === selected.id || selected.status === "PUBLISHED"}>
+              {publishingId === selected.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {selected.status === "PUBLISHED" ? "已发布给学生" : "发布给学生"}
+            </Button>
+          ) : null}
         </div>
         <Preview appType={app.appType} payload={payload} />
       </section>

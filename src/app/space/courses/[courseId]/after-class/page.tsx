@@ -17,7 +17,7 @@ export default async function AfterClassPage({ params }: PageProps) {
   const questions = course.aiArtifacts.filter((artifact) => artifact.appType === "question_generation");
   const papers = course.aiArtifacts.filter((artifact) => artifact.appType === "paper_assembly");
   const modules = [
-    { title: "作业", description: "学生课后提交任务和学习反思。", href: `/space/courses/${course.id}/assignments`, icon: PenLine, count: course.chapters.length },
+    { title: "作业", description: "学生查看老师发布的作业和任务。", href: `/space/courses/${course.id}/assignments`, icon: PenLine, count: questions.length },
     { title: "考试", description: "学生查看测验与阶段考试。", href: `/space/courses/${course.id}/exams`, icon: ClipboardList, count: papers.length },
     { title: "题库", description: canManage ? "教师维护 AI题库和练习题。" : "题库为教师管理入口，学生侧只开放作业和考试。", href: `/space/courses/${course.id}/question-bank`, icon: ScrollText, count: questions.length }
   ];

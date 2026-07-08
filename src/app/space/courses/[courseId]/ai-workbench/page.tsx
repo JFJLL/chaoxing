@@ -18,7 +18,7 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
   const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
-  if (!canManage) redirect(`/space/courses/${course.id}/pre-class`);
+  if (!canManage) redirect(`/space/courses/${course.id}/after-class`);
   const prepEntries = [
     {
       title: "AI文档建课",
@@ -58,7 +58,7 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
     }
   ];
   const libraryEntries = [
-    { title: "资料库", description: "教材、参考资料和教师上传材料", icon: FolderOpen },
+    { title: "课件资料", description: "教材、课件和教师上传材料", icon: FolderOpen },
     { title: "案例库", description: "课程案例和课堂分析材料", icon: LibraryBig },
     { title: "项目库", description: "课程项目与实践任务素材", icon: Database },
     { title: "慕课 / 参考视频", description: "外部课程与参考视频接入位", icon: Video }
@@ -109,7 +109,7 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
           <section className="rounded-[28px] bg-white p-6 shadow-sm lg:p-7">
             <div className="flex flex-col gap-1 border-b border-slate-100 pb-5">
               <h2 className="text-xl font-semibold text-slate-950">备课资源与 AI 能力</h2>
-              <p className="text-sm text-slate-500">把文档建课、课件生成、资料库和 AI 助教收敛到课程备课中心。</p>
+              <p className="text-sm text-slate-500">把文档建课、课件生成、课程资料库和 AI 助教收敛到课程备课中心。</p>
             </div>
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {prepEntries.map((entry) => {
