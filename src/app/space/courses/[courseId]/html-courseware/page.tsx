@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
-import type { HtmlCoursewarePayload } from "@/types/courseWorkspace";
+import { htmlCoursewarePayloadSchema, type HtmlCoursewarePayload } from "@/types/courseWorkspace";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
@@ -14,7 +14,12 @@ export default async function HtmlCoursewarePage({ params }: PageProps) {
     where: { courseId, appType: "html_courseware", status: "PUBLISHED" },
     orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }]
   });
-  const payload = artifact ? (JSON.parse(artifact.payload) as HtmlCoursewarePayload) : null;
+  let payload: HtmlCoursewarePayload | null = null;
+  try {
+    payload = artifact?.payload ? htmlCoursewarePayloadSchema.parse(JSON.parse(artifact.payload)) : null;
+  } catch {
+    payload = null;
+  }
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="html-courseware">

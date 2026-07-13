@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Network, PlaySquare, RefreshCw, Trash2 } from "lucide-react";
+import { Network, PlaySquare, RefreshCw, Trash2 } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
 
 type KnowledgeMapSummary = {
@@ -103,20 +103,13 @@ export function ImportJobManager({
               <Network className="h-4 w-4" />
               {map.status === "PUBLISHED" ? "导图已发布" : "发布导图"}
             </Button>
-            <Button
-              type="button"
-              onClick={() =>
-                action("generate-html", `/api/courses/${courseId}/html-courseware`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ mapId: map.id })
-                })
-              }
-              disabled={busy === "generate-html"}
-            >
-              <FileText className="h-4 w-4" />
-              {busy === "generate-html" ? "生成中" : "生成HTML课件"}
-            </Button>
+            <LinkButton href={`/space/courses/${courseId}/ai-workbench/apps/courseware`} variant="secondary">
+              编辑 AI 课件
+            </LinkButton>
+            <LinkButton href={`/space/courses/${courseId}/ai-workbench/apps/html_courseware`}>
+              <PlaySquare className="h-4 w-4" />
+              前往 HTML 课件
+            </LinkButton>
           </div>
         </div>
       ) : (

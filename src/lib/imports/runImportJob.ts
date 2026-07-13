@@ -37,7 +37,7 @@ export async function runImportJob(jobId: string) {
       where: { id: jobId },
       data: {
         generatedOutline: JSON.stringify(generated.outline),
-        warning: generated.warning ?? null,
+        warning: null,
         status: "MAPPING",
         currentStage: "知识导图生成"
       }
@@ -53,7 +53,7 @@ export async function runImportJob(jobId: string) {
         generatedOutline: JSON.stringify(generated.outline),
         status: "READY_FOR_REVIEW",
         currentStage: "等待教师审核",
-        warning: generated.warning ?? null,
+        warning: null,
         finishedAt: new Date()
       }
     });

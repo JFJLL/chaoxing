@@ -1,39 +1,33 @@
-import { CheckCircle2, Circle, XCircle } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
 import { LinkButton } from "@/components/ui/Button";
+import { getImportStepStates, getQueueLabel } from "@/lib/imports/importProgress";
 
-const steps = [
-  { key: "QUEUED", label: "文档上传" },
-  { key: "EXTRACTING", label: "内容解析" },
-  { key: "STRUCTURING", label: "目录生成" },
-  { key: "MAPPING", label: "知识导图" },
-  { key: "READY_FOR_REVIEW", label: "等待确认" },
-  { key: "APPLIED", label: "已应用" }
-];
-
-const rank: Record<string, number> = {
-  QUEUED: 0,
-  EXTRACTING: 1,
-  GENERATING: 2,
-  STRUCTURING: 2,
-  MAPPING: 3,
-  READY_FOR_REVIEW: 4,
-  APPLIED: 5
-};
+const stepStateLabels = {
+  complete: "已完成",
+  active: "进行中",
+  pending: "未开始"
+} as const;
 
 export function ImportTimeline({
   status,
   errorMessage,
-  retryHref
+  retryHref,
+  currentStage,
+  jobsAhead,
+  pollError
 }: {
   status: string;
   errorMessage?: string | null;
   retryHref?: string;
+  currentStage?: string | null;
+  jobsAhead?: number | null;
+  pollError?: string;
 }) {
   if (status === "FAILED") {
     return (
       <div className="rounded-md border border-red-100 bg-red-50 p-4 text-red-700">
         <div className="flex items-center gap-2 font-medium">
-          <XCircle className="h-4 w-4" />
+          <XCircle aria-hidden="true" className="h-4 w-4" />
           导入失败
         </div>
         <p className="mt-2 text-sm">{errorMessage ?? "请重新上传文档。"}</p>
@@ -46,18 +40,40 @@ export function ImportTimeline({
     );
   }
 
-  const current = rank[status] ?? 0;
+  const steps = getImportStepStates(status);
+  const showQueueLabel = status === "QUEUED" && jobsAhead !== undefined;
+
   return (
-    <ol className="grid gap-3 md:grid-cols-6">
-      {steps.map((step, index) => {
-        const done = index <= current;
-        return (
-          <li key={step.key} className="flex items-center gap-2 rounded-md border border-[var(--cx-border)] bg-white p-3 text-sm">
-            {done ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4 text-slate-300" />}
-            <span className={done ? "font-medium text-slate-900" : "text-slate-500"}>{step.label}</span>
+    <div className="space-y-3">
+      {currentStage || showQueueLabel || pollError ? (
+        <div role="status" aria-live="polite" className="space-y-3">
+          {currentStage || showQueueLabel ? (
+            <div className="rounded-md border border-blue-100 bg-blue-50 px-4 py-3">
+              {currentStage ? <p className="text-sm font-medium text-blue-900">{currentStage}</p> : null}
+              {showQueueLabel ? <p className="mt-1 text-xs text-blue-700">{getQueueLabel(jobsAhead ?? null)}</p> : null}
+            </div>
+          ) : null}
+          {pollError ? <p className="rounded-md border border-orange-100 bg-orange-50 px-4 py-3 text-sm text-orange-700">{pollError}</p> : null}
+        </div>
+      ) : null}
+      <ol aria-label="文档建课进度" className="grid gap-3 md:grid-cols-6">
+        {steps.map((step) => (
+          <li
+            key={step.key}
+            aria-label={`${step.label}：${stepStateLabels[step.state]}`}
+            className="flex items-center gap-2 rounded-md border border-[var(--cx-border)] bg-white p-3 text-sm"
+          >
+            {step.state === "complete" ? (
+              <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-emerald-600" />
+            ) : step.state === "active" ? (
+              <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-blue-600" />
+            ) : (
+              <Circle aria-hidden="true" className="h-4 w-4 text-slate-300" />
+            )}
+            <span className={step.state === "pending" ? "text-slate-500" : "font-medium text-slate-900"}>{step.label}</span>
           </li>
-        );
-      })}
-    </ol>
+        ))}
+      </ol>
+    </div>
   );
 }

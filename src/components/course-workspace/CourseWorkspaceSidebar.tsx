@@ -18,7 +18,7 @@ function coverClass(cover?: string | null) {
 }
 
 export function CourseWorkspaceSidebar({ course, activeTab, canManage }: Props) {
-  const visibleNav = canManage ? courseWorkspaceNav : courseWorkspaceNav.filter((item) => item.id !== "ai-workbench");
+  const visibleNav = courseWorkspaceNav;
 
   return (
     <aside className="w-full shrink-0 border-r border-slate-100 bg-white p-4 lg:w-[248px]">
@@ -58,7 +58,7 @@ export function CourseWorkspaceSidebar({ course, activeTab, canManage }: Props) 
               >
                 <Icon className="h-4 w-4" />
               </span>
-              <span>{item.label}</span>
+              <span>{item.id === "ai-workbench" && !canManage ? "AI助教" : item.label}</span>
             </Link>
           );
         })}

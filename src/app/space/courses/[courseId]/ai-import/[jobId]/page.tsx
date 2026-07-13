@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseOwner } from "@/lib/permissions";
-import { ImportTimeline } from "@/components/ai-import/ImportTimeline";
+import { ImportProgressClient } from "@/components/ai-import/ImportProgressClient";
 import { OutlineReviewEditor } from "@/components/ai-import/OutlineReviewEditor";
 import { ImportJobManager } from "@/components/ai-import/ImportJobManager";
 import type { GeneratedCourseOutline } from "@/types/course";
@@ -45,7 +45,14 @@ export default async function AiImportReviewPage({ params }: PageProps) {
             <h1 className="mt-1 text-2xl font-semibold text-slate-900">AI 文档建课</h1>
             <p className="mt-1 text-sm text-slate-500">{job.originalName}</p>
           </header>
-          <ImportTimeline status={job.status} errorMessage={job.errorMessage} retryHref={`/space/courses/${courseId}/ai-import`} />
+          <ImportProgressClient
+            jobId={job.id}
+            initialStatus={job.status}
+            initialCurrentStage={job.currentStage}
+            initialJobsAhead={null}
+            initialErrorMessage={job.errorMessage}
+            retryHref={`/space/courses/${courseId}/ai-import`}
+          />
           {job.warning ? <p className="rounded-md bg-orange-50 p-3 text-sm text-orange-700">{job.warning}</p> : null}
           <ImportJobManager
             courseId={courseId}

@@ -15,6 +15,18 @@ type JsonCompletionInput = {
   model?: string;
 };
 
+export type TextCompletionMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type TextCompletionStreamInput = {
+  system: string;
+  messages: TextCompletionMessage[];
+  model?: string;
+  signal?: AbortSignal;
+};
+
 function firstNonEmpty(...values: Array<string | undefined>) {
   return values.find((value) => value && value.trim().length > 0)?.trim();
 }
@@ -131,6 +143,16 @@ export function buildGeminiGenerateContentUrl(config: AiModelConfig) {
   return appendApiKey(url, config.apiKey);
 }
 
+export function buildGeminiStreamContentUrl(config: AiModelConfig) {
+  const generateUrl = new URL(buildGeminiGenerateContentUrl(config));
+  generateUrl.pathname = generateUrl.pathname.replace(/:generateContent$/, ":streamGenerateContent");
+  generateUrl.searchParams.set("alt", "sse");
+  const apiKey = generateUrl.searchParams.get("key");
+  generateUrl.searchParams.delete("key");
+  if (apiKey) generateUrl.searchParams.set("key", apiKey);
+  return generateUrl.toString();
+}
+
 async function createOpenAiCompatibleJsonCompletion(config: AiModelConfig, input: JsonCompletionInput) {
   const client = new OpenAI({
     apiKey: config.apiKey,
@@ -199,4 +221,104 @@ export async function createJsonCompletion(input: JsonCompletionInput) {
   }
 
   return createOpenAiCompatibleJsonCompletion(config, input);
+}
+
+async function* createOpenAiCompatibleTextStream(config: AiModelConfig, input: TextCompletionStreamInput) {
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.baseURL
+  });
+  const completion = await client.chat.completions.create({
+    model: config.model,
+    stream: true,
+    messages: [
+      { role: "system", content: input.system },
+      ...input.messages
+    ]
+  }, { signal: input.signal });
+
+  for await (const chunk of completion) {
+    const text = chunk.choices[0]?.delta.content;
+    if (text) yield text;
+  }
+}
+
+function parseGeminiStreamFrame(frame: string) {
+  const data = frame
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart())
+    .join("\n")
+    .trim();
+  if (!data || data === "[DONE]") return "";
+
+  try {
+    const body = JSON.parse(data) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    return body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+  } catch {
+    throw new Error("AI stream returned invalid data");
+  }
+}
+
+async function* readGeminiSse(response: Response) {
+  if (!response.body) throw new Error("AI stream returned no body");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const frames = buffer.split(/\r?\n\r?\n/);
+    buffer = frames.pop() ?? "";
+    for (const frame of frames) {
+      const text = parseGeminiStreamFrame(frame);
+      if (text) yield text;
+    }
+    if (done) break;
+  }
+
+  if (buffer.trim()) {
+    const text = parseGeminiStreamFrame(buffer);
+    if (text) yield text;
+  }
+}
+
+async function createGeminiTextStream(config: AiModelConfig, input: TextCompletionStreamInput) {
+  const response = await fetch(buildGeminiStreamContentUrl(config), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": config.apiKey
+    },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: input.system }] },
+      contents: input.messages.map((message) => ({
+        role: message.role === "assistant" ? "model" : "user",
+        parts: [{ text: message.content }]
+      })),
+      generationConfig: { temperature: 0.2 }
+    }),
+    signal: input.signal
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Gemini API failed: ${response.status} ${message.slice(0, 300)}`);
+  }
+
+  return readGeminiSse(response);
+}
+
+export async function createTextCompletionStream(input: TextCompletionStreamInput): Promise<AsyncIterable<string> | null> {
+  const config = resolveAiModelConfig(input.model);
+  if (!config) return null;
+
+  if (config.provider === "gemini") {
+    return createGeminiTextStream(config, input);
+  }
+
+  return createOpenAiCompatibleTextStream(config, input);
 }

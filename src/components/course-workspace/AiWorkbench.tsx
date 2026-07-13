@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BarChart3, BookOpenCheck, Bot, ClipboardCheck, FileText, GraduationCap, MessageCircle, Search, Sparkles, Target, Wand2 } from "lucide-react";
+import { BarChart3, BookOpenCheck, ClipboardCheck, GraduationCap, Search, Sparkles, Target } from "lucide-react";
 import { clsx } from "clsx";
 import { AiAppGrid } from "@/components/course-workspace/AiAppGrid";
 import { courseAiApps } from "@/lib/courseWorkspace/aiApps";
+import { AiCourseSearch } from "@/components/course-workspace/AiCourseSearch";
+import { AiTutor, type TutorConversationDto } from "@/components/course-workspace/AiTutor";
 
 const topTabs = ["AI助教", "AI应用", "AI实践", "AI学情分析"] as const;
 const categories = ["全部备课工具", "备课中心", "教学神器"] as const;
@@ -27,59 +29,6 @@ export type AiWorkbenchContext = {
   chapters: Array<{ title: string; lessonCount: number }>;
   recentArtifacts: Array<{ id: string; title: string; appType: string; createdAt: string }>;
 };
-
-function AiTutorPanel({ context }: { context: AiWorkbenchContext }) {
-  const assistantCards = [
-    { title: "课程问答助手", description: `基于《${context.courseTitle}》的章节、资料和公告回答教学问题。`, icon: MessageCircle },
-    { title: "备课建议", description: `已识别 ${context.chapterCount} 个章节、${context.lessonCount} 个课时，可生成导入语、重点难点和课堂追问。`, icon: BookOpenCheck },
-    { title: "资源检索", description: `当前课程有 ${context.resourceCount} 份资料，可快速定位可用于备课和课堂活动的内容。`, icon: FileText }
-  ];
-
-  return (
-    <section className="rounded-[28px] bg-white p-6 shadow-sm lg:p-7">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-950">AI助教</h2>
-            <p className="mt-1 text-sm text-slate-500">围绕课程资料、章节和课堂管理提供本地化助教能力。</p>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-3">
-            {assistantCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <article key={card.title} className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
-                  <Icon className="h-7 w-7 text-[#2165f3]" />
-                  <h3 className="mt-4 font-semibold text-slate-950">{card.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{card.description}</p>
-                </article>
-              );
-            })}
-          </div>
-          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
-            <p className="text-sm font-semibold text-blue-900">本节课助教建议</p>
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
-              {["先回顾上次任务点完成情况", "从课程资料中抽取 3 个讨论问题", "课后把 AI出题结果同步到题库"].map((item) => (
-                <div key={item} className="rounded-xl bg-white px-4 py-3 text-sm text-blue-800 shadow-sm">{item}</div>
-              ))}
-            </div>
-          </div>
-        </div>
-        <aside className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-          <h3 className="font-semibold text-slate-950">课程上下文</h3>
-          <div className="mt-4 space-y-3">
-            {context.chapters.slice(0, 5).map((chapter) => (
-              <div key={chapter.title} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
-                <span className="line-clamp-1 text-slate-700">{chapter.title}</span>
-                <span className="shrink-0 text-slate-400">{chapter.lessonCount} 课时</span>
-              </div>
-            ))}
-            {!context.chapters.length ? <p className="text-sm text-slate-500">暂无课程目录，可通过 AI文档建课补充。</p> : null}
-          </div>
-        </aside>
-      </div>
-    </section>
-  );
-}
 
 function AiPracticePanel({ courseId, context }: { courseId: string; context: AiWorkbenchContext }) {
   const practices = [
@@ -198,7 +147,7 @@ function AiLearningAnalyticsPanel({ context }: { context: AiWorkbenchContext }) 
   );
 }
 
-export function AiWorkbench({ courseId, context, canManage = false }: { courseId: string; context: AiWorkbenchContext; canManage?: boolean }) {
+export function AiWorkbench({ courseId, context, canManage = false, initialTutorConversations = [] }: { courseId: string; context: AiWorkbenchContext; canManage?: boolean; initialTutorConversations?: TutorConversationDto[] }) {
   const visibleTopTabs = canManage ? topTabs : topTabs.filter((tab) => tab === "AI助教" || tab === "AI学情分析");
   const [topTab, setTopTab] = useState<(typeof topTabs)[number]>(canManage ? "AI应用" : "AI助教");
   const [category, setCategory] = useState<(typeof categories)[number]>("全部备课工具");
@@ -233,16 +182,10 @@ export function AiWorkbench({ courseId, context, canManage = false }: { courseId
             </button>
           ))}
         </div>
-        <div className="flex max-w-xl flex-1 items-center gap-2 rounded-full bg-white px-4 py-2 shadow-sm lg:max-w-md xl:max-w-lg">
-          <Search className="h-4 w-4 text-slate-400" />
-          <input className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="AI智能检索资源" />
-          <button type="button" className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white">
-            <Wand2 className="h-4 w-4" />
-          </button>
-        </div>
+        <AiCourseSearch courseId={courseId} />
       </div>
 
-      {topTab === "AI助教" ? <AiTutorPanel context={context} /> : null}
+      {topTab === "AI助教" ? <AiTutor courseId={courseId} courseTitle={context.courseTitle} initialConversations={initialTutorConversations} /> : null}
       {canManage && topTab === "AI实践" ? <AiPracticePanel courseId={courseId} context={context} /> : null}
       {topTab === "AI学情分析" ? <AiLearningAnalyticsPanel context={context} /> : null}
       {canManage && topTab === "AI应用" ? (

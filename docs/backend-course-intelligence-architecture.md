@@ -93,7 +93,8 @@ model DocumentImportJob {
   warning          String?
   errorMessage     String?
   currentStage     String?
-  queuePosition    Int?
+  /// Number of tasks ahead: active workers plus earlier pending jobs.
+  jobsAhead        Int?
   retryCount       Int      @default(0)
   startedAt        DateTime?
   finishedAt       DateTime?
@@ -314,7 +315,7 @@ Implementation note: keep the existing fallback behavior. AI failure should degr
 
 - Requires course owner/admin.
 - Lists jobs for the course.
-- Includes status, stage, queue position, error, timestamps.
+- Includes status, stage, jobs ahead (active workers plus earlier pending jobs), error, timestamps.
 
 `GET /api/courses/[courseId]/imports/[jobId]`
 

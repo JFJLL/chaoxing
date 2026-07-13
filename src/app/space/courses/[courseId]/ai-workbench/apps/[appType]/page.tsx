@@ -2,12 +2,14 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { isTeacher } from "@/lib/permissions";
 import { getCourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
 import type { CourseAiAppType } from "@/types/courseWorkspace";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { AiAppGenerator } from "@/components/course-workspace/AiAppGenerator";
+import { parseManagerAiArtifactDto } from "@/lib/courseWorkspace/aiArtifactClient";
 
 type PageProps = {
   params: Promise<{ courseId: string; appType: string }>;
@@ -35,6 +37,47 @@ export default async function AiAppDetailPage({ params }: PageProps) {
   if (!canManage) redirect(`/space/courses/${course.id}/resources`);
 
   const artifacts = course.aiArtifacts.filter((artifact) => artifact.appType === appType);
+  const initialArtifacts = artifacts.map((artifact) => parseManagerAiArtifactDto({
+    id: artifact.id,
+    seriesId: artifact.seriesId,
+    appType,
+    title: artifact.title,
+    prompt: artifact.prompt,
+    payload: artifact.payload,
+    scope: artifact.scope,
+    status: artifact.status,
+    version: artifact.version,
+    errorCode: artifact.errorCode,
+    errorMessage: artifact.errorMessage,
+    sourceJobId: artifact.sourceJobId,
+    sourceArtifactId: artifact.sourceArtifactId,
+    jobsAhead: null,
+    startedAt: artifact.startedAt?.toISOString() ?? null,
+    finishedAt: artifact.finishedAt?.toISOString() ?? null,
+    approvedAt: artifact.approvedAt?.toISOString() ?? null,
+    publishedAt: artifact.publishedAt?.toISOString() ?? null,
+    createdAt: artifact.createdAt.toISOString(),
+    updatedAt: artifact.updatedAt.toISOString()
+  }));
+  const approvedQuestions = appType === "paper_assembly"
+    ? await db.courseQuestion.findMany({
+        where: { courseId: course.id, status: "APPROVED" },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        select: { id: true, stem: true }
+      })
+    : [];
+  const coursewareSources = appType === "html_courseware"
+    ? await db.courseAiArtifact.findMany({
+        where: {
+          courseId: course.id,
+          appType: "courseware",
+          status: { in: ["APPROVED", "PUBLISHED"] },
+          payload: { not: null }
+        },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        select: { id: true, title: true, version: true, status: true }
+      })
+    : [];
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="ai-workbench">
@@ -50,7 +93,14 @@ export default async function AiAppDetailPage({ params }: PageProps) {
           </div>
         </div>
 
-        <AiAppGenerator courseId={course.id} app={app} initialArtifacts={artifacts} />
+        <AiAppGenerator
+          courseId={course.id}
+          app={app}
+          chapters={course.chapters.map((chapter) => ({ id: chapter.id, title: chapter.title }))}
+          approvedQuestions={approvedQuestions}
+          coursewareSources={coursewareSources}
+          initialArtifacts={initialArtifacts}
+        />
       </div>
     </FanyaCourseShell>
   );

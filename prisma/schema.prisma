@@ -39,6 +39,9 @@ model User {
   notes             Note[]
   noteTags          NoteTag[]
   courseAiArtifacts CourseAiArtifact[]
+  courseQuestions   CourseQuestion[]
+  aiConversations   CourseAiConversation[]
+  aiCoachTasks      AiCoachTask[]         @relation("AiCoachTaskCreator")
   topicFolders      TopicFolder[]
   topics            Topic[]
   driveFiles        DriveFile[]
@@ -74,6 +77,9 @@ model Course {
   resources     Resource[]
   imports       DocumentImportJob[]
   aiArtifacts   CourseAiArtifact[]
+  questions     CourseQuestion[]
+  aiConversations CourseAiConversation[]
+  aiCoachTasks  AiCoachTask[]
   knowledgeMaps CourseKnowledgeMap[]
   announcements Announcement[]
   helpTickets   HelpTicket[]
@@ -177,22 +183,126 @@ model DocumentImportJob {
 }
 
 model CourseAiArtifact {
-  id          String             @id @default(cuid())
-  courseId    String
-  course      Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  appType     String
-  title       String
-  prompt      String?
-  payload     String
-  status      String             @default("DRAFT")
-  version     Int                @default(1)
-  sourceJobId String?
-  sourceJob   DocumentImportJob? @relation(fields: [sourceJobId], references: [id], onDelete: SetNull)
-  publishedAt DateTime?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id               String             @id @default(cuid())
+  seriesId         String             @default(cuid())
+  courseId         String
+  course           Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appType          String
+  title            String
+  prompt           String?
+  payload          String?
+  inputSnapshot    String?
+  runToken         String?
+  scope            String?
+  status           String             @default("DRAFT")
+  version          Int                @default(1)
+  errorCode        String?
+  errorMessage     String?
+  sourceJobId      String?
+  sourceJob        DocumentImportJob? @relation(fields: [sourceJobId], references: [id], onDelete: SetNull)
+  sourceArtifactId String?
+  sourceArtifact   CourseAiArtifact?  @relation("ArtifactRevisionSource", fields: [sourceArtifactId], references: [id], onDelete: SetNull)
+  derivedArtifacts CourseAiArtifact[] @relation("ArtifactRevisionSource")
+  questions        CourseQuestion[]
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  approvedAt       DateTime?
+  publishedAt      DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([seriesId, version])
+  @@index([courseId, appType, status])
+  @@index([status, createdAt])
+  @@index([status, runToken])
+  @@index([sourceArtifactId])
+}
+
+model CourseQuestion {
+  id               String            @id @default(cuid())
+  courseId         String
+  course           Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdById      String?
+  createdBy        User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  sourceArtifactId String?
+  sourceArtifact   CourseAiArtifact? @relation(fields: [sourceArtifactId], references: [id], onDelete: SetNull)
+  sourceSeriesId   String
+  sourceKey        String
+  type             String
+  stem             String
+  options          String?
+  answer           String
+  explanation      String
+  status           String            @default("DRAFT")
+  version          Int               @default(1)
+  approvedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([courseId, sourceSeriesId, sourceKey])
+  @@index([courseId, status, type])
+  @@index([sourceArtifactId])
+}
+
+model AiCoachTask {
+  id                 String                 @id @default(cuid())
+  courseId           String
+  course             Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdById        String?
+  createdBy          User?                  @relation("AiCoachTaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  title              String
+  scenario           String
+  aiRole             String
+  objective          String
+  rubric             String
+  completionCriteria String
+  status             String                 @default("DRAFT")
+  version            Int                    @default(1)
+  publishedAt        DateTime?
+  conversations      CourseAiConversation[]
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  @@index([courseId, status, updatedAt])
+  @@index([createdById, updatedAt])
+}
+
+model CourseAiConversation {
+  id               String            @id @default(cuid())
+  courseId         String
+  course           Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind             String
+  status           String            @default("ACTIVE")
+  generationToken  String?
+  title            String?
+  coachTaskId      String?
+  coachTask        AiCoachTask?      @relation(fields: [coachTaskId], references: [id], onDelete: NoAction)
+  evaluation       String?
+  evaluationStatus String?
+  completedAt      DateTime?
+  messages         CourseAiMessage[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([courseId, userId, kind, updatedAt])
+  @@index([coachTaskId, userId, createdAt])
+  @@index([status, generationToken])
+}
+
+model CourseAiMessage {
+  id             String               @id @default(cuid())
+  conversationId String
+  conversation   CourseAiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  citations      String?
+  createdAt      DateTime             @default(now())
+
+  @@index([conversationId, createdAt])
 }
 
 model CourseKnowledgeMap {

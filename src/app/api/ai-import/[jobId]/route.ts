@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseOwner } from "@/lib/permissions";
 import { getImportQueueSnapshot, recoverImportJobsFromDatabase } from "@/lib/imports/importQueue";
+import { getJobsAhead } from "@/lib/imports/importProgress";
 
 type RouteContext = {
   params: Promise<{ jobId: string }>;
@@ -36,7 +37,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     job: {
       ...job,
       generatedOutline: job.generatedOutline ? JSON.parse(job.generatedOutline) : null,
-      queuePosition: job.status === "QUEUED" && queueIndex >= 0 ? queueIndex + 1 : null
+      jobsAhead: job.status === "QUEUED" ? getJobsAhead(snapshot.activeWorkers, queueIndex) : null
     }
   });
 }

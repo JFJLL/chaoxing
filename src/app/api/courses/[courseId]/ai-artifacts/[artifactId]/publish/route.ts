@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { db } from "@/lib/db";
 import { requireCourseOwner } from "@/lib/permissions";
+import { ArtifactWorkflowError, publishArtifact } from "@/lib/courseWorkspace/artifactWorkflow";
+import { createPrismaArtifactWorkflowStore } from "@/lib/courseWorkspace/prismaArtifactStores";
+import { toSafeAiArtifactDto } from "@/lib/courseWorkspace/aiGenerationQueue";
 
-type RouteContext = {
-  params: Promise<{ courseId: string; artifactId: string }>;
+type RouteContext = { params: Promise<{ courseId: string; artifactId: string }> };
+
+const messages: Record<string, string> = {
+  ARTIFACT_NOT_FOUND: "AI 产物不存在",
+  AI_ARTIFACT_TYPE_NOT_PUBLISHABLE: "该 AI 产物仅供教师内部使用，确认后无需发布",
+  ARTIFACT_PUBLISH_CONFLICT: "只有已确认且状态未变化的 AI 产物可以发布"
 };
-
-const multiPublishAppTypes = new Set(["question_generation", "paper_assembly"]);
 
 export async function POST(_request: Request, context: RouteContext) {
   const user = await requireUser();
@@ -18,25 +22,17 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }
 
-  const artifact = await db.courseAiArtifact.findFirst({
-    where: { id: artifactId, courseId }
-  });
-  if (!artifact) {
-    return NextResponse.json({ error: "AI 产物不存在" }, { status: 404 });
-  }
-
-  const published = await db.$transaction(async (tx) => {
-    if (!multiPublishAppTypes.has(artifact.appType)) {
-      await tx.courseAiArtifact.updateMany({
-        where: { courseId, appType: artifact.appType, status: "PUBLISHED", id: { not: artifactId } },
-        data: { status: "ARCHIVED" }
-      });
+  try {
+    const artifact = await publishArtifact(createPrismaArtifactWorkflowStore(), { courseId, artifactId });
+    return NextResponse.json({ artifact: toSafeAiArtifactDto(artifact, { canManage: true, jobsAhead: null }) });
+  } catch (error) {
+    if (error instanceof ArtifactWorkflowError) {
+      return NextResponse.json({
+        code: error.code,
+        error: messages[error.code] ?? "无法发布 AI 产物",
+        retryable: error.retryable
+      }, { status: error.code === "ARTIFACT_NOT_FOUND" ? 404 : 409 });
     }
-    return tx.courseAiArtifact.update({
-      where: { id: artifactId },
-      data: { status: "PUBLISHED", publishedAt: new Date() }
-    });
-  });
-
-  return NextResponse.json({ artifact: published });
+    throw error;
+  }
 }

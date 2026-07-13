@@ -10,7 +10,8 @@ import type { AiQuestionPayload } from "@/types/courseWorkspace";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
-function questionCount(payload: string) {
+function questionCount(payload: string | null) {
+  if (!payload) return 0;
   try {
     return (JSON.parse(payload) as AiQuestionPayload).questions.length;
   } catch {

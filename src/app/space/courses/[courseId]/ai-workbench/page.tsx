@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { isTeacher } from "@/lib/permissions";
@@ -8,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { CoursePublishButton } from "@/components/courses/CoursePublishButton";
 import { Bot, FileText, FolderOpen, MessageCircle, Network, Presentation } from "lucide-react";
+import { listTutorConversations, toTutorConversationDto } from "@/lib/courseWorkspace/aiConversation";
 
 type PageProps = {
   params: Promise<{ courseId: string }>;
@@ -18,7 +18,7 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
   const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
-  if (!canManage) redirect(`/space/courses/${course.id}/after-class`);
+  const initialTutorConversations = (await listTutorConversations(user, course.id)).map(toTutorConversationDto);
   const prepEntries = [
     {
       title: "AI文档建课",
@@ -119,7 +119,7 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
             </div>
           </section>
         ) : null}
-        <AiWorkbench courseId={course.id} context={context} canManage={canManage} />
+        <AiWorkbench courseId={course.id} context={context} canManage={canManage} initialTutorConversations={initialTutorConversations} />
       </div>
     </FanyaCourseShell>
   );
