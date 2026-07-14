@@ -17,7 +17,7 @@ describe("import progress", () => {
       { key: "EXTRACTING", label: "内容解析" },
       { key: "STRUCTURING", label: "目录生成" },
       { key: "MAPPING", label: "知识导图" },
-      { key: "READY_FOR_REVIEW", label: "等待确认" },
+      { key: "READY_FOR_REVIEW", label: "待你确认" },
       { key: "APPLIED", label: "已应用" }
     ]);
   });
@@ -34,6 +34,12 @@ describe("import progress", () => {
   it("marks every stage complete after the outline has been applied", () => {
     expect(getImportStepStates("APPLIED").map((step) => step.state)).toEqual([
       "complete", "complete", "complete", "complete", "complete", "complete"
+    ]);
+  });
+
+  it("marks review as a user-attention state instead of active loading", () => {
+    expect(getImportStepStates("READY_FOR_REVIEW").map((step) => step.state)).toEqual([
+      "complete", "complete", "complete", "complete", "attention", "pending"
     ]);
   });
 

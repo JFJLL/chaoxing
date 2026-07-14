@@ -32,6 +32,20 @@ describe("ImportTimeline", () => {
     expect(html).not.toContain("animate-spin");
   });
 
+  it("renders review as a static action prompt linked to the outline editor", () => {
+    const html = renderToStaticMarkup(
+      <ImportTimeline status="READY_FOR_REVIEW" currentStage="等待用户确认" />
+    );
+
+    expect(html).toContain("AI 已完成课程结构，请检查后应用到课程。");
+    expect(html).toContain('href="#outline-review"');
+    expect(html).toContain("查看并确认");
+    expect(html).toContain('aria-label="待你确认：需要操作"');
+    expect(html).toContain("lucide-circle-alert");
+    expect(html).not.toContain("animate-spin");
+    expect(html).not.toContain("等待用户确认");
+  });
+
   it("exposes an accessible status for every step", () => {
     const html = renderToStaticMarkup(<ImportTimeline status="STRUCTURING" />);
 
@@ -40,7 +54,7 @@ describe("ImportTimeline", () => {
     expect(html).toContain('aria-label="内容解析：已完成"');
     expect(html).toContain('aria-label="目录生成：进行中"');
     expect(html).toContain('aria-label="知识导图：未开始"');
-    expect(html).toContain('aria-label="等待确认：未开始"');
+    expect(html).toContain('aria-label="待你确认：未开始"');
     expect(html).toContain('aria-label="已应用：未开始"');
     expect(html.match(/aria-hidden="true"/g)).toHaveLength(6);
   });

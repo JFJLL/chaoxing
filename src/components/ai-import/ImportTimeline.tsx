@@ -1,10 +1,11 @@
-import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Circle, CircleAlert, Loader2, XCircle } from "lucide-react";
 import { LinkButton } from "@/components/ui/Button";
 import { getImportStepStates, getQueueLabel } from "@/lib/imports/importProgress";
 
 const stepStateLabels = {
   complete: "已完成",
   active: "进行中",
+  attention: "需要操作",
   pending: "未开始"
 } as const;
 
@@ -42,10 +43,22 @@ export function ImportTimeline({
 
   const steps = getImportStepStates(status);
   const showQueueLabel = status === "QUEUED" && jobsAhead !== undefined;
+  const needsReview = status === "READY_FOR_REVIEW";
+  const showProcessingNotice = !needsReview && status !== "APPLIED" && (currentStage || showQueueLabel || pollError);
 
   return (
     <div className="space-y-3">
-      {currentStage || showQueueLabel || pollError ? (
+      {needsReview ? (
+        <div role="status" aria-live="polite" className="flex flex-col gap-3 rounded-md border border-orange-200 bg-orange-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-orange-900">AI 已完成课程结构，请检查后应用到课程。</p>
+            <p className="mt-1 text-xs text-orange-700">系统处理已结束，现在需要你确认生成结果。</p>
+          </div>
+          <a href="#outline-review" className="inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-orange-600 px-4 text-sm font-medium text-white transition hover:bg-orange-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2">
+            查看并确认
+          </a>
+        </div>
+      ) : showProcessingNotice ? (
         <div role="status" aria-live="polite" className="space-y-3">
           {currentStage || showQueueLabel ? (
             <div className="rounded-md border border-blue-100 bg-blue-50 px-4 py-3">
@@ -61,16 +74,20 @@ export function ImportTimeline({
           <li
             key={step.key}
             aria-label={`${step.label}：${stepStateLabels[step.state]}`}
-            className="flex items-center gap-2 rounded-md border border-[var(--cx-border)] bg-white p-3 text-sm"
+            className={`flex items-center gap-2 rounded-md border p-3 text-sm ${
+              step.state === "attention" ? "border-orange-200 bg-orange-50" : "border-[var(--cx-border)] bg-white"
+            }`}
           >
             {step.state === "complete" ? (
               <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-emerald-600" />
             ) : step.state === "active" ? (
               <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-blue-600" />
+            ) : step.state === "attention" ? (
+              <CircleAlert aria-hidden="true" className="h-4 w-4 text-orange-600" />
             ) : (
               <Circle aria-hidden="true" className="h-4 w-4 text-slate-300" />
             )}
-            <span className={step.state === "pending" ? "text-slate-500" : "font-medium text-slate-900"}>{step.label}</span>
+            <span className={step.state === "pending" ? "text-slate-500" : step.state === "attention" ? "font-medium text-orange-900" : "font-medium text-slate-900"}>{step.label}</span>
           </li>
         ))}
       </ol>

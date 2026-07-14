@@ -39,7 +39,7 @@ export function OutlineReviewEditor({
   }
 
   return (
-    <div className="space-y-5">
+    <div id="outline-review" className="scroll-mt-6 space-y-5">
       <section className="rounded-md border border-[var(--cx-border)] p-4">
         <div className="grid gap-3 md:grid-cols-2">
           <Input value={outline.title} onChange={(event) => setOutline({ ...outline, title: event.target.value })} />

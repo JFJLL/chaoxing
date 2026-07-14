@@ -3,11 +3,11 @@ export const IMPORT_STEPS = [
   { key: "EXTRACTING", label: "内容解析" },
   { key: "STRUCTURING", label: "目录生成" },
   { key: "MAPPING", label: "知识导图" },
-  { key: "READY_FOR_REVIEW", label: "等待确认" },
+  { key: "READY_FOR_REVIEW", label: "待你确认" },
   { key: "APPLIED", label: "已应用" }
 ] as const;
 
-export type ImportStepState = "complete" | "active" | "pending";
+export type ImportStepState = "complete" | "active" | "attention" | "pending";
 
 const IMPORT_JOB_STATUSES = new Set([
   "QUEUED",
@@ -60,6 +60,13 @@ export function getImportStepStates(status: string) {
 
   if (normalizedStatus === "APPLIED") {
     return IMPORT_STEPS.map((step) => ({ ...step, state: "complete" as const }));
+  }
+
+  if (normalizedStatus === "READY_FOR_REVIEW") {
+    return IMPORT_STEPS.map((step, index) => ({
+      ...step,
+      state: (index < currentIndex ? "complete" : index === currentIndex ? "attention" : "pending") as ImportStepState
+    }));
   }
 
   return IMPORT_STEPS.map((step, index) => ({
