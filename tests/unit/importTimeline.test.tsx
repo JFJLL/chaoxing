@@ -24,6 +24,14 @@ describe("ImportTimeline", () => {
     expect(html.match(/class="lucide lucide-circle /g)).toHaveLength(3);
   });
 
+  it("renders the applied terminal stage as complete without a spinner", () => {
+    const html = renderToStaticMarkup(<ImportTimeline status="APPLIED" />);
+
+    expect(html.match(/class="lucide lucide-circle-check /g)).toHaveLength(6);
+    expect(html).toContain('aria-label="已应用：已完成"');
+    expect(html).not.toContain("animate-spin");
+  });
+
   it("exposes an accessible status for every step", () => {
     const html = renderToStaticMarkup(<ImportTimeline status="STRUCTURING" />);
 

@@ -31,6 +31,12 @@ describe("import progress", () => {
     ]);
   });
 
+  it("marks every stage complete after the outline has been applied", () => {
+    expect(getImportStepStates("APPLIED").map((step) => step.state)).toEqual([
+      "complete", "complete", "complete", "complete", "complete", "complete"
+    ]);
+  });
+
   it("recognizes terminal statuses and leaves failed steps pending", () => {
     expect(isImportTerminal("READY_FOR_REVIEW")).toBe(true);
     expect(isImportTerminal("APPLIED")).toBe(true);

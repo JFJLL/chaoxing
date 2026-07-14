@@ -58,6 +58,10 @@ export function getImportStepStates(status: string) {
   const normalizedStatus = status === "GENERATING" ? "STRUCTURING" : status;
   const currentIndex = IMPORT_STEPS.findIndex((step) => step.key === normalizedStatus);
 
+  if (normalizedStatus === "APPLIED") {
+    return IMPORT_STEPS.map((step) => ({ ...step, state: "complete" as const }));
+  }
+
   return IMPORT_STEPS.map((step, index) => ({
     ...step,
     state: (index < currentIndex ? "complete" : index === currentIndex ? "active" : "pending") as ImportStepState

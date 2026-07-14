@@ -4,7 +4,6 @@ import { isTeacher } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { AiWorkbench } from "@/components/course-workspace/AiWorkbench";
 import { Badge } from "@/components/ui/Badge";
-import { LinkButton } from "@/components/ui/Button";
 import { CoursePublishButton } from "@/components/courses/CoursePublishButton";
 import { Bot, FileText, FolderOpen, MessageCircle, Network, Presentation } from "lucide-react";
 import { listTutorConversations, toTutorConversationDto } from "@/lib/courseWorkspace/aiConversation";
@@ -91,10 +90,6 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
               <p className="mt-1 text-sm text-slate-500">{course.title}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <LinkButton href={`/space/courses/${course.id}/ai-import`} variant="secondary">
-                <Bot className="h-4 w-4" />
-                AI 文档建课
-              </LinkButton>
               <CoursePublishButton courseId={course.id} status={course.status} />
             </div>
           </section>

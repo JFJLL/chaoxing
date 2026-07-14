@@ -61,8 +61,9 @@ UPLOAD_DIR="./.uploads"
 首次部署或覆盖代码后执行：
 
 ```bash
-npm install
-npm exec prisma -- migrate deploy
+npm ci
+npx prisma generate
+npx prisma migrate deploy
 npm run build
 pm2 restart cuc --update-env
 ```
