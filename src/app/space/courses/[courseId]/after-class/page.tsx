@@ -6,6 +6,7 @@ import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell
 import { CourseModulePanel } from "@/components/course-workspace/CourseModulePanel";
 import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
+import { db } from "@/lib/db";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
@@ -14,12 +15,15 @@ export default async function AfterClassPage({ params }: PageProps) {
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
   const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
-  const questions = course.aiArtifacts.filter((artifact) => artifact.appType === "question_generation");
-  const papers = course.aiArtifacts.filter((artifact) => artifact.appType === "paper_assembly");
+  const [assignmentCount, examCount, questionCount] = await Promise.all([
+    db.assignment.count({ where: { courseId, ...(canManage ? {} : { status: "PUBLISHED" }) } }),
+    db.exam.count({ where: { courseId, ...(canManage ? {} : { status: "PUBLISHED" }) } }),
+    canManage ? db.courseQuestion.count({ where: { courseId, status: "APPROVED" } }) : Promise.resolve(0)
+  ]);
   const modules = [
-    { title: "作业", description: "学生查看老师发布的作业和任务。", href: `/space/courses/${course.id}/assignments`, icon: PenLine, count: questions.length },
-    { title: "考试", description: "学生查看测验与阶段考试。", href: `/space/courses/${course.id}/exams`, icon: ClipboardList, count: papers.length },
-    { title: "题库", description: canManage ? "教师维护 AI题库和练习题。" : "题库为教师管理入口，学生侧只开放作业和考试。", href: `/space/courses/${course.id}/question-bank`, icon: ScrollText, count: questions.length }
+    { title: "作业", description: "学生查看并提交老师发布的作业。", href: `/space/courses/${course.id}/assignments`, icon: PenLine, count: assignmentCount },
+    { title: "考试", description: "学生在规定时间内参加正式考试。", href: `/space/courses/${course.id}/exams`, icon: ClipboardList, count: examCount },
+    { title: "题库", description: "教师维护已确认题目，供作业和考试复用。", href: `/space/courses/${course.id}/question-bank`, icon: ScrollText, count: questionCount }
   ];
 
   return (

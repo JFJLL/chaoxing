@@ -5,6 +5,8 @@ import { isTeacher } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { CourseModulePanel } from "@/components/course-workspace/CourseModulePanel";
 import { LinkButton } from "@/components/ui/Button";
+import { LessonProgressButton } from "@/components/course-workspace/LessonProgressButton";
+import { db } from "@/lib/db";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
@@ -13,6 +15,8 @@ export default async function StructurePage({ params }: PageProps) {
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
   const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const lessonProgress = canManage ? [] : await db.lessonProgress.findMany({ where: { userId: user.id, lesson: { chapter: { courseId } }, completedAt: { not: null } }, select: { lessonId: true } });
+  const completedLessonIds = new Set(lessonProgress.map((item) => item.lessonId));
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="structure">
@@ -34,8 +38,9 @@ export default async function StructurePage({ params }: PageProps) {
               <p className="mt-1 text-sm text-slate-500">{chapter.summary ?? "暂无章节简介"}</p>
               <div className="mt-4 space-y-2">
                 {chapter.lessons.map((lesson) => (
-                  <div key={lesson.id} className="rounded-xl bg-white px-4 py-3 text-sm text-slate-600">
-                    {chapter.order}.{lesson.order} {lesson.title}
+                  <div key={lesson.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 text-sm text-slate-600">
+                    <span>{chapter.order}.{lesson.order} {lesson.title}</span>
+                    {!canManage ? <LessonProgressButton courseId={courseId} lessonId={lesson.id} completed={completedLessonIds.has(lesson.id)} /> : null}
                   </div>
                 ))}
               </div>

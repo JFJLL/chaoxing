@@ -20,6 +20,7 @@ export async function loadCourseWorkspace(user: SessionUser, courseId: string) {
         include: { driveFile: true }
       },
       announcements: {
+        where: canManage ? {} : { status: "PUBLISHED", OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] },
         orderBy: { createdAt: "desc" },
         include: { author: true }
       },

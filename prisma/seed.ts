@@ -255,7 +255,9 @@ async function main() {
       courseId: functionalCourse.id,
       authorId: teacher.id,
       title: "课程资料已更新",
-      body: "请同学们查看第二章新增的建课案例。"
+      body: "请同学们查看第二章新增的建课案例。",
+      status: "PUBLISHED",
+      publishAt: new Date()
     }
   });
 

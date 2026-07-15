@@ -16,7 +16,7 @@ export default async function CoursesPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const user = await requireUser();
   const canTeach = isTeacher(user);
-  const activeTab = canTeach ? "taught" : "learned";
+  const activeTab = canTeach && params.tab !== "learned" ? "taught" : "learned";
 
   const courses =
     activeTab === "taught"

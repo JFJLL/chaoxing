@@ -54,7 +54,7 @@ type PrivateKnowledgeRows = {
 
 export type CourseKnowledgeSourceDependencies = {
   requireAccess(user: SessionUser, courseId: string): Promise<AccessibleCourse>;
-  loadPublic(courseId: string): Promise<PublicKnowledgeRows>;
+  loadPublic(courseId: string, canManage: boolean): Promise<PublicKnowledgeRows>;
   loadArtifacts(courseId: string, canManage: boolean): Promise<ArtifactKnowledgeRow[]>;
   loadPrivate(courseId: string): Promise<PrivateKnowledgeRows>;
 };
@@ -83,7 +83,7 @@ const TYPE_LIMITS: Record<CourseKnowledgeSourceType, number> = {
 
 const defaultDependencies: CourseKnowledgeSourceDependencies = {
   requireAccess: requireCourseAccess,
-  async loadPublic(courseId) {
+  async loadPublic(courseId, canManage) {
     const [chapters, resources, announcements] = await Promise.all([
       db.chapter.findMany({
         where: { courseId },
@@ -107,7 +107,7 @@ const defaultDependencies: CourseKnowledgeSourceDependencies = {
         select: { id: true, title: true, type: true }
       }),
       db.announcement.findMany({
-        where: { courseId },
+        where: { courseId, ...(canManage ? {} : { status: "PUBLISHED", OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] }) },
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
         take: 50,
         select: { id: true, title: true, body: true }
@@ -189,7 +189,7 @@ export async function buildCourseKnowledgeSources(input: {
   if (!canManage && course.status !== "ACTIVE") throw new CourseKnowledgeAccessError();
 
   const [publicRows, artifacts] = await Promise.all([
-    dependencies.loadPublic(input.courseId),
+    dependencies.loadPublic(input.courseId, canManage),
     dependencies.loadArtifacts(input.courseId, canManage)
   ]);
   const privateRows = canManage ? await dependencies.loadPrivate(input.courseId) : null;

@@ -58,7 +58,7 @@ export function CourseWorkspaceSidebar({ course, activeTab, canManage }: Props) 
               >
                 <Icon className="h-4 w-4" />
               </span>
-              <span>{item.id === "ai-workbench" && !canManage ? "AI助教" : item.label}</span>
+              <span>{item.id === "ai-workbench" && !canManage ? "AI助教" : item.id === "analytics" && !canManage ? "我的学习" : item.label}</span>
             </Link>
           );
         })}
