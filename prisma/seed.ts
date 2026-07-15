@@ -1,7 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/lib/passwords";
-import { generateCourseAiArtifact } from "../src/lib/courseWorkspace/generateAiArtifact";
-import type { CourseAiAppType } from "../src/types/courseWorkspace";
+import type { CourseAiAppType, CourseAiArtifactPayload } from "../src/types/courseWorkspace";
 
 const prisma = new PrismaClient();
 
@@ -425,36 +424,51 @@ async function main() {
     }
   });
 
-  const functionalCourseContext = await prisma.course.findUniqueOrThrow({
-    where: { id: functionalCourse.id },
-    include: {
-      chapters: {
-        orderBy: { order: "asc" },
-        include: { lessons: { orderBy: { order: "asc" } } }
-      }
+  const seededQuestion = await prisma.courseQuestion.create({
+    data: {
+      id: "seed-platform-question",
+      courseId: functionalCourse.id,
+      createdById: teacher.id,
+      sourceSeriesId: "seed-platform-question-series",
+      sourceKey: "question_11111111-1111-4111-8111-111111111111",
+      type: "single_choice",
+      stem: "个人空间的主要学习入口是什么？",
+      options: JSON.stringify(["课程", "云盘"]),
+      answer: "A",
+      explanation: "课程入口汇集章节、任务与课堂活动。",
+      status: "APPROVED",
+      approvedAt: new Date()
     }
   });
 
-  const seededAiApps: Array<{ appType: CourseAiAppType; title: string; prompt: string }> = [
+  type SeededAiAppType = Exclude<CourseAiAppType, "html_courseware">;
+  const seededAiApps: Array<{ appType: SeededAiAppType; title: string; prompt: string }> = [
     { appType: "question_generation", title: "AI出题：平台导览基础题", prompt: "围绕平台导览生成课堂练习题" },
     { appType: "lesson_plan", title: "AI教案：课程任务点教学设计", prompt: "设计一次课程任务点讲授与实践活动" },
     { appType: "courseware", title: "AI课件：教师建课流程", prompt: "生成教师建课流程课件" },
     { appType: "paper_assembly", title: "AI组卷：功能体验课阶段测验", prompt: "组装覆盖平台导览和教师建课的试卷" }
   ];
+  const seededPayloads: Record<SeededAiAppType, CourseAiArtifactPayload> = {
+    question_generation: {
+      questions: [{ id: "question_22222222-2222-4222-8222-222222222222", type: "single_choice", stem: "个人空间的主要学习入口是什么？", options: ["课程", "云盘"], answer: "A", explanation: "课程入口汇集章节、任务与课堂活动。" }]
+    },
+    lesson_plan: {
+      objectives: ["理解课程任务点"],
+      keyPoints: ["章节结构", "任务完成状态"],
+      teachingProcess: [{ phase: "任务导入", minutes: 10, activity: "查看课程任务点并说明完成规则" }],
+      assessment: ["课堂问答"]
+    },
+    courseware: {
+      slides: [{ title: "教师建课流程", bullets: ["新建课程", "编辑目录", "发布资源"], speakerNotes: "结合功能体验课演示完整建课流程。" }]
+    },
+    paper_assembly: {
+      title: "功能体验课阶段测验",
+      sections: [{ name: "平台导览", score: 20, questionIds: [seededQuestion.id] }]
+    }
+  };
 
   for (const app of seededAiApps) {
-    const payload = generateCourseAiArtifact({
-      appType: app.appType,
-      courseTitle: functionalCourseContext.title,
-      chapters: functionalCourseContext.chapters.map((chapter) => ({
-        title: chapter.title,
-        lessons: chapter.lessons.map((lesson) => ({
-          title: lesson.title,
-          summary: lesson.summary
-        }))
-      })),
-      prompt: app.prompt
-    });
+    const payload = seededPayloads[app.appType];
 
     await prisma.courseAiArtifact.create({
       data: {

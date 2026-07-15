@@ -1,4 +1,4 @@
-import { Bot, BriefcaseBusiness, Database, FileText, FolderOpen, LibraryBig, Video } from "lucide-react";
+import { Bot, BriefcaseBusiness, FileText, FolderOpen, LibraryBig, Video } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { isTeacher } from "@/lib/permissions";
@@ -18,13 +18,14 @@ function hasKeyword(resource: CourseResource, keywords: string[]) {
 
 function ResourceCard({ resource, icon = "folder" }: { resource: CourseResource; icon?: ResourceIcon }) {
   const Icon = icon === "file" ? FileText : icon === "case" ? LibraryBig : icon === "project" ? BriefcaseBusiness : icon === "video" ? Video : FolderOpen;
-  return (
-    <article className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
+  const content = <>
       <Icon className="h-6 w-6 text-[#5669c9]" />
       <h2 className="mt-3 font-semibold text-slate-900">{resource.title}</h2>
       <p className="mt-1 text-sm text-slate-500">{resource.driveFile?.name ?? resource.url ?? resource.type}</p>
-    </article>
-  );
+    </>;
+  if (resource.driveFile) return <a href={`/api/drive/${resource.driveFile.id}?download=1`} className="rounded-2xl border border-slate-100 bg-slate-50 p-5 transition hover:border-blue-200 hover:bg-blue-50/40">{content}</a>;
+  if (resource.url) return <a href={resource.url} target="_blank" rel="noreferrer" className="rounded-2xl border border-slate-100 bg-slate-50 p-5 transition hover:border-blue-200 hover:bg-blue-50/40">{content}</a>;
+  return <article className="rounded-2xl border border-slate-100 bg-slate-50 p-5">{content}</article>;
 }
 
 function EmptyLibraryState({ label }: { label: string }) {
@@ -47,8 +48,8 @@ export default async function ResourcesPage({ params }: PageProps) {
     <FanyaCourseShell user={user} course={course} activeTab="resources">
       <CourseModulePanel
         title="课程资料库"
-        description="课件资料、案例库、项目库、慕课和参考视频统一管理。"
-        actions={canManage ? <LinkButton href={`/space/courses/${course.id}/ai-workbench/apps/courseware`}><Bot className="h-4 w-4" />AI课件</LinkButton> : undefined}
+        description="查看和下载课件、案例、项目资料及参考视频。"
+        actions={canManage ? <div className="flex gap-2"><LinkButton href="/space/drive" variant="secondary"><FolderOpen className="h-4 w-4" />管理资料</LinkButton><LinkButton href={`/space/courses/${course.id}/ai-workbench/apps/courseware`}><Bot className="h-4 w-4" />AI课件</LinkButton></div> : undefined}
       >
         <div className="space-y-8">
           <section id="courseware" className="scroll-mt-6">
@@ -105,23 +106,6 @@ export default async function ResourcesPage({ params }: PageProps) {
             </div>
           </section>
 
-          <section id="cnki" className="scroll-mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Database className="h-5 w-5 text-[#5669c9]" />
-                  <h2 className="text-lg font-semibold text-slate-900">知网接口</h2>
-                </div>
-                <p className="mt-2 text-sm leading-6 text-slate-500">保留课程内的 CNKI 文献检索接入位，可承接机构授权后的论文、期刊、学位论文和参考文献同步。</p>
-              </div>
-              <Badge tone="blue">接口入口</Badge>
-            </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              {["期刊论文", "学位论文", "参考文献"].map((item) => (
-                <div key={item} className="rounded-xl bg-white p-4 text-sm font-medium text-slate-700 shadow-sm">{item}</div>
-              ))}
-            </div>
-          </section>
         </div>
       </CourseModulePanel>
     </FanyaCourseShell>

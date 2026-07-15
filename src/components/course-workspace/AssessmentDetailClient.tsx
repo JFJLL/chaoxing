@@ -6,6 +6,7 @@ import { CheckCircle2, Clock3, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
+import { Dialog } from "@/components/ui/Dialog";
 
 type QuestionDto = {
   id: string;
@@ -81,6 +82,7 @@ export function AssessmentDetailClient({
   const [draftTitle, setDraftTitle] = useState(title);
   const [draftInstructions, setDraftInstructions] = useState(instructions ?? "");
   const [draftQuestions, setDraftQuestions] = useState(() => questions.map((question) => ({ ...question, answer: question.answer ?? "", explanation: question.explanation ?? "" })));
+  const [extensionTarget, setExtensionTarget] = useState<ExtensionStudent | null>(null);
   const responsesRef = useRef(responses);
   responsesRef.current = responses;
   const [remaining, setRemaining] = useState<number | null>(deadline ? Math.max(0, Math.floor((new Date(deadline).getTime() - Date.now()) / 1000)) : null);
@@ -169,16 +171,16 @@ export function AssessmentDetailClient({
     });
   }
 
-  async function extendStudent(student: ExtensionStudent) {
-    const value = window.prompt(`为 ${student.name} 设置单独截止时间（ISO 时间；留空清除）`, student.dueAt ?? "");
-    if (value === null) return;
+  async function extendStudent(formData: FormData) {
+    if (!extensionTarget) return;
+    const value = String(formData.get("dueAt") || "");
     let dueAt: string | null = null;
     if (value.trim()) {
       const date = new Date(value);
       if (Number.isNaN(date.getTime())) { setError("截止时间格式无效"); return; }
       dueAt = date.toISOString();
     }
-    await request(`/api/courses/${courseId}/assignments/${itemId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "EXTEND", userId: student.id, dueAt }) });
+    if (await request(`/api/courses/${courseId}/assignments/${itemId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "EXTEND", userId: extensionTarget.id, dueAt }) })) setExtensionTarget(null);
   }
 
   async function returnSubmission(target: RecordDto) {
@@ -220,7 +222,7 @@ export function AssessmentDetailClient({
         </section>
       ) : canManage ? (
         <section className="space-y-4">
-          {kind === "assignment" && extensionStudents.length ? <div className="rounded-2xl border border-slate-100 bg-white p-4"><h2 className="font-semibold text-slate-900">个别学生延期</h2><div className="mt-3 flex flex-wrap gap-2">{extensionStudents.map((student) => <Button key={student.id} type="button" variant="secondary" className="h-8" onClick={() => extendStudent(student)}>{student.name}{student.dueAt ? ` · ${new Date(student.dueAt).toLocaleString("zh-CN")}` : ""}</Button>)}</div></div> : null}
+          {kind === "assignment" && extensionStudents.length ? <div className="rounded-2xl border border-slate-100 bg-white p-4"><h2 className="font-semibold text-slate-900">个别学生延期</h2><div className="mt-3 flex flex-wrap gap-2">{extensionStudents.map((student) => <Button key={student.id} type="button" variant="secondary" className="h-8" onClick={() => setExtensionTarget(student)}>{student.name}{student.dueAt ? ` · ${new Date(student.dueAt).toLocaleString("zh-CN")}` : ""}</Button>)}</div></div> : null}
           <h2 className="font-semibold text-slate-900">学生提交与批改</h2>
           {records.map((target) => <form key={target.id} action={(formData) => grade(target, formData)} className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50 p-5"><div className="flex items-center justify-between"><div><p className="font-medium">{target.userName}</p><p className="text-xs text-slate-500">{target.status} · {target.submittedAt ? new Date(target.submittedAt).toLocaleString("zh-CN") : "尚未提交"}</p></div><Badge tone={target.status === "GRADED" ? "green" : "orange"}>{target.score ?? 0} 分</Badge></div>{target.answers.map((answer) => { const question = questions.find((item) => item.id === answer.questionId); return <div key={answer.id} className="rounded-xl bg-white p-4"><p className="text-sm font-medium">{question?.stem}</p><p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">学生回答：{answer.response || "未作答"}</p><p className="mt-1 text-xs text-blue-700">标准答案：{question?.answer}</p><div className="mt-3 grid gap-2 md:grid-cols-[120px_1fr]"><Input name={`score-${answer.id}`} type="number" min={0} max={answer.maxPoints} step="0.5" defaultValue={answer.score ?? 0} /><Input name={`feedback-${answer.id}`} defaultValue={answer.feedback ?? ""} placeholder="单题评语" /></div></div>; })}<Textarea name="feedback" defaultValue={target.feedback ?? ""} placeholder="整体评语" /><div className="flex gap-2"><Button type="submit" disabled={busy}><CheckCircle2 className="h-4 w-4" />保存评分</Button>{kind === "assignment" && target.status !== "RETURNED" ? <Button type="button" variant="secondary" disabled={busy} onClick={() => returnSubmission(target)}>退回重做</Button> : null}</div></form>)}
           {!records.length ? <p className="text-sm text-slate-500">暂无学生提交。</p> : null}
@@ -234,6 +236,7 @@ export function AssessmentDetailClient({
           {editable ? <div className="flex gap-2"><Button type="button" variant="secondary" disabled={busy} onClick={() => saveOrSubmit("SAVE")}><Save className="h-4 w-4" />暂存</Button><Button type="button" disabled={busy} onClick={() => saveOrSubmit("SUBMIT")}><Send className="h-4 w-4" />正式提交</Button></div> : record ? <p className="text-sm text-slate-500">当前状态：{record.status === "GRADED" ? "已评分" : "已提交"}</p> : null}
         </section>
       )}
+      <Dialog open={Boolean(extensionTarget)} title={`设置 ${extensionTarget?.name ?? "学生"} 的截止时间`} onClose={() => !busy && setExtensionTarget(null)}><form key={extensionTarget?.id} action={extendStudent} className="space-y-4"><label className="block space-y-1 text-sm"><span>单独截止时间（留空清除延期）</span><Input name="dueAt" type="datetime-local" defaultValue={extensionTarget?.dueAt ? new Date(new Date(extensionTarget.dueAt).getTime() - new Date(extensionTarget.dueAt).getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : ""} /></label><div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setExtensionTarget(null)}>取消</Button><Button type="submit" disabled={busy}>保存延期</Button></div></form></Dialog>
     </div>
   );
 }

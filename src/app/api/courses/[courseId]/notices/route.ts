@@ -52,5 +52,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       pinned: parsed.data.pinned ?? false
     }
   });
-  return NextResponse.json({ notice }, { status: 201 });
+  return NextResponse.json({
+    notice: { ...notice, authorName: user.name, readAt: null, readCount: 0, readerIds: [] }
+  }, { status: 201 });
 }
