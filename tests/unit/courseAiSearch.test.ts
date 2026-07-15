@@ -57,6 +57,18 @@ describe("searchCourseKnowledge", () => {
     await expect(promise).rejects.toBeInstanceOf(AiServiceError);
     await expect(promise).rejects.toMatchObject({ code: "MODEL_REQUEST_FAILED" });
     await expect(promise).rejects.not.toThrow("secret-value");
+    expect(complete).toHaveBeenCalledOnce();
+  });
+
+  it("retries one invalid ranking response before failing the search", async () => {
+    const complete = vi.fn()
+      .mockResolvedValueOnce("not-json")
+      .mockResolvedValueOnce(JSON.stringify({ sourceIds: ["lesson:lesson-1"] }));
+
+    await expect(searchCourseKnowledge({ query: "光合作用", sources, complete })).resolves.toEqual([
+      sources[0]
+    ]);
+    expect(complete).toHaveBeenCalledTimes(2);
   });
 
   it.each([

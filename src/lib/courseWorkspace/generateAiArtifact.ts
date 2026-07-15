@@ -43,7 +43,7 @@ const HTML_UI_TEXT_ALLOWLIST = ["上一页", "下一页", "首页", "末页", "�
 
 const outputInstructions: Record<CourseAiAppType, string> = {
   question_generation:
-    '输出 {"questions":[{"type":"single_choice|multiple_choice|short_answer","stem":"...","options":["..."],"answer":"...","explanation":"..."}]}。选择题必须有至少两个选项。',
+    '输出 {"questions":[{"type":"single_choice|multiple_choice|short_answer","stem":"...","options":["..."],"answer":"...","explanation":"..."}]}。选择题必须有至少两个选项；简答题不得输出 options 字段；answer 始终是字符串，多选答案用逗号连接，不得输出数组。',
   lesson_plan:
     '输出 {"objectives":["..."],"keyPoints":["..."],"teachingProcess":[{"phase":"...","minutes":10,"activity":"..."}],"assessment":["..."]}。',
   courseware:
@@ -75,6 +75,32 @@ function parseJson(raw: string | null) {
   } catch {
     throw invalidOutput("无法解析 JSON");
   }
+}
+
+function normalizeQuestionModelPayload(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const payload = value as Record<string, unknown>;
+  if (!Array.isArray(payload.questions)) return value;
+
+  return {
+    ...payload,
+    questions: payload.questions.map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+      const question = { ...(item as Record<string, unknown>) };
+      if (question.type === "short_answer" && Array.isArray(question.options) && question.options.length === 0) {
+        delete question.options;
+      }
+      if (
+        question.type === "multiple_choice"
+        && Array.isArray(question.answer)
+        && question.answer.length > 0
+        && question.answer.every((answer) => typeof answer === "string" && answer.trim().length > 0)
+      ) {
+        question.answer = question.answer.join(", ");
+      }
+      return question;
+    })
+  };
 }
 
 type HtmlSourceToken = {
@@ -268,7 +294,7 @@ function parsePayload(input: GenerateCourseAiArtifactInput, raw: string | null):
 
     switch (input.appType) {
       case "question_generation":
-        return aiQuestionPayloadSchema.parse(json);
+        return aiQuestionPayloadSchema.parse(normalizeQuestionModelPayload(json));
       case "lesson_plan":
         return aiLessonPlanPayloadSchema.parse(json);
       case "courseware":
@@ -322,16 +348,24 @@ export async function generateCourseAiArtifact(input: GenerateCourseAiArtifactIn
   const config = resolveAiModelConfig();
   if (!config) throw new AiServiceError("MODEL_NOT_CONFIGURED", "AI 模型未配置，请先联系管理员完成配置");
 
-  try {
-    const raw = await createJsonCompletion({
-      model: config.model,
-      system: "你是课程教学内容生成助手。你必须严格遵守输出 JSON 契约和输入数据边界。",
-      user: buildCourseAiArtifactPrompt(input)
-    });
-    return parsePayload(input, raw);
-  } catch (error) {
-    throw toSafeAiError(error);
+  const prompt = buildCourseAiArtifactPrompt(input);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const raw = await createJsonCompletion({
+        model: config.model,
+        system: "你是课程教学内容生成助手。你必须严格遵守输出 JSON 契约和输入数据边界。",
+        user: attempt === 0
+          ? prompt
+          : `${prompt}\n上一次输出未通过 JSON 契约校验。请重新生成完整 JSON，逐项核对必填字段、字段类型和结尾括号。`
+      });
+      return parsePayload(input, raw);
+    } catch (error) {
+      const safe = toSafeAiError(error);
+      if (safe.code !== "MODEL_INVALID_OUTPUT" || attempt === 1) throw safe;
+    }
   }
+
+  throw new AiServiceError("MODEL_INVALID_OUTPUT", "AI 返回内容无效，请重试");
 }
 
 export async function generateHtmlCoursewareWithAi(input: GenerateCourseAiArtifactInput): Promise<HtmlCoursewarePayload> {

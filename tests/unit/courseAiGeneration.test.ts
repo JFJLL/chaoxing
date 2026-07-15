@@ -89,15 +89,21 @@ function clearAiEnv() {
   for (const name of aiEnvNames) delete process.env[name];
 }
 
-function mockModelOutput(payload: unknown) {
-  return vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-    new Response(
-      JSON.stringify({
-        candidates: [{ content: { parts: [{ text: typeof payload === "string" ? payload : JSON.stringify(payload) }] } }]
-      }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
-    )
+function modelResponse(payload: unknown) {
+  return new Response(
+    JSON.stringify({
+      candidates: [{ content: { parts: [{ text: typeof payload === "string" ? payload : JSON.stringify(payload) }] } }]
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } }
   );
+}
+
+function mockModelOutput(payload: unknown, repeats = 2) {
+  const fetchMock = vi.spyOn(globalThis, "fetch");
+  for (let index = 0; index < repeats; index += 1) {
+    fetchMock.mockResolvedValueOnce(modelResponse(payload));
+  }
+  return fetchMock;
 }
 
 function inputFor(appType: CourseAiAppType) {
@@ -153,6 +159,57 @@ describe("strict course AI generation", () => {
     } else {
       expect(result).toMatchObject(payload);
     }
+  });
+
+  it("normalizes common question-model variants before validating the stored contract", async () => {
+    mockModelOutput({
+      questions: [
+        {
+          type: "short_answer",
+          stem: "简述公共文化服务的公益性。",
+          options: [],
+          answer: "以社会效益和公众基本文化权益为优先。",
+          explanation: "考查公共文化服务的核心属性。"
+        },
+        {
+          type: "multiple_choice",
+          stem: "公共文化服务的特征包括哪些？",
+          options: ["公益性", "均等性", "便利性", "营利优先"],
+          answer: ["公益性", "均等性", "便利性"],
+          explanation: "公共文化服务强调公益、均等和便利。"
+        }
+      ]
+    });
+
+    const result = await generateCourseAiArtifact(inputFor("question_generation"));
+
+    expect(result).toEqual({
+      questions: [
+        {
+          type: "short_answer",
+          stem: "简述公共文化服务的公益性。",
+          answer: "以社会效益和公众基本文化权益为优先。",
+          explanation: "考查公共文化服务的核心属性。"
+        },
+        {
+          type: "multiple_choice",
+          stem: "公共文化服务的特征包括哪些？",
+          options: ["公益性", "均等性", "便利性", "营利优先"],
+          answer: "公益性, 均等性, 便利性",
+          explanation: "公共文化服务强调公益、均等和便利。"
+        }
+      ]
+    });
+  });
+
+  it("retries one invalid model response before failing the generation", async () => {
+    const fetchMock = mockModelOutput("not-json", 1);
+    fetchMock.mockResolvedValueOnce(modelResponse(validPayloads.question_generation));
+
+    await expect(generateCourseAiArtifact(inputFor("question_generation"))).resolves.toMatchObject(
+      validPayloads.question_generation
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("rejects generation when no model is configured", async () => {
@@ -331,7 +388,7 @@ describe("strict course AI generation", () => {
   });
 
   it("sanitizes provider errors without leaking credentials", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(
       new Error("Bearer secret-token failed; api_key=private-key; sk-1234567890")
     );
 
@@ -339,5 +396,6 @@ describe("strict course AI generation", () => {
 
     await expect(promise).rejects.toMatchObject({ code: "MODEL_REQUEST_FAILED" });
     await expect(promise).rejects.not.toThrow(/secret-token|private-key|sk-1234567890/);
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

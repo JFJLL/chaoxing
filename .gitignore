@@ -13,3 +13,5 @@ tsconfig.tsbuildinfo
 *.docx
 .codegraph/
 .superpowers/
+.workflow/.debug/
+outputs/
