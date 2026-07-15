@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidChoiceAnswer, normalizeChoiceAnswer } from "@/lib/teaching/choiceQuestions";
 
 export const assessmentQuestionInputSchema = z.object({
   id: z.string().optional(),
@@ -12,22 +13,27 @@ export const assessmentQuestionInputSchema = z.object({
 }).superRefine((question, context) => {
   if (question.type !== "short_answer" && (!question.options || question.options.length < 2)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["options"], message: "选择题至少需要两个选项" });
+  } else if (question.type !== "short_answer" && question.options && !isValidChoiceAnswer(question.answer, question.options, question.type === "multiple_choice")) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["answer"], message: "标准答案必须对应已有选项" });
   }
 });
 
 export type AssessmentQuestionInput = z.infer<typeof assessmentQuestionInputSchema>;
 
 export function questionCreateRows(questions: AssessmentQuestionInput[]) {
-  return questions.map((question, index) => ({
+  return questions.map((question, index) => {
+    const options = question.options ?? [];
+    return {
     sourceQuestionId: question.sourceQuestionId ?? null,
     type: question.type,
     stem: question.stem,
     options: question.options ? JSON.stringify(question.options) : null,
-    answer: question.answer,
+    answer: question.type === "short_answer" ? question.answer : normalizeChoiceAnswer(question.answer, options, question.type === "multiple_choice"),
     explanation: question.explanation,
     points: question.points,
     order: index + 1
-  }));
+    };
+  });
 }
 
 export function parseOptions(value: string | null) {

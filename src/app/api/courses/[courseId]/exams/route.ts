@@ -26,7 +26,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 export async function POST(request: NextRequest, context: RouteContext) {
   const user = await requireUser(); const { courseId } = await context.params; await requireCourseOwner(user, courseId);
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "考试内容无效", details: parsed.error.flatten() }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "考试内容无效", details: parsed.error.flatten() }, { status: 400 });
   let paperQuestionIds: string[] = [];
   if (parsed.data.sourceArtifactId) {
     const artifact = await db.courseAiArtifact.findFirst({ where: { id: parsed.data.sourceArtifactId, courseId, appType: "paper_assembly", status: { in: ["APPROVED", "PUBLISHED"] } }, select: { payload: true } });

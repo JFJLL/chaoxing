@@ -1,28 +1,19 @@
+import { normalizeChoiceAnswer } from "@/lib/teaching/choiceQuestions";
+
 export type GradableAnswer = {
   type: string;
   answer: string;
   response: string;
   points: number;
+  options?: string[];
 };
-
-function normalizeSingle(value: string) {
-  return value.trim().toLocaleUpperCase();
-}
-
-function normalizeMultiple(value: string) {
-  return value
-    .split(/[,，;；\s]+/)
-    .map(normalizeSingle)
-    .filter(Boolean)
-    .sort()
-    .join(",");
-}
 
 export function gradeObjectiveAnswer(input: GradableAnswer) {
   if (input.type === "short_answer") return null;
-  const correct = input.type === "multiple_choice"
-    ? normalizeMultiple(input.answer) === normalizeMultiple(input.response)
-    : normalizeSingle(input.answer) === normalizeSingle(input.response);
+  const multiple = input.type === "multiple_choice";
+  const options = input.options ?? [];
+  const correct = normalizeChoiceAnswer(input.answer, options, multiple)
+    === normalizeChoiceAnswer(input.response, options, multiple);
   return correct ? input.points : 0;
 }
 

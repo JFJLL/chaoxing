@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseAccess } from "@/lib/permissions";
 import { gradeObjectiveAnswer } from "@/lib/teaching/assessment";
+import { parseOptions } from "@/lib/teaching/assessmentInput";
 
 type RouteContext = { params: Promise<{ courseId: string; assignmentId: string }> };
 const schema = z.object({ action: z.enum(["SAVE", "SUBMIT"]), answers: z.array(z.object({ questionId: z.string(), response: z.string().max(20_000) })).max(200) });
@@ -33,7 +34,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   });
   await db.$transaction(validAnswers.map((answer) => {
     const question = questionMap.get(answer.questionId)!;
-    const score = parsed.data.action === "SUBMIT" ? gradeObjectiveAnswer({ type: question.type, answer: question.answer, response: answer.response, points: question.points }) : null;
+    const score = parsed.data.action === "SUBMIT" ? gradeObjectiveAnswer({ type: question.type, answer: question.answer, response: answer.response, points: question.points, options: parseOptions(question.options) }) : null;
     return db.assignmentAnswer.upsert({ where: { submissionId_questionId: { submissionId: submission.id, questionId: answer.questionId } }, create: { submissionId: submission.id, questionId: answer.questionId, response: answer.response, score }, update: { response: answer.response, score } });
   }));
   if (parsed.data.action === "SUBMIT") {

@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseAccess } from "@/lib/permissions";
 import { gradeObjectiveAnswer } from "@/lib/teaching/assessment";
+import { parseOptions } from "@/lib/teaching/assessmentInput";
 
 type RouteContext = { params: Promise<{ courseId: string; examId: string }> };
 const answerSchema = z.object({ action: z.enum(["SAVE", "SUBMIT"]), answers: z.array(z.object({ questionId: z.string(), response: z.string().max(20_000) })).max(200) });
@@ -29,7 +30,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   if (attempt.status !== "IN_PROGRESS") return NextResponse.json({ error: "答卷已经提交" }, { status: 409 });
   const now = new Date(); const deadline = attemptDeadline(attempt.startedAt, exam.durationMinutes, exam.endsAt); const mustSubmit = now >= deadline; const submit = parsed.data.action === "SUBMIT" || mustSubmit;
   const questionMap = new Map(exam.questions.map((question) => [question.id, question])); const validAnswers = parsed.data.answers.filter((answer) => questionMap.has(answer.questionId));
-  await db.$transaction(validAnswers.map((answer) => { const question = questionMap.get(answer.questionId)!; const score = submit ? gradeObjectiveAnswer({ type: question.type, answer: question.answer, response: answer.response, points: question.points }) : null; return db.examAnswer.upsert({ where: { attemptId_questionId: { attemptId: attempt.id, questionId: answer.questionId } }, create: { attemptId: attempt.id, questionId: answer.questionId, response: answer.response, score }, update: { response: answer.response, score } }); }));
+  await db.$transaction(validAnswers.map((answer) => { const question = questionMap.get(answer.questionId)!; const score = submit ? gradeObjectiveAnswer({ type: question.type, answer: question.answer, response: answer.response, points: question.points, options: parseOptions(question.options) }) : null; return db.examAnswer.upsert({ where: { attemptId_questionId: { attemptId: attempt.id, questionId: answer.questionId } }, create: { attemptId: attempt.id, questionId: answer.questionId, response: answer.response, score }, update: { response: answer.response, score } }); }));
   if (submit) { const answers = await db.examAnswer.findMany({ where: { attemptId: attempt.id }, include: { question: true } }); const pendingManual = answers.some((answer) => answer.question.type === "short_answer"); const score = answers.reduce((sum, answer) => sum + (answer.score ?? 0), 0); await db.examAttempt.update({ where: { id: attempt.id }, data: { status: pendingManual ? "SUBMITTED" : "GRADED", submittedAt: now, score, gradedAt: pendingManual ? null : now } }); }
   return NextResponse.json({ ok: true, submitted: submit, deadline });
 }

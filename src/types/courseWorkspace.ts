@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidChoiceAnswer } from "@/lib/teaching/choiceQuestions";
 
 export type CourseAiAppType = "question_generation" | "lesson_plan" | "courseware" | "paper_assembly" | "html_courseware";
 
@@ -36,6 +37,12 @@ const aiQuestionSchema = z
         code: z.ZodIssueCode.custom,
         path: ["options"],
         message: "选择题必须提供选项"
+      });
+    } else if (question.type !== "short_answer" && question.options && !isValidChoiceAnswer(question.answer, question.options, question.type === "multiple_choice")) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["answer"],
+        message: "标准答案必须对应已有选项"
       });
     }
   });

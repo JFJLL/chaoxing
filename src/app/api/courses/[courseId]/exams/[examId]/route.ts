@@ -3,12 +3,12 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseOwner } from "@/lib/permissions";
-import { assessmentQuestionInputSchema, questionCreateRows } from "@/lib/teaching/assessmentInput";
+import { assessmentQuestionInputSchema, parseOptions, questionCreateRows } from "@/lib/teaching/assessmentInput";
 import { gradeObjectiveAnswer } from "@/lib/teaching/assessment";
 
 type RouteContext = { params: Promise<{ courseId: string; examId: string }> };
 const schema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("PUBLISH") }), z.object({ action: z.literal("WITHDRAW") }), z.object({ action: z.literal("PUBLISH_RESULTS") }),
+  z.object({ action: z.literal("PUBLISH") }), z.object({ action: z.literal("WITHDRAW") }), z.object({ action: z.literal("PUBLISH_RESULTS") }), z.object({ action: z.literal("CREATE_REVISION") }),
   z.object({ action: z.literal("UPDATE_CONTENT"), title: z.string().trim().min(1).max(200), instructions: z.string().max(10_000).optional(), questions: z.array(assessmentQuestionInputSchema).min(1).max(200) }),
   z.object({ action: z.literal("SCHEDULE"), startsAt: z.string().datetime().nullable(), endsAt: z.string().datetime().nullable(), durationMinutes: z.number().int().min(1).max(600) })
 ]);
@@ -29,7 +29,8 @@ async function submitExpiredAttempts(exam: { id: string; durationMinutes: number
         type: answer.question.type,
         answer: answer.question.answer,
         response: answer.response,
-        points: answer.question.points
+        points: answer.question.points,
+        options: parseOptions(answer.question.options)
       })
     }));
     const pendingManual = attempt.answers.some((answer) => answer.question.type === "short_answer");
@@ -47,8 +48,12 @@ async function submitExpiredAttempts(exam: { id: string; durationMinutes: number
 export async function PUT(request: NextRequest, context: RouteContext) {
   const user = await requireUser(); const { courseId, examId } = await context.params; await requireCourseOwner(user, courseId);
   const parsed = schema.safeParse(await request.json().catch(() => null)); if (!parsed.success) return NextResponse.json({ error: "考试操作无效" }, { status: 400 });
-  const exam = await db.exam.findFirst({ where: { id: examId, courseId }, include: { _count: { select: { questions: true } } } }); if (!exam) return NextResponse.json({ error: "考试不存在" }, { status: 404 });
-  if (parsed.data.action === "UPDATE_CONTENT") {
+  const exam = await db.exam.findFirst({ where: { id: examId, courseId }, include: { questions: { orderBy: { order: "asc" } }, _count: { select: { questions: true } } } }); if (!exam) return NextResponse.json({ error: "考试不存在" }, { status: 404 });
+  if (parsed.data.action === "CREATE_REVISION") {
+    if (exam.status === "DRAFT") return NextResponse.json({ error: "当前考试已经是可编辑草稿" }, { status: 409 });
+    const revision = await db.exam.create({ data: { courseId, createdById: user.id, title: `${exam.title}（新版本）`, instructions: exam.instructions, startsAt: null, endsAt: null, durationMinutes: exam.durationMinutes, sourceArtifactId: exam.sourceArtifactId, questions: { create: exam.questions.map((question) => ({ sourceQuestionId: question.sourceQuestionId, type: question.type, stem: question.stem, options: question.options, answer: question.answer, explanation: question.explanation, points: question.points, order: question.order })) } }, select: { id: true } });
+    return NextResponse.json({ ok: true, itemId: revision.id });
+  } else if (parsed.data.action === "UPDATE_CONTENT") {
     if (exam.status !== "DRAFT") return NextResponse.json({ error: "已发布考试的题目内容不可修改" }, { status: 409 });
     await db.$transaction([db.examQuestion.deleteMany({ where: { examId } }), db.exam.update({ where: { id: examId }, data: { title: parsed.data.title, instructions: parsed.data.instructions, questions: { create: questionCreateRows(parsed.data.questions) } } })]);
   } else if (parsed.data.action === "PUBLISH") {

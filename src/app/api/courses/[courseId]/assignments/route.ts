@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const { courseId } = await context.params;
   await requireCourseOwner(user, courseId);
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "作业内容无效", details: parsed.error.flatten() }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "作业内容无效", details: parsed.error.flatten() }, { status: 400 });
   const sourceQuestions = await loadSourceQuestionInputs(courseId, parsed.data.sourceQuestionIds);
   if (sourceQuestions.length !== parsed.data.sourceQuestionIds.length) return NextResponse.json({ error: "部分题库题目不存在或尚未确认" }, { status: 400 });
   const questions = [...sourceQuestions, ...parsed.data.questions];

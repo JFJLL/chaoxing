@@ -10,6 +10,7 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("PUBLISH"), publishAt: z.string().datetime().nullable().optional() }),
   z.object({ action: z.literal("WITHDRAW") }),
   z.object({ action: z.literal("PUBLISH_RESULTS") }),
+  z.object({ action: z.literal("CREATE_REVISION") }),
   z.object({ action: z.literal("EXTEND"), userId: z.string().min(1), dueAt: z.string().datetime().nullable() }),
   z.object({ action: z.literal("UPDATE_CONTENT"), title: z.string().trim().min(1).max(200), instructions: z.string().max(10_000).optional(), questions: z.array(assessmentQuestionInputSchema).min(1).max(200) }),
   z.object({ action: z.literal("SCHEDULE"), dueAt: z.string().datetime().nullable(), allowLate: z.boolean(), immediateFeedback: z.boolean() })
@@ -21,9 +22,13 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   await requireCourseOwner(user, courseId);
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "作业操作无效" }, { status: 400 });
-  const assignment = await db.assignment.findFirst({ where: { id: assignmentId, courseId }, include: { _count: { select: { questions: true } } } });
+  const assignment = await db.assignment.findFirst({ where: { id: assignmentId, courseId }, include: { questions: { orderBy: { order: "asc" } }, _count: { select: { questions: true } } } });
   if (!assignment) return NextResponse.json({ error: "作业不存在" }, { status: 404 });
-  if (parsed.data.action === "UPDATE_CONTENT") {
+  if (parsed.data.action === "CREATE_REVISION") {
+    if (assignment.status === "DRAFT") return NextResponse.json({ error: "当前作业已经是可编辑草稿" }, { status: 409 });
+    const revision = await db.assignment.create({ data: { courseId, createdById: user.id, title: `${assignment.title}（新版本）`, instructions: assignment.instructions, dueAt: null, allowLate: assignment.allowLate, immediateFeedback: assignment.immediateFeedback, sourceArtifactId: assignment.sourceArtifactId, questions: { create: assignment.questions.map((question) => ({ sourceQuestionId: question.sourceQuestionId, type: question.type, stem: question.stem, options: question.options, answer: question.answer, explanation: question.explanation, points: question.points, order: question.order })) } }, select: { id: true } });
+    return NextResponse.json({ ok: true, itemId: revision.id });
+  } else if (parsed.data.action === "UPDATE_CONTENT") {
     if (assignment.status !== "DRAFT") return NextResponse.json({ error: "已发布作业的题目内容不可修改" }, { status: 409 });
     await db.$transaction([db.assignmentQuestion.deleteMany({ where: { assignmentId } }), db.assignment.update({ where: { id: assignmentId }, data: { title: parsed.data.title, instructions: parsed.data.instructions, questions: { create: questionCreateRows(parsed.data.questions) } } })]);
   } else if (parsed.data.action === "PUBLISH") {

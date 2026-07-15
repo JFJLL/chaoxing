@@ -1,6 +1,7 @@
 import type { AiQuestionPayload, AiPaperPayload } from "@/types/courseWorkspace";
 import { parseStoredArtifactPayload } from "@/lib/courseWorkspace/artifactPayload";
 import { isServerQuestionKey } from "@/lib/courseWorkspace/questionKeys";
+import { normalizeChoiceAnswer } from "@/lib/teaching/choiceQuestions";
 
 export type ArtifactWorkflowErrorCode =
   | "ARTIFACT_NOT_FOUND"
@@ -78,7 +79,9 @@ function questionEntries(payload: AiQuestionPayload, artifact: ArtifactWorkflowR
     type: question.type,
     stem: question.stem,
     options: question.options ? JSON.stringify(question.options) : null,
-    answer: question.answer,
+    answer: question.type === "short_answer"
+      ? question.answer
+      : normalizeChoiceAnswer(question.answer, question.options ?? [], question.type === "multiple_choice"),
     explanation: question.explanation,
     status: "APPROVED",
     approvedAt
