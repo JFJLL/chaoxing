@@ -21,10 +21,6 @@ vi.mock("@/lib/courseWorkspace/aiConversation", () => ({
 vi.mock("@/components/course-workspace/FanyaCourseShell", () => ({
   FanyaCourseShell: ({ children }: { children: React.ReactNode }) => <>{children}</>
 }));
-vi.mock("@/components/courses/CoursePublishButton", () => ({
-  CoursePublishButton: () => <button type="button">发布课程</button>
-}));
-
 import AiWorkbenchPage from "../../src/app/space/courses/[courseId]/ai-workbench/page";
 import { teacherPrepWorkflows } from "../../src/lib/courseWorkspace/capabilities";
 
@@ -66,6 +62,9 @@ describe("AiWorkbenchPage", () => {
     expect(html).not.toContain("管理备课成果");
     expect(html).not.toContain("AI助教");
     expect(html).not.toContain("已发布互动课件");
+    expect(html).not.toContain("发布课程");
+    expect(html).not.toContain("撤回发布");
+    expect(html).not.toContain("草稿");
   });
 
   it("sends students directly to the tutor without teacher workflows", async () => {

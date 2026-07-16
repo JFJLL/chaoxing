@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/Button";
 type CoursePublishButtonProps = {
   courseId: string;
   status: string;
+  className?: string;
 };
 
-export function CoursePublishButton({ courseId, status }: CoursePublishButtonProps) {
+export function CoursePublishButton({ courseId, status, className }: CoursePublishButtonProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
@@ -34,10 +35,10 @@ export function CoursePublishButton({ courseId, status }: CoursePublishButtonPro
 
   return (
     <div className="space-y-2">
-      <Button type="button" variant="secondary" onClick={updateStatus} disabled={submitting}>
+      <Button type="button" variant="secondary" className={className} onClick={updateStatus} disabled={submitting}>
         {submitting ? "更新中" : status === "ACTIVE" ? "撤回发布" : "发布课程"}
       </Button>
-      {error ? <p className="text-sm text-red-100">{error}</p> : null}
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
     </div>
   );
 }

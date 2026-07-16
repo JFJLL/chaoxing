@@ -13,7 +13,7 @@ export function TeacherPrepWorkbench({ courseId }: { courseId: string }) {
   return (
     <section className="rounded-[28px] bg-white p-6 shadow-sm lg:p-7">
       <div className="border-b border-slate-100 pb-5">
-        <h2 className="text-xl font-semibold text-slate-950">备课资源与 AI 能力</h2>
+        <h1 className="text-xl font-semibold text-slate-950">备课资源与 AI 能力</h1>
         <p className="mt-1 text-sm text-slate-500">选择要完成的备课目标；相关步骤已经合并到同一条流程中。</p>
       </div>
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">

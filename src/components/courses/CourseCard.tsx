@@ -3,6 +3,7 @@ import { BookOpen, User } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { CourseDeleteButton } from "@/components/courses/CourseDeleteButton";
+import { CoursePublishButton } from "@/components/courses/CoursePublishButton";
 
 type CourseCardProps = {
   course: {
@@ -14,6 +15,7 @@ type CourseCardProps = {
     owner?: { name: string } | null;
     progress?: number;
     enrollments?: Array<unknown>;
+    status?: string;
   };
   mode: "learned" | "taught";
 };
@@ -50,7 +52,11 @@ export function CourseCard({ course, mode }: CourseCardProps) {
               {course.owner?.name ?? "本地教师"}
             </p>
           </div>
-          {mode === "taught" ? <Badge tone="blue">教</Badge> : null}
+          {mode === "taught" ? (
+            <Badge tone={course.status === "ACTIVE" ? "green" : "orange"}>
+              {course.status === "ACTIVE" ? "已发布" : "草稿"}
+            </Badge>
+          ) : null}
         </div>
 
         {mode === "learned" ? (
@@ -67,11 +73,14 @@ export function CourseCard({ course, mode }: CourseCardProps) {
           <p className="text-sm text-slate-500">学生 {course.enrollments?.length ?? 0} 人</p>
         )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           <LinkButton href={`/space/courses/${course.id}`} variant="secondary" className="h-9 px-3">
             <BookOpen className="h-4 w-4" />
             进入课程
           </LinkButton>
+          {mode === "taught" && course.status ? (
+            <CoursePublishButton courseId={course.id} status={course.status} className="h-9 px-3" />
+          ) : null}
           {mode === "taught" ? <CourseDeleteButton courseId={course.id} title={course.title} className="ml-auto" /> : null}
         </div>
       </div>

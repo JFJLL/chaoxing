@@ -82,6 +82,9 @@ describe("course workspace navigation", () => {
     expect(courseHtml).toContain('href="https://zovii.studio/"');
     expect(courseHtml).toContain("zovii智能画布");
     expect(courseHtml).toContain('target="_blank"');
+    expect(courseHtml).toContain("bg-slate-100 text-slate-500");
+    expect(courseHtml).not.toContain("lucide-external-link");
+    expect(courseHtml).not.toContain("from-fuchsia-500");
     expect(spaceHtml).not.toContain("zovii.studio");
     expect(spaceHtml).not.toContain("生图");
   });

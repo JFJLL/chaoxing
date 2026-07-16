@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   KnowledgeMapGraph,
   buildKnowledgeMindMapLayout,
+  wrapKnowledgeLabel,
   type KnowledgeEdge,
   type KnowledgeNode
 } from "@/components/course-workspace/KnowledgeMapGraph";
@@ -50,10 +51,26 @@ describe("knowledge mind-map layout", () => {
     const html = renderToStaticMarkup(createElement(KnowledgeMapGraph, { nodes, edges }));
 
     expect(html).toContain('aria-label="课程思维导图"');
-    expect(html).toContain("学习目标向左展开");
+    expect(html).toContain("拖动画布");
+    expect(html).toContain("Ctrl/⌘ + 滚轮缩放");
+    expect(html).toContain('aria-label="缩小思维导图"');
+    expect(html).toContain('aria-label="放大思维导图"');
+    expect(html).toContain('aria-label="适应画布"');
     expect(html).toContain("2 条交叉关系已收起");
     expect(html).toContain("4 个下级节点已收起");
     expect(html).toContain("第一章 服务认知");
     expect(html).not.toContain("用户画像");
+  });
+
+  it("keeps every character of long labels and grows the node instead of truncating it", () => {
+    const longLabel = "学习制定文化产品的开发、定价、分销及促销等完整策略并形成可执行方案";
+    const longNodes = nodes.map((node) => node.id === "objective" ? { ...node, label: longLabel } : node);
+    const html = renderToStaticMarkup(createElement(KnowledgeMapGraph, { nodes: longNodes, edges }));
+    const shortLayout = buildKnowledgeMindMapLayout(nodes, edges);
+    const longLayout = buildKnowledgeMindMapLayout(longNodes, edges);
+
+    for (const line of wrapKnowledgeLabel(longLabel)) expect(html).toContain(line);
+    expect(html).not.toContain("…");
+    expect(longLayout.positions.get("objective")!.height).toBeGreaterThan(shortLayout.positions.get("objective")!.height);
   });
 });
