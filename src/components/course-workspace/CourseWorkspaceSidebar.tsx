@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { clsx } from "clsx";
-import { ExternalLink, Link2 } from "lucide-react";
-import { courseWorkspaceNav } from "@/lib/courseWorkspace/nav";
+import { courseWorkspaceNav, getCourseWorkspaceNavParent } from "@/lib/courseWorkspace/nav";
 import type { CourseWorkspaceTab } from "@/types/courseWorkspace";
 
 type Props = {
@@ -19,27 +18,19 @@ function coverClass(cover?: string | null) {
 
 export function CourseWorkspaceSidebar({ course, activeTab, canManage }: Props) {
   const visibleNav = courseWorkspaceNav;
+  const activeParent = getCourseWorkspaceNavParent(activeTab);
 
   return (
     <aside className="w-full shrink-0 border-r border-slate-100 bg-white p-4 lg:w-[248px]">
       <div className={clsx("overflow-hidden rounded-xl bg-gradient-to-br p-4 text-white shadow-sm", coverClass(course.cover))}>
-        <div className="flex items-center justify-between text-xs text-white/85">
-          <span className="inline-flex items-center gap-1">
-            课程门户
-            <ExternalLink className="h-3 w-3" />
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Link2 className="h-3 w-3" />
-            链接
-          </span>
-        </div>
-        <h2 className="mt-14 line-clamp-2 text-base font-semibold leading-6">{course.title}</h2>
+        <p className="text-xs text-white/80">当前课程</p>
+        <h2 className="mt-12 line-clamp-2 text-base font-semibold leading-6">{course.title}</h2>
       </div>
 
       <nav className="mt-4 space-y-1.5">
         {visibleNav.map((item) => {
           const Icon = item.icon;
-          const active = item.id === activeTab;
+          const active = item.id === activeParent;
           return (
             <Link
               key={item.id}

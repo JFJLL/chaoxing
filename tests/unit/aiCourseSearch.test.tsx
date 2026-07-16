@@ -83,13 +83,14 @@ describe("AiCourseSearchView", () => {
     query: "光合作用",
     onQueryChange: () => undefined,
     onSubmit: () => undefined,
-    onRetry: () => undefined
+    onRetry: () => undefined,
+    onDismiss: () => undefined
   };
 
   it("renders loading and disables duplicate submission", () => {
     const markup = renderToStaticMarkup(<AiCourseSearchView {...baseProps} state={{ status: "loading", results: [] }} />);
 
-    expect(markup).toContain("正在检索当前课程");
+    expect(markup).toContain("正在搜索课程资料");
     expect(markup).toContain("disabled");
     expect(markup).toContain("animate-spin");
   });
@@ -105,7 +106,7 @@ describe("AiCourseSearchView", () => {
   it("renders an explicit no-results state", () => {
     const markup = renderToStaticMarkup(<AiCourseSearchView {...baseProps} state={{ status: "success", results: [] }} />);
 
-    expect(markup).toContain("当前课程中没有找到相关内容");
+    expect(markup).toContain("当前课程中没有找到相关资料");
   });
 
   it("renders an explicit failure and retry while preserving the query", () => {
@@ -115,5 +116,6 @@ describe("AiCourseSearchView", () => {
     expect(markup).toContain("重试");
     expect(markup).toContain('value="光合作用"');
     expect(markup).not.toContain("模板");
+    expect(markup).toContain("关闭搜索结果并清除关键词");
   });
 });

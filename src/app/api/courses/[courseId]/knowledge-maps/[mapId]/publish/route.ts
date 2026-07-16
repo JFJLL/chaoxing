@@ -20,7 +20,7 @@ export async function POST(_request: Request, context: RouteContext) {
     where: { id: mapId, courseId }
   });
   if (!map) {
-    return NextResponse.json({ error: "知识导图不存在" }, { status: 404 });
+    return NextResponse.json({ error: "知识图谱不存在" }, { status: 404 });
   }
 
   const published = await db.$transaction(async (tx) => {

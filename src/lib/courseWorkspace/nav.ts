@@ -6,6 +6,7 @@ import {
   Volume2
 } from "lucide-react";
 import type { CourseWorkspaceTab } from "@/types/courseWorkspace";
+import { courseCapabilities } from "@/lib/courseWorkspace/capabilities";
 
 export const courseWorkspaceNav: Array<{
   id: CourseWorkspaceTab;
@@ -19,3 +20,25 @@ export const courseWorkspaceNav: Array<{
   { id: "notices", label: "通知", hrefSegment: "notices", icon: Volume2 },
   { id: "analytics", label: "学情分析", hrefSegment: "analytics", icon: BarChart3 }
 ];
+
+const courseWorkspaceNavParents: Record<CourseWorkspaceTab, CourseWorkspaceTab> = {
+  "ai-workbench": "ai-workbench",
+  "pre-class": "after-class",
+  activities: "activities",
+  "after-class": "after-class",
+  analytics: "analytics",
+  structure: "ai-workbench",
+  "knowledge-map": "ai-workbench",
+  "html-courseware": "ai-workbench",
+  resources: "ai-workbench",
+  notices: "notices",
+  discussions: "after-class",
+  assignments: "after-class",
+  exams: "after-class",
+  "question-bank": "after-class"
+};
+
+export function getCourseWorkspaceNavParent(activeTab: CourseWorkspaceTab) {
+  return courseCapabilities.find((capability) => capability.enabled && capability.activeTab === activeTab)?.navParent
+    ?? courseWorkspaceNavParents[activeTab];
+}

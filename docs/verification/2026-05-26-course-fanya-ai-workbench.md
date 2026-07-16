@@ -1,21 +1,58 @@
-# Course Fanya AI Workbench Verification
+# AI Workbench 信息架构验证
 
-## Commands
+最后验证：2026-07-16
 
-- `npm run typecheck`
-- `npm run test`
-- `npm run build`
-- `npm run test:e2e`
+## 目标结构
 
-## Manual Checks
+- 教师进入 `/space/courses/[courseId]/ai-workbench` 后直接看到“继续处理、创建教学内容、管理备课成果、教学支持”，不再出现 `AI助教 / AI应用 / AI实践 / AI学情分析` 四个页内总标签。
+- 学生进入同一路径后直接看到课程资料搜索和 AI 助教对话，不显示教师任务、班级库存或 AI 产物统计。
+- AI 助教的 canonical route 为 `/space/courses/[courseId]/ai-workbench/tutor`。
+- 互动课件生成器命名为“生成互动课件”；成果页命名为“已发布互动课件”。
+- 所有教师主能力由 `src/lib/courseWorkspace/capabilities.ts` 统一注册。
 
-- Course card opens `/space/courses/[courseId]/ai-workbench`.
-- `AI应用` tab contains `AI出题`, `AI教案`, `AI课件`, and `AI组卷`.
-- Four requested AI apps generate and persist artifacts.
-- All course sidebar tabs render and update active state.
-- Existing `AI 文档建课` and `课程建设` links remain available from the course workspace.
+## 自动化验证
 
-## Known Limits
+运行：
 
-- UI is structurally close but not pixel-perfect.
-- Disabled AI app cards outside the requested four are visible but not implemented.
+```bash
+npm run verify
+```
+
+2026-07-16 结果：
+
+- TypeScript 类型检查通过。
+- 52 个测试文件、474 个测试全部通过。
+- Next.js 生产构建通过。
+- 新路由 `/space/courses/[courseId]/ai-workbench/tutor` 已进入生产路由表。
+
+覆盖的关键回归：
+
+- 每个启用的教师能力在备课首页恰好出现一次。
+- AI组卷主入口可见，缺少审核题目时提供“去 AI出题”和“审核题库”。
+- 互动课件生成和已发布成果使用不同名称与 canonical route。
+- resources、knowledge-map、html-courseware 持续高亮“备课中心”。
+- 题库保持在“课后”父级，避免从课后进入后侧栏跳层。
+- 学生端直达 AI 助教，不显示教师库存数据。
+- 无动作的“课程门户 / 链接 / 账号管理 / 切换单位或角色”不再展示。
+
+## Kimi WebBridge 实际走查
+
+使用教师账号走查：
+
+- 备课首页显示 10 个唯一能力入口，包含 AI组卷。
+- AI 助教进入独立页面，页面内没有旧的四个总标签。
+- AI组卷只有 1 道审核题目时，“开始 AI 生成”处于禁用状态，两条解锁路径均可见。
+- 互动课件生成器缺少来源时，提供“生成 AI课件”操作。
+- “生成互动课件”和“已发布互动课件”分别进入生成器与成果页。
+- 课程资料库使用“基于课程资料生成课件”的次级上下文入口。
+- 子页均显示稳定面包屑，侧栏父级高亮符合任务归属。
+
+使用学生账号走查：
+
+- 侧栏显示 `AI助教 / 上课 / 课后 / 通知 / 我的学习`。
+- 点击课程 AI 入口后直接展示搜索与聊天，不出现第二层 AI 助教标签。
+- `/analytics` 标题为“我的学习”，只显示当前学生的真实课时、签到、作业、考试和 AI 陪练数据。
+
+## 浏览器自动化说明
+
+Kimi WebBridge 在后台标签页中会触发 Chrome 对 `requestAnimationFrame` 的节流，Next.js 流式 HTML 已完整返回但 Suspense 内容交换会延迟。走查时只执行了 Next 已排队的内容交换回调以读取真实 DOM；未修改业务数据、权限或页面状态。

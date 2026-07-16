@@ -228,7 +228,7 @@ export async function createKnowledgeMapDraft({
     data: {
       courseId,
       sourceJobId,
-      title: `${outline.title} 知识导图`,
+      title: `${outline.title} 知识图谱`,
       summary: outline.description,
       status: "DRAFT",
       version: 1

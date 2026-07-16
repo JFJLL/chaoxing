@@ -1,0 +1,61 @@
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import { CourseWorkspaceSidebar } from "../../src/components/course-workspace/CourseWorkspaceSidebar";
+import { CourseWorkspaceBreadcrumbs } from "../../src/components/course-workspace/CourseWorkspaceBreadcrumbs";
+import { getCourseWorkspaceNavParent } from "../../src/lib/courseWorkspace/nav";
+import { UserMenu } from "../../src/components/shell/UserMenu";
+
+(globalThis as typeof globalThis & { React: typeof React }).React = React;
+
+describe("course workspace navigation", () => {
+  it.each(["resources", "knowledge-map", "html-courseware", "structure"] as const)(
+    "keeps %s under the prep center parent",
+    (tab) => {
+      expect(getCourseWorkspaceNavParent(tab)).toBe("ai-workbench");
+    }
+  );
+
+  it("keeps the legacy pre-class redirect under the after-class parent", () => {
+    expect(getCourseWorkspaceNavParent("pre-class")).toBe("after-class");
+    expect(getCourseWorkspaceNavParent("question-bank")).toBe("after-class");
+  });
+
+  it("highlights the prep center for a child route and removes fake course links", () => {
+    const html = renderToStaticMarkup(
+      <CourseWorkspaceSidebar
+        course={{ id: "course-1", title: "测试课程" }}
+        activeTab="resources"
+        canManage
+      />
+    );
+
+    expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/space\/courses\/course-1\/ai-workbench"/);
+    expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+    expect(html).not.toContain("课程门户");
+    expect(html).not.toContain(">链接<");
+  });
+
+  it("renders a stable course-to-prep breadcrumb hierarchy", () => {
+    const html = renderToStaticMarkup(
+      <CourseWorkspaceBreadcrumbs courseId="course-1" courseTitle="测试课程" current="AI组卷" />
+    );
+
+    expect(html).toContain('aria-label="面包屑"');
+    expect(html).toContain('href="/space/courses"');
+    expect(html).toContain('href="/space/courses/course-1"');
+    expect(html).toContain('href="/space/courses/course-1/ai-workbench"');
+    expect(html).toContain('aria-current="page"');
+    expect(html).toContain("AI组卷");
+  });
+
+  it("does not expose account actions that have no implementation", () => {
+    const html = renderToStaticMarkup(
+      <UserMenu user={{ id: "teacher-1", name: "李老师", role: "TEACHER", institutionId: "institution-1" }} />
+    );
+
+    expect(html).toContain("退出空间");
+    expect(html).not.toContain("账号管理");
+    expect(html).not.toContain("切换单位/角色");
+  });
+});

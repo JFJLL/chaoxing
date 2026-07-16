@@ -90,7 +90,7 @@ export function ImportJobManager({
               <h3 className="font-medium text-slate-900">{map.title}</h3>
               <span className="rounded-full bg-white px-2 py-0.5 text-xs text-slate-500">{map.status === "PUBLISHED" ? "已发布" : "草稿"}</span>
             </div>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{map.summary ?? "根据课程目录生成的知识导图草稿。"}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{map.summary ?? "根据课程目录生成的知识图谱草稿。"}</p>
             <p className="mt-2 text-xs text-slate-500">{map.nodes.length} 个节点，{map.edges.length} 条关系</p>
           </div>
           <div className="flex flex-wrap items-start gap-2 lg:justify-end">
@@ -113,7 +113,7 @@ export function ImportJobManager({
           </div>
         </div>
       ) : (
-        <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-500">任务完成后会在这里出现知识导图草稿。</p>
+        <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-500">任务完成后会在这里出现知识图谱草稿。</p>
       )}
 
       {htmlArtifact ? (

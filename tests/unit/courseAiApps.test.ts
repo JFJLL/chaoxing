@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { courseAiApps, enabledCourseAiAppTypes, getCourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
 import { buildKnowledgeMapDraft } from "@/lib/knowledgeMap/generateKnowledgeMap";
 import type { CourseAiAppType } from "@/types/courseWorkspace";
+import { courseCapabilities, enabledGeneratorCapabilities } from "@/lib/courseWorkspace/capabilities";
 
 const appTypes: CourseAiAppType[] = ["question_generation", "lesson_plan", "courseware", "paper_assembly", "html_courseware"];
 
@@ -13,6 +14,19 @@ describe("course AI apps", () => {
       expect(matches).toHaveLength(1);
       expect(getCourseAiAppDefinition(appType).enabled).toBe(true);
     }
+  });
+
+  it("uses one enabled capability registry with unique canonical names and routes", () => {
+    const enabled = courseCapabilities.filter((capability) => capability.enabled);
+    const titles = enabled.map((capability) => capability.title);
+    const routes = enabled.map((capability) => capability.route("course-1"));
+
+    expect(new Set(titles).size).toBe(titles.length);
+    expect(new Set(routes).size).toBe(routes.length);
+    expect(enabledGeneratorCapabilities.map((capability) => capability.appType).sort()).toEqual(appTypes.sort());
+    expect(enabled.find((capability) => capability.id === "ai-paper-assembly")?.prerequisites).toEqual(["approved_questions"]);
+    expect(enabled.find((capability) => capability.id === "ai-interactive-courseware")?.title).toBe("生成互动课件");
+    expect(enabled.find((capability) => capability.id === "published-interactive-courseware")?.title).toBe("已发布互动课件");
   });
 
   it("builds relational knowledge maps beyond a plain outline", () => {

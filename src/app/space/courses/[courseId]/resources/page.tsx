@@ -6,6 +6,7 @@ import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell
 import { CourseModulePanel } from "@/components/course-workspace/CourseModulePanel";
 import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
+import { CourseWorkspaceBreadcrumbs } from "@/components/course-workspace/CourseWorkspaceBreadcrumbs";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 type CourseResource = Awaited<ReturnType<typeof loadCourseWorkspace>>["resources"][number];
@@ -49,7 +50,8 @@ export default async function ResourcesPage({ params }: PageProps) {
       <CourseModulePanel
         title="课程资料库"
         description="查看和下载课件、案例、项目资料及参考视频。"
-        actions={canManage ? <div className="flex gap-2"><LinkButton href="/space/drive" variant="secondary"><FolderOpen className="h-4 w-4" />管理资料</LinkButton><LinkButton href={`/space/courses/${course.id}/ai-workbench/apps/courseware`}><Bot className="h-4 w-4" />AI课件</LinkButton></div> : undefined}
+        breadcrumbs={<CourseWorkspaceBreadcrumbs courseId={course.id} courseTitle={course.title} current="课程资料库" />}
+        actions={canManage ? <div className="flex gap-2"><LinkButton href="/space/drive" variant="secondary"><FolderOpen className="h-4 w-4" />管理资料</LinkButton><LinkButton href={`/space/courses/${course.id}/ai-workbench/apps/courseware`} variant="secondary"><Bot className="h-4 w-4" />基于课程资料生成课件</LinkButton></div> : undefined}
       >
         <div className="space-y-8">
           <section id="courseware" className="scroll-mt-6">

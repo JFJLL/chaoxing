@@ -144,7 +144,7 @@ export function AiArtifactEditor({ appType, title, payload, approvedQuestions = 
         <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
           HTML 课件是已确认课件的视觉版本，仅支持安全预览，不允许直接修改教学内容。
         </div>
-        <iframe title="HTML课件预览" srcDoc={draft.payload.html} sandbox="allow-scripts" className="h-[520px] w-full rounded-xl border border-slate-200 bg-white" />
+        <iframe title="互动课件预览" srcDoc={draft.payload.html} sandbox="allow-scripts" className="h-[520px] w-full rounded-xl border border-slate-200 bg-white" />
       </div>
     );
   }

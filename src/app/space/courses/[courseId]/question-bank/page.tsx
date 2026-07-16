@@ -8,6 +8,7 @@ import { CourseModulePanel } from "@/components/course-workspace/CourseModulePan
 import { LinkButton } from "@/components/ui/Button";
 import { QuestionBankClient } from "@/components/course-workspace/QuestionBankClient";
 import { parseOptions } from "@/lib/teaching/assessmentInput";
+import { CourseWorkspaceBreadcrumbs } from "@/components/course-workspace/CourseWorkspaceBreadcrumbs";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
@@ -36,7 +37,7 @@ export default async function QuestionBankPage({ params }: PageProps) {
   return (
     <FanyaCourseShell user={user} course={course} activeTab="question-bank">
       {!canManage ? (
-        <CourseModulePanel title="题库" description="题库由教师维护，学生请前往作业或考试完成学习任务。">
+        <CourseModulePanel title="题库" description="题库由教师维护，学生请前往作业或考试完成学习任务。" breadcrumbs={<CourseWorkspaceBreadcrumbs courseId={course.id} courseTitle={course.title} current="题库" parent={{ label: "课后", href: `/space/courses/${course.id}/after-class` }} />}>
           <div className="rounded-2xl border border-slate-100 bg-slate-50 p-6">
             <LockKeyhole className="h-8 w-8 text-slate-500" />
             <h2 className="mt-4 font-semibold text-slate-900">学生端不开放题库维护视图</h2>
@@ -57,6 +58,7 @@ export default async function QuestionBankPage({ params }: PageProps) {
       <CourseModulePanel
         title="题库"
         description="汇总已确认的 AI 题目；稳定题目 ID 可供组卷持续引用。"
+        breadcrumbs={<CourseWorkspaceBreadcrumbs courseId={course.id} courseTitle={course.title} current="题库" parent={{ label: "课后", href: `/space/courses/${course.id}/after-class` }} />}
         actions={<div className="flex flex-wrap gap-2"><LinkButton href={`/space/courses/${course.id}/after-class`} variant="secondary"><ArrowLeft className="h-4 w-4" />返回课后</LinkButton><LinkButton href={`/space/courses/${course.id}/ai-workbench/apps/question_generation`}><Bot className="h-4 w-4" />AI出题</LinkButton></div>}
       >
         <QuestionBankClient courseId={courseId} initialQuestions={questions.map((question) => ({ id: question.id, type: question.type as "single_choice" | "multiple_choice" | "short_answer", stem: question.stem, options: parseOptions(question.options), answer: question.answer, explanation: question.explanation, version: question.version, sourceTitle: question.sourceArtifact?.title ?? "AI 题库", sourceVersion: question.sourceArtifact?.version ?? null }))} />

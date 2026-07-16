@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -10,6 +8,7 @@ import type { CourseAiAppType } from "@/types/courseWorkspace";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { AiAppGenerator } from "@/components/course-workspace/AiAppGenerator";
 import { parseManagerAiArtifactDto } from "@/lib/courseWorkspace/aiArtifactClient";
+import { CourseWorkspaceBreadcrumbs } from "@/components/course-workspace/CourseWorkspaceBreadcrumbs";
 
 type PageProps = {
   params: Promise<{ courseId: string; appType: string }>;
@@ -78,16 +77,16 @@ export default async function AiAppDetailPage({ params }: PageProps) {
         select: { id: true, title: true, version: true, status: true }
       })
     : [];
+  const hasCourseContent = course.chapters.length > 0
+    || course.resources.length > 0
+    || await db.documentImportJob.count({ where: { courseId: course.id, extractedText: { not: null } } }) > 0;
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="ai-workbench">
       <div className="space-y-5">
         <div className="flex flex-col gap-3 rounded-[28px] bg-white p-6 shadow-sm lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <Link href={`/space/courses/${course.id}/ai-workbench`} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-blue-700">
-              <ArrowLeft className="h-4 w-4" />
-              备课中心
-            </Link>
+            <CourseWorkspaceBreadcrumbs courseId={course.id} courseTitle={course.title} current={app.title} />
             <h1 className="mt-3 text-2xl font-semibold text-slate-900">{app.title}</h1>
             <p className="mt-1 text-sm text-slate-500">{app.description}</p>
           </div>
@@ -100,6 +99,7 @@ export default async function AiAppDetailPage({ params }: PageProps) {
           approvedQuestions={approvedQuestions}
           coursewareSources={coursewareSources}
           initialArtifacts={initialArtifacts}
+          hasCourseContent={hasCourseContent}
         />
       </div>
     </FanyaCourseShell>

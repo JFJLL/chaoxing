@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Bot, LoaderCircle, Plus, RotateCcw, Send, Square } from "lucide-react";
+import Link from "next/link";
 import { readAiStream, type AiCitation, type AiStreamEvent } from "@/lib/ai/streamProtocol";
 
 export type TutorMessageDto = {
@@ -230,7 +231,7 @@ function MessageBubble({ assistant, content, citations, streaming = false }: { a
         <p className="whitespace-pre-wrap">{content}{streaming ? <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-blue-500 align-middle" /> : null}</p>
         {assistant && citations.length ? (
           <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
-            {citations.map((citation, index) => <a key={citation.id} href={citation.href} className="rounded-full bg-white px-3 py-1 text-xs text-blue-700" title={citation.snippet}>[{index + 1}] {citation.label}</a>)}
+            {citations.map((citation, index) => <Link key={citation.id} href={citation.href} className="rounded-full bg-white px-3 py-1 text-xs text-blue-700" title={citation.snippet}>[{index + 1}] {citation.label}</Link>)}
           </div>
         ) : null}
       </div>

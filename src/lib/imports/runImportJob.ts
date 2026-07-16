@@ -39,7 +39,7 @@ export async function runImportJob(jobId: string) {
         generatedOutline: JSON.stringify(generated.outline),
         warning: null,
         status: "MAPPING",
-        currentStage: "知识导图生成"
+        currentStage: "知识图谱生成"
       }
     });
     await createKnowledgeMapDraft({

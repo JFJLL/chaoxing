@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { KnowledgeMapGraph } from "@/components/course-workspace/KnowledgeMapGraph";
+import { CourseWorkspaceBreadcrumbs } from "@/components/course-workspace/CourseWorkspaceBreadcrumbs";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
@@ -56,10 +57,10 @@ export default async function KnowledgeMapPage({ params }: PageProps) {
   return (
     <FanyaCourseShell user={user} course={course} activeTab="knowledge-map">
       <section className="rounded-[28px] bg-white p-6 shadow-sm">
-        <p className="text-sm text-slate-500">{course.title}</p>
-        <h1 className="mt-1 text-2xl font-semibold text-slate-900">知识导图</h1>
+        <CourseWorkspaceBreadcrumbs courseId={course.id} courseTitle={course.title} current="知识图谱" />
+        <h1 className="mt-4 text-2xl font-semibold text-slate-900">知识图谱</h1>
         {!map ? (
-          <p className="mt-5 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">暂无已发布知识导图。</p>
+          <p className="mt-5 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">暂无已发布知识图谱。</p>
         ) : (
           <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="space-y-4">

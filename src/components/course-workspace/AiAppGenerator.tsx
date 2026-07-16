@@ -106,7 +106,8 @@ export function AiAppGenerator({
   chapters,
   approvedQuestions,
   coursewareSources,
-  initialArtifacts
+  initialArtifacts,
+  hasCourseContent = true
 }: {
   courseId: string;
   app: CourseAiAppDefinition & { appType: CourseAiAppType };
@@ -114,6 +115,7 @@ export function AiAppGenerator({
   approvedQuestions: Array<{ id: string; stem: string }>;
   coursewareSources: Array<{ id: string; title: string; version: number; status: string }>;
   initialArtifacts: ManagerAiArtifactDto[];
+  hasCourseContent?: boolean;
 }) {
   const [prompt, setPrompt] = useState("");
   const [options, setOptions] = useState<GeneratorOptions>(defaultOptions);
@@ -187,7 +189,7 @@ export function AiAppGenerator({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (actionLock.current || (app.appType === "paper_assembly" && approvedQuestions.length < 3) || (app.appType === "html_courseware" && !sourceArtifactId)) return;
+    if (actionLock.current || generationBlocked) return;
     actionLock.current = true;
     setCreating(true);
     setError("");
@@ -229,8 +231,17 @@ export function AiAppGenerator({
   }
 
   const isBusy = creating || Boolean(busyAction);
-  const generationBlocked = (app.appType === "paper_assembly" && approvedQuestions.length < 3)
-    || (app.appType === "html_courseware" && !sourceArtifactId);
+  const prerequisites = app.prerequisites ?? (
+    app.appType === "paper_assembly"
+      ? ["approved_questions" as const]
+      : app.appType === "html_courseware"
+        ? ["approved_courseware" as const]
+        : ["course_content" as const]
+  );
+  const missingCourseContent = prerequisites.includes("course_content") && !hasCourseContent;
+  const missingApprovedQuestions = prerequisites.includes("approved_questions") && approvedQuestions.length < 3;
+  const missingApprovedCourseware = prerequisites.includes("approved_courseware") && !sourceArtifactId;
+  const generationBlocked = missingCourseContent || missingApprovedQuestions || missingApprovedCourseware;
 
   return (
     <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -251,11 +262,12 @@ export function AiAppGenerator({
           {app.appType === "lesson_plan" ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1"><label className="space-y-1 text-sm font-medium text-slate-700"><span>课时分钟</span><input type="number" min={30} max={180} value={options.lessonMinutes} onChange={(event) => updateOption("lessonMinutes", Number(event.target.value))} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="space-y-1 text-sm font-medium text-slate-700"><span>教法</span><select value={options.teachingMethod} onChange={(event) => updateOption("teachingMethod", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option>讲授结合实践</option><option>任务驱动</option><option>案例研讨</option><option>翻转课堂</option></select></label></div> : null}
           {app.appType === "courseware" || app.appType === "html_courseware" ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1"><label className="space-y-1 text-sm font-medium text-slate-700"><span>页数</span><input type="number" min={5} max={16} value={options.slideCount} onChange={(event) => updateOption("slideCount", Number(event.target.value))} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="space-y-1 text-sm font-medium text-slate-700"><span>风格</span><select value={options.coursewareStyle} onChange={(event) => updateOption("coursewareStyle", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option>课堂讲授</option><option>案例分析</option><option>实训操作</option><option>复习总结</option></select></label></div> : null}
           {app.appType === "paper_assembly" ? <label className="space-y-1 text-sm font-medium text-slate-700"><span>试卷总分</span><input type="number" min={30} max={150} value={options.paperScore} onChange={(event) => updateOption("paperScore", Number(event.target.value))} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label> : null}
-          {app.appType === "paper_assembly" ? <div className={`rounded-xl p-3 text-sm ${approvedQuestions.length < 3 ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}><p>已审核题目 {approvedQuestions.length} 道</p>{approvedQuestions.length < 3 ? <p className="mt-1">请先生成并审核至少 3 道题目</p> : null}</div> : null}
-          {app.appType === "html_courseware" ? <div className="space-y-2"><label className="space-y-1 text-sm font-medium text-slate-700"><span>来源课件</span><select value={sourceArtifactId} onChange={(event) => setSourceArtifactId(event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option value="">请选择已确认课件</option>{coursewareSources.map((source) => <option key={source.id} value={source.id}>{source.title} · v{source.version} · {source.status === "PUBLISHED" ? "已发布" : "已确认"}</option>)}</select></label>{!coursewareSources.length ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">请先生成并确认 AI 课件，再生成 HTML 课件。<Link className="ml-1 underline" href={`/space/courses/${courseId}/ai-workbench/apps/courseware`}>前往 AI 课件</Link></p> : null}</div> : null}
+          {app.appType === "paper_assembly" ? <div className={`rounded-xl p-3 text-sm ${missingApprovedQuestions ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-700"}`}><p>已审核题目 {approvedQuestions.length} 道</p>{missingApprovedQuestions ? <div className="mt-2"><p>请先生成并审核至少 3 道题目。</p><div className="mt-3 flex flex-wrap gap-3"><Link className="font-medium underline underline-offset-4" href={`/space/courses/${courseId}/ai-workbench/apps/question_generation`}>去 AI出题</Link><Link className="font-medium underline underline-offset-4" href={`/space/courses/${courseId}/question-bank`}>审核题库</Link></div></div> : null}</div> : null}
+          {app.appType === "html_courseware" ? <div className="space-y-2"><label className="space-y-1 text-sm font-medium text-slate-700"><span>来源课件</span><select value={sourceArtifactId} onChange={(event) => setSourceArtifactId(event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option value="">请选择已确认课件</option>{coursewareSources.map((source) => <option key={source.id} value={source.id}>{source.title} · v{source.version} · {source.status === "PUBLISHED" ? "已发布" : "已确认"}</option>)}</select></label>{missingApprovedCourseware ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">还没有可用的来源课件。先生成并确认一份 AI课件，再回到这里制作互动版本。<Link className="ml-1 font-medium underline underline-offset-4" href={`/space/courses/${courseId}/ai-workbench/apps/courseware`}>生成 AI课件</Link></p> : null}</div> : null}
 
           <div><label htmlFor="ai-app-prompt" className="text-sm font-medium text-slate-700">生成要求</label><textarea id="ai-app-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={`补充${app.title}要求`} className="mt-2 min-h-24 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-400" /></div>
           <div className="rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-700">{structuredPrompt()}</div>
+          {missingCourseContent ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p className="font-medium">当前课程还没有可用于 AI 生成的内容</p><p className="mt-1 leading-5">先导入课程文档或添加课程资料，系统才知道应该依据什么生成。</p><div className="mt-3 flex flex-wrap gap-3"><Link className="font-medium underline underline-offset-4" href={`/space/courses/${courseId}/ai-import`}>AI文档建课</Link><Link className="font-medium underline underline-offset-4" href={`/space/courses/${courseId}/resources`}>查看课程资料库</Link></div></div> : null}
           {error ? <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
           <Button type="submit" className="w-full" disabled={isBusy || generationBlocked}>
             {creating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
@@ -273,7 +285,7 @@ export function AiAppGenerator({
       </aside>
 
       <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-        {!selected ? <p className="text-sm text-slate-500">先填写生成要求，创建第一个 AI 任务。</p> : (
+        {!selected ? <div className="flex min-h-[360px] items-center justify-center"><div className="max-w-md text-center"><Sparkles className="mx-auto h-9 w-9 text-blue-500" aria-hidden="true" /><h2 className="mt-4 text-lg font-semibold text-slate-900">准备开始{app.title}</h2><p className="mt-2 text-sm leading-6 text-slate-500">填写生成要求 → AI 生成草稿 → 编辑确认{publishableAppTypes.has(app.appType) ? " → 发布给学生" : ""}。生成完成后可在这里逐项编辑，不会直接发布。</p></div></div> : (
           <>
             <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
               <div><p className="text-sm text-slate-500">AI 产物 · v{selected.version}</p><h2 className="mt-1 text-xl font-semibold text-slate-900">{selected.title}</h2></div>

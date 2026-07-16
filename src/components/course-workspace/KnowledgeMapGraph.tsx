@@ -137,7 +137,7 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
 
   return (
     <div className="overflow-x-auto rounded-[28px] border border-slate-100 bg-gradient-to-br from-white via-slate-50 to-sky-50 p-4 shadow-sm">
-      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="课程知识导图">
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="课程知识图谱">
         <defs>
           <marker id="knowledge-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
             <path d="M0,0 L9,4.5 L0,9 Z" fill="#94a3b8" />

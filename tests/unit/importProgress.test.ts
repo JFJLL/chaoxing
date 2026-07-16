@@ -16,7 +16,7 @@ describe("import progress", () => {
       { key: "QUEUED", label: "文档上传" },
       { key: "EXTRACTING", label: "内容解析" },
       { key: "STRUCTURING", label: "目录生成" },
-      { key: "MAPPING", label: "知识导图" },
+      { key: "MAPPING", label: "知识图谱" },
       { key: "READY_FOR_REVIEW", label: "待你确认" },
       { key: "APPLIED", label: "已应用" }
     ]);

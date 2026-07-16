@@ -53,6 +53,7 @@ function render(
   options: {
     approvedQuestions?: Array<{ id: string; stem: string }>;
     coursewareSources?: Array<{ id: string; title: string; version: number; status: string }>;
+    hasCourseContent?: boolean;
   } = {}
 ) {
   return renderToStaticMarkup(
@@ -63,6 +64,7 @@ function render(
       approvedQuestions={options.approvedQuestions ?? []}
       coursewareSources={options.coursewareSources ?? []}
       initialArtifacts={[artifact]}
+      hasCourseContent={options.hasCourseContent}
     />
   );
 }
@@ -162,6 +164,8 @@ describe("AI artifact status presentation", () => {
 
     expect(markup).toContain("已审核题目 2 道");
     expect(markup).toContain("请先生成并审核至少 3 道题目");
+    expect(markup).toContain("去 AI出题");
+    expect(markup).toContain("审核题库");
     expect(markup).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
     expect(markup).not.toContain("模板");
   });
@@ -175,7 +179,8 @@ describe("AI artifact status presentation", () => {
       description: "生成 HTML"
     };
     const emptyMarkup = render({ ...baseArtifact, appType: "html_courseware" }, htmlApp);
-    expect(emptyMarkup).toContain("请先生成并确认 AI 课件");
+    expect(emptyMarkup).toContain("还没有可用的来源课件");
+    expect(emptyMarkup).toContain("生成 AI课件");
     expect(emptyMarkup).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
 
     const readyMarkup = render({ ...baseArtifact, appType: "html_courseware" }, htmlApp, {
@@ -184,6 +189,15 @@ describe("AI artifact status presentation", () => {
     expect(readyMarkup).toContain("来源课件");
     expect(readyMarkup).toContain("第一章课件 · v2 · 已确认");
     expect(readyMarkup).not.toContain("请先生成并确认 AI 课件");
+  });
+
+  it("blocks source-based generation when the course has no usable content and provides next steps", () => {
+    const markup = render(baseArtifact, app, { hasCourseContent: false });
+
+    expect(markup).toContain("当前课程还没有可用于 AI 生成的内容");
+    expect(markup).toContain("AI文档建课");
+    expect(markup).toContain("查看课程资料库");
+    expect(markup).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
   });
 });
 

@@ -7,6 +7,7 @@ import { CourseModulePanel } from "@/components/course-workspace/CourseModulePan
 import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { db } from "@/lib/db";
+import Link from "next/link";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
@@ -36,11 +37,11 @@ export default async function AfterClassPage({ params }: PageProps) {
             <div className="flex flex-wrap gap-2">
               <LinkButton href={`/space/courses/${course.id}/ai-workbench/apps/question_generation`} variant="secondary">
                 <Bot className="h-4 w-4" />
-                AI题库
+                生成课后练习
               </LinkButton>
-              <LinkButton href={`/space/courses/${course.id}/ai-workbench/apps/paper_assembly`}>
+              <LinkButton href={`/space/courses/${course.id}/ai-workbench/apps/paper_assembly`} variant="secondary">
                 <Bot className="h-4 w-4" />
-                AI组卷
+                创建测验卷
               </LinkButton>
             </div>
           ) : null
@@ -50,14 +51,14 @@ export default async function AfterClassPage({ params }: PageProps) {
           {modules.filter((module) => canManage || module.title !== "题库").map((module) => {
             const Icon = module.icon;
             return (
-              <a key={module.title} href={module.href} className="rounded-2xl border border-slate-100 bg-slate-50 p-5 transition hover:border-blue-100 hover:bg-blue-50/50">
+              <Link key={module.title} href={module.href} className="rounded-2xl border border-slate-100 bg-slate-50 p-5 transition hover:border-blue-100 hover:bg-blue-50/50">
                 <div className="flex items-start justify-between gap-3">
                   <Icon className="h-7 w-7 text-[#2165f3]" />
                   <Badge tone={module.count ? "blue" : "gray"}>{module.count} 项</Badge>
                 </div>
                 <h2 className="mt-4 font-semibold text-slate-900">{module.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">{module.description}</p>
-              </a>
+              </Link>
             );
           })}
         </div>

@@ -7,6 +7,8 @@ import { recoverImportJobsFromDatabase } from "@/lib/imports/importQueue";
 import { UploadPanel } from "@/components/ai-import/UploadPanel";
 import { ImportTimeline } from "@/components/ai-import/ImportTimeline";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
+import Link from "next/link";
+import { CourseWorkspaceBreadcrumbs } from "@/components/course-workspace/CourseWorkspaceBreadcrumbs";
 
 type PageProps = {
   params: Promise<{ courseId: string }>;
@@ -42,8 +44,8 @@ export default async function AiImportPage({ params }: PageProps) {
       <section className="rounded-[28px] bg-white p-6 shadow-sm lg:p-8">
         <div className="space-y-6">
           <header className="border-b border-[var(--cx-border)] pb-5">
-            <p className="text-sm text-slate-500">{course.title}</p>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-900">AI 文档建课</h1>
+            <CourseWorkspaceBreadcrumbs courseId={course.id} courseTitle={course.title} current="AI文档建课" />
+            <h1 className="mt-4 text-2xl font-semibold text-slate-900">AI文档建课</h1>
           </header>
           <section className="rounded-2xl border border-blue-100 bg-blue-50/70 p-5">
             <h2 className="font-semibold text-blue-950">生成结果</h2>
@@ -68,9 +70,9 @@ export default async function AiImportPage({ params }: PageProps) {
               <div key={job.id} className="rounded-md border border-[var(--cx-border)] p-4">
                 <div className="mb-3 flex items-center justify-between text-sm">
                   <span className="font-medium text-slate-800">{job.originalName}</span>
-                  <a className="text-[var(--cx-blue)]" href={`/space/courses/${courseId}/ai-import/${job.id}`}>
+                  <Link className="text-[var(--cx-blue)]" href={`/space/courses/${courseId}/ai-import/${job.id}`}>
                     查看
-                  </a>
+                  </Link>
                 </div>
                 <ImportTimeline status={job.status} errorMessage={job.errorMessage} retryHref={`/space/courses/${courseId}/ai-import`} />
               </div>

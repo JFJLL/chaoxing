@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { FileSearch, Loader2, RefreshCw, Search, Wand2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { FileSearch, Loader2, RefreshCw, Search, Wand2, X } from "lucide-react";
 
 const sourceTypeLabels = {
   course: "课程",
@@ -127,13 +128,15 @@ export function AiCourseSearchView({
   state,
   onQueryChange,
   onSubmit,
-  onRetry
+  onRetry,
+  onDismiss
 }: {
   query: string;
   state: AiCourseSearchState;
   onQueryChange: (query: string) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   onRetry: () => void;
+  onDismiss: () => void;
 }) {
   const loading = state.status === "loading";
   const showPanel = state.status !== "idle";
@@ -142,7 +145,7 @@ export function AiCourseSearchView({
     <div className="relative max-w-xl flex-1 lg:max-w-md xl:max-w-lg">
       <form onSubmit={onSubmit} role="search" className="flex items-center gap-2 rounded-full bg-white px-4 py-2 shadow-sm">
         <Search className="h-4 w-4 text-slate-400" aria-hidden="true" />
-        <label htmlFor="ai-course-search" className="sr-only">检索当前课程</label>
+        <label htmlFor="ai-course-search" className="sr-only">搜索课程资料</label>
         <input
           id="ai-course-search"
           value={query}
@@ -150,12 +153,12 @@ export function AiCourseSearchView({
           maxLength={300}
           disabled={loading}
           className="min-w-0 flex-1 bg-transparent text-sm outline-none disabled:text-slate-400"
-          placeholder="AI智能检索当前课程"
+          placeholder="搜索课程资料"
         />
         <button
           type="submit"
           disabled={loading || !query.trim()}
-          aria-label={loading ? "正在检索当前课程" : "开始检索当前课程"}
+          aria-label={loading ? "正在搜索课程资料" : "搜索课程资料"}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white disabled:cursor-not-allowed disabled:bg-blue-300"
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Wand2 className="h-4 w-4" aria-hidden="true" />}
@@ -164,7 +167,10 @@ export function AiCourseSearchView({
 
       {showPanel ? (
         <section aria-live="polite" className="absolute right-0 z-30 mt-3 w-full min-w-[min(92vw,420px)] rounded-2xl border border-slate-100 bg-white p-4 shadow-xl">
-          {loading ? <p role="status" className="flex items-center gap-2 text-sm text-blue-700"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />正在检索当前课程</p> : null}
+          <button type="button" onClick={onDismiss} aria-label="关闭搜索结果并清除关键词" className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+          {loading ? <p role="status" className="flex items-center gap-2 pr-9 text-sm text-blue-700"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />正在搜索课程资料</p> : null}
           {state.status === "error" ? (
             <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
               <p>{state.error}</p>
@@ -174,17 +180,17 @@ export function AiCourseSearchView({
             </div>
           ) : null}
           {state.status === "success" && state.results.length === 0 ? (
-            <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">当前课程中没有找到相关内容</p>
+            <p className="mr-8 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">当前课程中没有找到相关资料</p>
           ) : null}
           {state.status === "success" && state.results.length > 0 ? (
             <div className="max-h-[420px] space-y-2 overflow-y-auto">
-              <p className="px-1 text-xs font-medium text-slate-400">找到 {state.results.length} 条当前课程内容</p>
+              <p className="px-1 pr-9 text-xs font-medium text-slate-400">找到 {state.results.length} 条相关课程资料</p>
               {state.results.map((result) => (
-                <a key={result.id} href={result.href} className="block rounded-xl border border-slate-100 p-3 transition hover:border-blue-200 hover:bg-blue-50/50">
+                <Link key={result.id} href={result.href} className="block rounded-xl border border-slate-100 p-3 transition hover:border-blue-200 hover:bg-blue-50/50">
                   <span className="flex items-center gap-2 text-xs text-blue-700"><FileSearch className="h-3.5 w-3.5" aria-hidden="true" />{sourceTypeLabels[result.type]}</span>
                   <span className="mt-1 block text-sm font-medium text-slate-900">{result.label}</span>
                   <span className="mt-1 line-clamp-3 block whitespace-pre-wrap text-xs leading-5 text-slate-600">{result.snippet}</span>
-                </a>
+                </Link>
               ))}
             </div>
           ) : null}
@@ -199,6 +205,19 @@ export function AiCourseSearch({ courseId }: { courseId: string }) {
   const [state, setState] = useState<AiCourseSearchState>({ status: "idle", results: [] });
   const lock = useRef<ReturnType<typeof createSearchSubmissionLock> | null>(null);
   if (!lock.current) lock.current = createSearchSubmissionLock();
+
+  function dismiss() {
+    setQuery("");
+    setState({ status: "idle", results: [] });
+  }
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismiss();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, []);
 
   async function runSearch() {
     if (!lock.current?.acquire()) return;
@@ -227,5 +246,5 @@ export function AiCourseSearch({ courseId }: { courseId: string }) {
     void runSearch();
   }
 
-  return <AiCourseSearchView query={query} state={state} onQueryChange={setQuery} onSubmit={submit} onRetry={() => void runSearch()} />;
+  return <AiCourseSearchView query={query} state={state} onQueryChange={setQuery} onSubmit={submit} onRetry={() => void runSearch()} onDismiss={dismiss} />;
 }
