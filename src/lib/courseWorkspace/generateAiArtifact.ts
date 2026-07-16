@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AiServiceError, toSafeAiError } from "@/lib/ai/errors";
-import { createJsonCompletion, resolveAiModelConfig } from "@/lib/ai/modelClient";
+import { createJsonCompletion, createTextCompletion, resolveAiModelConfig } from "@/lib/ai/modelClient";
 import type { CourseAiContext } from "@/lib/courseWorkspace/buildAiContext";
 import {
   aiCoursewarePayloadSchema,
@@ -35,7 +35,10 @@ export type GenerateCourseAiArtifactInput = {
   sourceCourseware?: AiCoursewarePayload;
 };
 
-const htmlModelPayloadSchema = htmlCoursewarePayloadSchema.omit({ generatedAt: true, sourceMapId: true });
+const htmlEnvelopeSchema = z.object({
+  html: htmlCoursewarePayloadSchema.shape.html,
+  theme: htmlCoursewarePayloadSchema.shape.theme
+}).passthrough();
 
 export const HTML_COURSEWARE_CSP = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'";
 
@@ -51,7 +54,7 @@ const outputInstructions: Record<CourseAiAppType, string> = {
   paper_assembly:
     '输出 {"title":"...","sections":[{"name":"...","score":20,"questionIds":["..."]}]}。questionIds 只能使用课程数据中 approvedQuestions 的 id，不得发明题目。',
   html_courseware:
-    '输出 {"html":"...","slideCount":1,"theme":"..."}。html 必须是含 doctype、html、head、body 的完整文档。教学区只能逐字使用 sourceCourseware 中的唯一占位符，每个占位符必须在 body 标签文本节点中恰好出现一次；不得输出占位符代表的原文或任何其他教学文字。只能使用内联 CSS/JS，不得使用 iframe、object、embed、form、事件处理器属性、javascript URL 或任何远程资源；slideCount 必须是 1 到 50 的整数。'
+    '生成含 doctype、html、head、body 的完整 HTML 文档。教学区只能逐字使用 sourceCourseware 中的唯一占位符，每个占位符必须在 body 标签文本节点中恰好出现一次；不得输出占位符代表的原文或任何其他教学文字。只能使用内联 CSS/JS，不得使用 iframe、object、embed、form、事件处理器属性、javascript URL 或任何远程资源。'
 };
 
 function extractJsonText(raw: string) {
@@ -75,6 +78,32 @@ function parseJson(raw: string | null) {
   } catch {
     throw invalidOutput("无法解析 JSON");
   }
+}
+
+function extractHtmlDocument(raw: string) {
+  const trimmed = raw.trim().replace(/^\uFEFF/, "");
+  const fenced = trimmed.match(/^```(?:html)?\s*([\s\S]*?)\s*```$/i)?.[1]?.trim() ?? trimmed;
+  const start = fenced.search(/<!doctype\s+html\b/i);
+  const closingTags = Array.from(fenced.matchAll(/<\/html\s*>/gi));
+  const end = closingTags.at(-1);
+  return start >= 0 && end?.index !== undefined
+    ? fenced.slice(start, end.index + end[0].length).trim()
+    : null;
+}
+
+function parseHtmlModelOutput(raw: string | null) {
+  if (!raw?.trim()) throw invalidOutput("模型未返回内容");
+
+  try {
+    const envelope = htmlEnvelopeSchema.safeParse(JSON.parse(extractJsonText(raw)));
+    if (envelope.success) return envelope.data;
+  } catch {
+    // Older and partially compatible providers may ignore JSON mode. Raw HTML is the stable contract.
+  }
+
+  const html = extractHtmlDocument(raw);
+  if (!html) throw invalidOutput("未返回完整 HTML 文档");
+  return { html };
 }
 
 function normalizeQuestionModelPayload(value: unknown) {
@@ -278,19 +307,20 @@ function ensurePaperUsesApprovedQuestions(payload: z.infer<typeof aiPaperPayload
 }
 
 function parsePayload(input: GenerateCourseAiArtifactInput, raw: string | null): CourseAiArtifactPayload {
-  const json = parseJson(raw);
-
   try {
     if (input.appType === "html_courseware") {
-      const parsed = htmlModelPayloadSchema.parse(json);
+      const parsed = parseHtmlModelOutput(raw);
       validateHtmlDocument(parsed.html);
       const htmlWithSourceText = validateAndReplaceSourceTokens(parsed.html, input.sourceCourseware!);
       return htmlCoursewarePayloadSchema.parse({
         ...parsed,
         html: injectFixedCsp(htmlWithSourceText),
+        slideCount: input.sourceCourseware!.slides.length,
         generatedAt: new Date().toISOString()
       });
     }
+
+    const json = parseJson(raw);
 
     switch (input.appType) {
       case "question_generation":
@@ -321,7 +351,9 @@ export function buildCourseAiArtifactPrompt(input: GenerateCourseAiArtifactInput
     ? buildHtmlSourceTokenContract(input.sourceCourseware).promptValue
     : undefined;
   return [
-    "只输出一个 JSON 对象，不要输出 Markdown、解释或额外字段。",
+    input.appType === "html_courseware"
+      ? "只输出一份完整 HTML 文档。首字符必须是 <!doctype html>，最后以 </html> 结束；不要输出 Markdown 代码围栏、JSON 或解释。"
+      : "只输出一个 JSON 对象，不要输出 Markdown、解释或额外字段。",
     outputInstructions[input.appType],
     input.appType === "html_courseware" && input.sourceCourseware
       ? `不得输出真实教学文字。只能排版 sourceCourseware 占位符；每个占位符在 body 文本节点中恰好出现一次。额外可见文案仅允许：${HTML_UI_TEXT_ALLOWLIST.join("、")}，以及纯页码和标点。`
@@ -351,12 +383,17 @@ export async function generateCourseAiArtifact(input: GenerateCourseAiArtifactIn
   const prompt = buildCourseAiArtifactPrompt(input);
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const raw = await createJsonCompletion({
+      const completion = input.appType === "html_courseware" ? createTextCompletion : createJsonCompletion;
+      const raw = await completion({
         model: config.model,
-        system: "你是课程教学内容生成助手。你必须严格遵守输出 JSON 契约和输入数据边界。",
+        system: input.appType === "html_courseware"
+          ? "你是互动课件前端生成助手。你必须严格遵守 HTML 输出契约和输入数据边界。"
+          : "你是课程教学内容生成助手。你必须严格遵守输出 JSON 契约和输入数据边界。",
         user: attempt === 0
           ? prompt
-          : `${prompt}\n上一次输出未通过 JSON 契约校验。请重新生成完整 JSON，逐项核对必填字段、字段类型和结尾括号。`
+          : input.appType === "html_courseware"
+            ? `${prompt}\n上一次输出未通过 HTML 契约校验。请重新生成完整文档，逐项核对全部占位符、标签闭合和安全限制。`
+            : `${prompt}\n上一次输出未通过 JSON 契约校验。请重新生成完整 JSON，逐项核对必填字段、字段类型和结尾括号。`
       });
       return parsePayload(input, raw);
     } catch (error) {

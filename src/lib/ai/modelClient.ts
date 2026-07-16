@@ -9,11 +9,13 @@ export type AiModelConfig = {
   model: string;
 };
 
-type JsonCompletionInput = {
+type CompletionInput = {
   system: string;
   user: string;
   model?: string;
 };
+
+type JsonCompletionInput = CompletionInput;
 
 export type TextCompletionMessage = {
   role: "user" | "assistant";
@@ -176,6 +178,22 @@ async function createOpenAiCompatibleJsonCompletion(config: AiModelConfig, input
   return completion.choices[0]?.message.content || "";
 }
 
+async function createOpenAiCompatibleTextCompletion(config: AiModelConfig, input: CompletionInput) {
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.baseURL
+  });
+  const completion = await client.chat.completions.create({
+    model: config.model,
+    messages: [
+      { role: "system", content: input.system },
+      { role: "user", content: input.user }
+    ]
+  });
+
+  return completion.choices[0]?.message.content || "";
+}
+
 async function createGeminiJsonCompletion(config: AiModelConfig, input: JsonCompletionInput) {
   const response = await fetch(buildGeminiGenerateContentUrl(config), {
     method: "POST",
@@ -212,6 +230,35 @@ async function createGeminiJsonCompletion(config: AiModelConfig, input: JsonComp
   return body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
 }
 
+async function createGeminiTextCompletion(config: AiModelConfig, input: CompletionInput) {
+  const response = await fetch(buildGeminiGenerateContentUrl(config), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": config.apiKey
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: `${input.system}\n\n${input.user}` }]
+        }
+      ],
+      generationConfig: { temperature: 0.2 }
+    })
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Gemini API failed: ${response.status} ${message.slice(0, 300)}`);
+  }
+
+  const body = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  return body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+}
+
 export async function createJsonCompletion(input: JsonCompletionInput) {
   const config = resolveAiModelConfig(input.model);
   if (!config) return null;
@@ -221,6 +268,17 @@ export async function createJsonCompletion(input: JsonCompletionInput) {
   }
 
   return createOpenAiCompatibleJsonCompletion(config, input);
+}
+
+export async function createTextCompletion(input: CompletionInput) {
+  const config = resolveAiModelConfig(input.model);
+  if (!config) return null;
+
+  if (config.provider === "gemini") {
+    return createGeminiTextCompletion(config, input);
+  }
+
+  return createOpenAiCompatibleTextCompletion(config, input);
 }
 
 async function* createOpenAiCompatibleTextStream(config: AiModelConfig, input: TextCompletionStreamInput) {

@@ -241,7 +241,7 @@ describe("strict course AI generation", () => {
     ],
     ["courseware", { slides: [{ title: "导入", bullets: [], speakerNotes: "说明" }] }],
     ["paper_assembly", { title: "测验", sections: [{ name: "单选题", score: -1, questionIds: ["question-1"] }] }],
-    ["html_courseware", { html: safeHtml, slideCount: 0, theme: "课堂蓝" }]
+    ["html_courseware", { html: "<html><body>缺少完整文档结构</body></html>", theme: "课堂蓝" }]
   ] as const)("rejects invalid %s payload schema", async (appType, payload) => {
     mockModelOutput(payload);
 
@@ -267,6 +267,30 @@ describe("strict course AI generation", () => {
 
     await expect(generateCourseAiArtifact(input)).rejects.toMatchObject({ code: "MODEL_INVALID_OUTPUT" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts raw HTML without a JSON envelope and derives slide count on the server", async () => {
+    const fetchMock = mockModelOutput(safeHtml);
+
+    const result = await generateCourseAiArtifact(inputFor("html_courseware"));
+
+    expect(result).toMatchObject({ slideCount: 1 });
+    expect(result).toHaveProperty("html", expect.stringContaining("课程导入"));
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      generationConfig?: { responseMimeType?: string };
+      contents?: Array<{ parts?: Array<{ text?: string }> }>;
+    };
+    expect(requestBody.generationConfig?.responseMimeType).toBeUndefined();
+    expect(requestBody.contents?.[0]?.parts?.[0]?.text).toContain("只输出一份完整 HTML 文档");
+  });
+
+  it("recovers a complete HTML document from a provider response with a malformed JSON wrapper", async () => {
+    mockModelOutput(`{"html":${safeHtml},"slideCount":1}`);
+
+    await expect(generateCourseAiArtifact(inputFor("html_courseware"))).resolves.toMatchObject({
+      slideCount: 1,
+      html: expect.stringContaining(fixedCsp)
+    });
   });
 
   it("rejects HTML that omits a required source token", async () => {
