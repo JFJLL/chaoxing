@@ -1,16 +1,16 @@
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
+import { requireCourseAccess } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { KnowledgeMapGraph } from "@/components/course-workspace/KnowledgeMapGraph";
-import { CourseWorkspaceBreadcrumbs } from "@/components/course-workspace/CourseWorkspaceBreadcrumbs";
+import { PrepWorkflowNavigation } from "@/components/course-workspace/PrepWorkflowNavigation";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
 export default async function KnowledgeMapPage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
-  const course = await loadCourseWorkspace(user, courseId);
+  const course = await requireCourseAccess(user, courseId);
   const map = await db.courseKnowledgeMap.findFirst({
     where: { courseId, status: "PUBLISHED" },
     orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
@@ -57,8 +57,13 @@ export default async function KnowledgeMapPage({ params }: PageProps) {
   return (
     <FanyaCourseShell user={user} course={course} activeTab="knowledge-map">
       <section className="rounded-[28px] bg-white p-6 shadow-sm">
-        <CourseWorkspaceBreadcrumbs courseId={course.id} courseTitle={course.title} current="知识图谱" />
-        <h1 className="mt-4 text-2xl font-semibold text-slate-900">知识图谱</h1>
+        <header className="flex flex-col gap-5 border-b border-slate-100 pb-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">课程内容与知识</h1>
+            <p className="mt-1 text-sm text-slate-500">查看课程目标、章节、活动与评价之间的知识关系。</p>
+          </div>
+          <PrepWorkflowNavigation courseId={course.id} workflow="content" active="knowledge-map" />
+        </header>
         {!map ? (
           <p className="mt-5 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">暂无已发布知识图谱。</p>
         ) : (

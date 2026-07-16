@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { courseAiApps, enabledCourseAiAppTypes, getCourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
 import { buildKnowledgeMapDraft } from "@/lib/knowledgeMap/generateKnowledgeMap";
 import type { CourseAiAppType } from "@/types/courseWorkspace";
-import { courseCapabilities, enabledGeneratorCapabilities } from "@/lib/courseWorkspace/capabilities";
+import { courseCapabilities, enabledGeneratorCapabilities, teacherPrepWorkflows } from "@/lib/courseWorkspace/capabilities";
 
 const appTypes: CourseAiAppType[] = ["question_generation", "lesson_plan", "courseware", "paper_assembly", "html_courseware"];
 
@@ -16,7 +16,7 @@ describe("course AI apps", () => {
     }
   });
 
-  it("uses one enabled capability registry with unique canonical names and routes", () => {
+  it("keeps generator definitions unique while consolidating the teacher homepage into five workflows", () => {
     const enabled = courseCapabilities.filter((capability) => capability.enabled);
     const titles = enabled.map((capability) => capability.title);
     const routes = enabled.map((capability) => capability.route("course-1"));
@@ -26,7 +26,9 @@ describe("course AI apps", () => {
     expect(enabledGeneratorCapabilities.map((capability) => capability.appType).sort()).toEqual(appTypes.sort());
     expect(enabled.find((capability) => capability.id === "ai-paper-assembly")?.prerequisites).toEqual(["approved_questions"]);
     expect(enabled.find((capability) => capability.id === "ai-interactive-courseware")?.title).toBe("生成互动课件");
-    expect(enabled.find((capability) => capability.id === "published-interactive-courseware")?.title).toBe("已发布互动课件");
+    expect(teacherPrepWorkflows.map((workflow) => workflow.id)).toEqual(["course-content", "lesson-plan", "assessment", "courseware", "tutor"]);
+    expect(teacherPrepWorkflows.find((workflow) => workflow.id === "assessment")?.includes).toEqual(["生成题目", "审核题库", "智能组卷"]);
+    expect(teacherPrepWorkflows.find((workflow) => workflow.id === "courseware")?.includes).toEqual(["生成课件", "互动课件", "已发布课件"]);
   });
 
   it("builds relational knowledge maps beyond a plain outline", () => {

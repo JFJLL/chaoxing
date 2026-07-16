@@ -1,4 +1,3 @@
-import { runImportJob } from "@/lib/imports/runImportJob";
 import { db } from "@/lib/db";
 import { createSlidingWindowConcurrencyGuard } from "@/lib/ai/requestGuards";
 import { maxCourseUploadBytes, maxInstitutionUploadBytes } from "@/lib/storage";
@@ -160,7 +159,8 @@ function drainImportQueue() {
     runningJobs.add(jobId);
     activeWorkers += 1;
 
-    void runImportJob(jobId)
+    void import("@/lib/imports/runImportJob")
+      .then(({ runImportJob }) => runImportJob(jobId))
       .catch(() => {
         // runImportJob persists the failure on the job record.
       })

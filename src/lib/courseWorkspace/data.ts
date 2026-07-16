@@ -10,7 +10,7 @@ export async function loadCourseWorkspace(user: SessionUser, courseId: string) {
   const course = await db.course.findUnique({
     where: { id: courseId },
     include: {
-      owner: true,
+      owner: { select: { id: true, name: true, avatar: true, role: true } },
       chapters: {
         orderBy: { order: "asc" },
         include: { lessons: { orderBy: { order: "asc" } } }
@@ -22,7 +22,7 @@ export async function loadCourseWorkspace(user: SessionUser, courseId: string) {
       announcements: {
         where: canManage ? {} : { status: "PUBLISHED", OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] },
         orderBy: { createdAt: "desc" },
-        include: { author: true }
+        include: { author: { select: { id: true, name: true, avatar: true, role: true } } }
       },
       aiArtifacts: {
         where: canManage ? {} : { status: "PUBLISHED" },
@@ -30,7 +30,7 @@ export async function loadCourseWorkspace(user: SessionUser, courseId: string) {
       },
       enrollments: {
         orderBy: { createdAt: "asc" },
-        include: { user: true }
+        include: { user: { select: { id: true, name: true, email: true, avatar: true, role: true } } }
       }
     }
   });

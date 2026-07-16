@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -65,11 +66,11 @@ function decodeSession(value: string): SessionUser | null {
   }
 }
 
-export async function getCurrentUser(): Promise<SessionUser | null> {
+export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const cookieStore = await cookies();
   const raw = cookieStore.get(SESSION_COOKIE)?.value;
   return raw ? decodeSession(raw) : null;
-}
+});
 
 export async function requireUser(): Promise<SessionUser> {
   const user = await getCurrentUser();

@@ -6,7 +6,6 @@ import {
   Volume2
 } from "lucide-react";
 import type { CourseWorkspaceTab } from "@/types/courseWorkspace";
-import { courseCapabilities } from "@/lib/courseWorkspace/capabilities";
 
 export const courseWorkspaceNav: Array<{
   id: CourseWorkspaceTab;
@@ -39,6 +38,5 @@ const courseWorkspaceNavParents: Record<CourseWorkspaceTab, CourseWorkspaceTab> 
 };
 
 export function getCourseWorkspaceNavParent(activeTab: CourseWorkspaceTab) {
-  return courseCapabilities.find((capability) => capability.enabled && capability.activeTab === activeTab)?.navParent
-    ?? courseWorkspaceNavParents[activeTab];
+  return courseWorkspaceNavParents[activeTab];
 }

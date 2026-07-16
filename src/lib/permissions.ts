@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { db } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth";
 
@@ -15,17 +16,23 @@ export function assertTeacher(user: SessionUser) {
   requireTeacher(user);
 }
 
-export async function requireCourseAccess(user: SessionUser, courseId: string) {
+const findAccessibleCourse = cache(async (userId: string, role: SessionUser["role"], courseId: string) => {
   const course = await db.course.findFirst({
     where: {
       id: courseId,
       OR: [
-        ...(user.role === "ADMIN" ? [{}] : []),
-        { ownerId: user.id },
-        { status: "ACTIVE", enrollments: { some: { userId: user.id } } }
+        ...(role === "ADMIN" ? [{}] : []),
+        { ownerId: userId },
+        { status: "ACTIVE", enrollments: { some: { userId } } }
       ]
     }
   });
+
+  return course;
+});
+
+export async function requireCourseAccess(user: SessionUser, courseId: string) {
+  const course = await findAccessibleCourse(user.id, user.role, courseId);
 
   if (!course) {
     throw new Error("无权访问课程");

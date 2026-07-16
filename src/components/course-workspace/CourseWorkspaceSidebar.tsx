@@ -35,6 +35,7 @@ export function CourseWorkspaceSidebar({ course, activeTab, canManage }: Props) 
             <Link
               key={item.id}
               href={`/space/courses/${course.id}/${item.hrefSegment}`}
+              prefetch={item.id === "ai-workbench"}
               aria-current={active ? "page" : undefined}
               className={clsx(
                 "flex h-11 items-center gap-3 rounded-lg px-3 text-sm transition",

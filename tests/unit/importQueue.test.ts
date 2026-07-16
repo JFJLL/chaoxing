@@ -101,7 +101,7 @@ describe("in-process import queue", () => {
 
     queue.enqueueImportJob("job-1");
     queue.enqueueImportJob("job-1");
-    expect(mocks.runImportJob).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(mocks.runImportJob).toHaveBeenCalledTimes(1));
 
     first.resolve();
     await vi.waitFor(() => expect(queue.getImportQueueSnapshot().activeWorkers).toBe(0));

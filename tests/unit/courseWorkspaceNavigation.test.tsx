@@ -2,7 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { CourseWorkspaceSidebar } from "../../src/components/course-workspace/CourseWorkspaceSidebar";
-import { CourseWorkspaceBreadcrumbs } from "../../src/components/course-workspace/CourseWorkspaceBreadcrumbs";
+import { PrepWorkflowNavigation } from "../../src/components/course-workspace/PrepWorkflowNavigation";
 import { getCourseWorkspaceNavParent } from "../../src/lib/courseWorkspace/nav";
 import { UserMenu } from "../../src/components/shell/UserMenu";
 
@@ -36,17 +36,27 @@ describe("course workspace navigation", () => {
     expect(html).not.toContain(">链接<");
   });
 
-  it("renders a stable course-to-prep breadcrumb hierarchy", () => {
+  it("uses task steps instead of a file-path breadcrumb for prep workflows", () => {
     const html = renderToStaticMarkup(
-      <CourseWorkspaceBreadcrumbs courseId="course-1" courseTitle="测试课程" current="AI组卷" />
+      <PrepWorkflowNavigation courseId="course-1" workflow="assessment" active="paper" />
     );
 
-    expect(html).toContain('aria-label="面包屑"');
-    expect(html).toContain('href="/space/courses"');
-    expect(html).toContain('href="/space/courses/course-1"');
-    expect(html).toContain('href="/space/courses/course-1/ai-workbench"');
-    expect(html).toContain('aria-current="page"');
-    expect(html).toContain("AI组卷");
+    expect(html).toContain('aria-label="备课流程"');
+    expect(html).toContain('href="/space/courses/course-1/ai-workbench/apps/question_generation"');
+    expect(html).toContain('href="/space/courses/course-1/question-bank"');
+    expect(html).toContain('href="/space/courses/course-1/ai-workbench/apps/paper_assembly"');
+    expect(html).toContain('aria-current="step"');
+    expect(html).toContain("智能组卷");
+    expect(html).not.toContain("面包屑");
+  });
+
+  it("keeps the primary content task inside the shared AI workbench layout", () => {
+    const html = renderToStaticMarkup(
+      <PrepWorkflowNavigation courseId="course-1" workflow="content" active="import" />
+    );
+
+    expect(html).toContain('href="/space/courses/course-1/ai-workbench/content"');
+    expect(html).not.toContain('href="/space/courses/course-1/ai-import"');
   });
 
   it("does not expose account actions that have no implementation", () => {
