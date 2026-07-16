@@ -41,7 +41,8 @@ model User {
   courseAiArtifacts     CourseAiArtifact[]
   courseQuestions       CourseQuestion[]
   aiConversations       CourseAiConversation[]
-  aiCoachTasks          AiCoachTask[]          @relation("AiCoachTaskCreator")
+  copilotSkills         CopilotSkill[]         @relation("CopilotSkillUploader")
+  copilotUsageEvents    CopilotUsageEvent[]
   topicFolders          TopicFolder[]
   topics                Topic[]
   driveFiles            DriveFile[]
@@ -81,6 +82,8 @@ model Course {
   institution        Institution            @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   folderId           String?
   folder             CourseFolder?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  copilotFolderId    String?
+  copilotFolder      DriveFile?             @relation("CourseCopilotFolder", fields: [copilotFolderId], references: [id], onDelete: SetNull)
   enrollments        CourseEnrollment[]
   chapters           Chapter[]
   resources          Resource[]
@@ -88,7 +91,8 @@ model Course {
   aiArtifacts        CourseAiArtifact[]
   questions          CourseQuestion[]
   aiConversations    CourseAiConversation[]
-  aiCoachTasks       AiCoachTask[]
+  copilotSkills      CopilotSkill[]
+  copilotUsageEvents CopilotUsageEvent[]
   knowledgeMaps      CourseKnowledgeMap[]
   announcements      Announcement[]
   attendanceSessions AttendanceSession[]
@@ -181,6 +185,8 @@ model DocumentImportJob {
   filePath         String?
   fileSize         Int                  @default(0)
   mimeType         String?
+  driveFileId      String?
+  driveFile        DriveFile?           @relation("ImportSourceDriveFile", fields: [driveFileId], references: [id], onDelete: SetNull)
   extractedText    String?
   generatedOutline String?
   warning          String?
@@ -259,50 +265,25 @@ model CourseQuestion {
   @@index([sourceArtifactId])
 }
 
-model AiCoachTask {
-  id                 String                 @id @default(cuid())
-  courseId           String
-  course             Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  createdById        String?
-  createdBy          User?                  @relation("AiCoachTaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  title              String
-  scenario           String
-  aiRole             String
-  objective          String
-  rubric             String
-  completionCriteria String
-  status             String                 @default("DRAFT")
-  version            Int                    @default(1)
-  publishedAt        DateTime?
-  conversations      CourseAiConversation[]
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
-
-  @@index([courseId, status, updatedAt])
-  @@index([createdById, updatedAt])
-}
-
 model CourseAiConversation {
-  id               String            @id @default(cuid())
-  courseId         String
-  course           Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  userId           String
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kind             String
-  status           String            @default("ACTIVE")
-  generationToken  String?
-  title            String?
-  coachTaskId      String?
-  coachTask        AiCoachTask?      @relation(fields: [coachTaskId], references: [id], onDelete: NoAction)
-  evaluation       String?
-  evaluationStatus String?
-  completedAt      DateTime?
-  messages         CourseAiMessage[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id              String                    @id @default(cuid())
+  courseId        String
+  course          Course                    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind            String
+  status          String                    @default("ACTIVE")
+  generationToken String?
+  title           String?
+  activeSkillId   String?
+  activeSkill     CopilotSkill?             @relation("CopilotActiveSkill", fields: [activeSkillId], references: [id], onDelete: SetNull)
+  messages        CourseAiMessage[]
+  attachments     CopilotConversationFile[]
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
 
   @@index([courseId, userId, kind, updatedAt])
-  @@index([coachTaskId, userId, createdAt])
+  @@index([activeSkillId, updatedAt])
   @@index([status, generationToken])
 }
 
@@ -313,9 +294,70 @@ model CourseAiMessage {
   role           String
   content        String
   citations      String?
+  skillId        String?
+  skill          CopilotSkill?        @relation("CopilotMessageSkill", fields: [skillId], references: [id], onDelete: SetNull)
+  skillName      String?
+  contextFiles   String?
   createdAt      DateTime             @default(now())
 
   @@index([conversationId, createdAt])
+  @@index([skillId, createdAt])
+}
+
+model CopilotSkill {
+  id                  String                 @id @default(cuid())
+  courseId            String
+  course              Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  uploadedById        String
+  uploadedBy          User                   @relation("CopilotSkillUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+  name                String
+  description         String
+  instructions        String
+  originalName        String
+  fileSize            Int
+  status              String                 @default("DISABLED")
+  activeConversations CourseAiConversation[] @relation("CopilotActiveSkill")
+  messages            CourseAiMessage[]      @relation("CopilotMessageSkill")
+  usageEvents         CopilotUsageEvent[]
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  @@index([courseId, status, updatedAt])
+  @@index([uploadedById, updatedAt])
+}
+
+model CopilotConversationFile {
+  id             String               @id @default(cuid())
+  conversationId String
+  conversation   CourseAiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  driveFileId    String?
+  driveFile      DriveFile?           @relation(fields: [driveFileId], references: [id], onDelete: SetNull)
+  fileName       String
+  mimeType       String?
+  createdAt      DateTime             @default(now())
+
+  @@unique([conversationId, driveFileId])
+  @@index([driveFileId, createdAt])
+}
+
+model CopilotUsageEvent {
+  id          String        @id @default(cuid())
+  courseId    String
+  course      Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skillId     String?
+  skill       CopilotSkill? @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  status      String        @default("STARTED")
+  fileCount   Int           @default(0)
+  imageCount  Int           @default(0)
+  errorCode   String?
+  completedAt DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@index([courseId, createdAt])
+  @@index([userId, courseId, createdAt])
+  @@index([skillId, createdAt])
 }
 
 model CourseKnowledgeMap {
@@ -537,24 +579,32 @@ model NoteTag {
 }
 
 model DriveFile {
-  id             String          @id @default(cuid())
-  ownerId        String
-  owner          User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  parentId       String?
-  parent         DriveFile?      @relation("DriveTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children       DriveFile[]     @relation("DriveTree")
-  name           String
-  kind           String
-  mimeType       String?
-  size           Int             @default(0)
-  path           String?
-  deletedAt      DateTime?
-  shares         DriveShare[]
-  resources      Resource[]
-  topicResources TopicResource[]
-  groupFiles     GroupFile[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                 String                    @id @default(cuid())
+  ownerId            String
+  owner              User                      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  parentId           String?
+  parent             DriveFile?                @relation("DriveTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children           DriveFile[]               @relation("DriveTree")
+  name               String
+  kind               String
+  mimeType           String?
+  size               Int                       @default(0)
+  path               String?
+  contentHash        String?
+  extractionStatus   String                    @default("PENDING")
+  extractedText      String?
+  extractionError    String?
+  extractedAt        DateTime?
+  deletedAt          DateTime?
+  shares             DriveShare[]
+  resources          Resource[]
+  topicResources     TopicResource[]
+  groupFiles         GroupFile[]
+  importJobs         DocumentImportJob[]       @relation("ImportSourceDriveFile")
+  copilotCourses     Course[]                  @relation("CourseCopilotFolder")
+  copilotAttachments CopilotConversationFile[]
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
 }
 
 model DriveShare {

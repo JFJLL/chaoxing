@@ -35,7 +35,9 @@ describe("ActivitiesPage", () => {
 
     expect(html).toContain("AI助教");
     expect(html).toContain('href="/space/courses/course-1/activities/tutor"');
-    expect(html).toContain("AI陪练");
+    expect(html).toContain("Copilot");
+    expect(html).toContain('href="/space/courses/course-1/activities/copilot"');
+    expect(html).not.toContain("AI陪练");
     expect(html).toContain("签到");
   });
 
@@ -45,7 +47,9 @@ describe("ActivitiesPage", () => {
     const html = renderToStaticMarkup(await ActivitiesPage({ params: Promise.resolve({ courseId: "course-1" }) }));
 
     expect(html).not.toContain('href="/space/courses/course-1/activities/tutor"');
-    expect(html).toContain("AI陪练");
+    expect(html).toContain("Copilot");
+    expect(html).toContain('href="/space/courses/course-1/activities/copilot"');
+    expect(html).not.toContain("AI陪练");
     expect(html).toContain("签到");
   });
 });

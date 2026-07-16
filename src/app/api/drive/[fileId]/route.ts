@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { streamDriveFile } from "@/lib/modules/driveFiles";
 import { requireDriveFileOwner, requireDriveFileReadable } from "@/lib/modules/drivePermissions";
 import { requireTeacher } from "@/lib/permissions";
+import { assertDriveMoveAllowed } from "@/lib/copilot/files";
 
 type RouteContext = { params: Promise<{ fileId: string }> };
 
@@ -12,7 +13,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const { fileId } = await context.params;
   try {
     const file = await requireDriveFileReadable(user, fileId);
-    if (request.nextUrl.searchParams.get("download")) return streamDriveFile(fileId);
+    if (request.nextUrl.searchParams.get("download")) return streamDriveFile(fileId, "attachment");
+    if (request.nextUrl.searchParams.get("preview")) return streamDriveFile(fileId, "inline");
     return NextResponse.json({ file });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权访问文件" }, { status: 403 });
@@ -26,7 +28,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     requireTeacher(user);
     const file = await requireDriveFileOwner(user, fileId);
-    if (body.parentId) await requireDriveFileOwner(user, body.parentId);
+    await assertDriveMoveAllowed(user.id, file.id, body.parentId ?? file.parentId);
     const updated = await db.driveFile.update({
       where: { id: file.id },
       data: { name: body.name, parentId: body.parentId }

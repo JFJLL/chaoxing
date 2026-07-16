@@ -1,5 +1,5 @@
 import { createHmac, randomUUID } from "crypto";
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import { basename, join } from "path";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -131,6 +131,36 @@ async function downloadDriveFileFromOss(uri: string, contentType: string) {
   return Buffer.from(await response.arrayBuffer());
 }
 
+export type DriveFileStorageRecord = {
+  id?: string;
+  kind: string;
+  name: string;
+  mimeType: string | null;
+  path: string | null;
+};
+
+export async function readDriveFileBytes(file: DriveFileStorageRecord) {
+  if (file.kind !== "file" || !file.path) throw new Error("文件不存在");
+  return file.path.startsWith("oss://")
+    ? downloadDriveFileFromOss(file.path, file.mimeType || "application/octet-stream")
+    : readFile(file.path);
+}
+
+export async function withDriveFilePath<T>(file: DriveFileStorageRecord, callback: (localPath: string) => Promise<T>) {
+  if (file.kind !== "file" || !file.path) throw new Error("文件不存在");
+  if (!file.path.startsWith("oss://")) return callback(file.path);
+
+  const cacheDir = join(getUploadDir(), "cache");
+  await mkdir(cacheDir, { recursive: true });
+  const localPath = join(cacheDir, `${randomUUID()}-${safeObjectName(file.name)}`);
+  await writeFile(localPath, await readDriveFileBytes(file));
+  try {
+    return await callback(localPath);
+  } finally {
+    await unlink(localPath).catch(() => undefined);
+  }
+}
+
 export async function storeDriveFile(input: { ownerId: string; fileName: string; bytes: Buffer; mimeType?: string | null }) {
   if (driveStorageProvider() === "local") {
     const dir = join(getUploadDir(), "drive");
@@ -147,17 +177,17 @@ export async function storeDriveFile(input: { ownerId: string; fileName: string;
   throw new Error("DRIVE_STORAGE_PROVIDER 仅支持 oss 或 local");
 }
 
-export async function streamDriveFile(fileId: string) {
+export async function streamDriveFile(fileId: string, disposition: "attachment" | "inline" = "attachment") {
   const file = await db.driveFile.findUnique({ where: { id: fileId } });
   if (!file || file.kind !== "file" || !file.path) {
     return NextResponse.json({ error: "文件不存在" }, { status: 404 });
   }
   const contentType = file.mimeType || "application/octet-stream";
-  const bytes = file.path.startsWith("oss://") ? await downloadDriveFileFromOss(file.path, contentType) : await readFile(file.path);
+  const bytes = await readDriveFileBytes(file);
   return new NextResponse(bytes, {
     headers: {
       "content-type": contentType,
-      "content-disposition": `attachment; filename="${encodeURIComponent(basename(file.name))}"`
+      "content-disposition": `${disposition}; filename="${encodeURIComponent(basename(file.name))}"`
     }
   });
 }

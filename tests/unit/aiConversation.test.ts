@@ -19,7 +19,7 @@ describe("AI tutor conversation", () => {
     for (const conversation of [
       { id: "c", courseId: "other", userId: "user-1", kind: "TUTOR" },
       { id: "c", courseId: "course-1", userId: "other", kind: "TUTOR" },
-      { id: "c", courseId: "course-1", userId: "user-1", kind: "COACH" },
+      { id: "c", courseId: "course-1", userId: "user-1", kind: "COPILOT" },
       null
     ]) {
       expect(() => assertTutorConversationAccess(conversation, {

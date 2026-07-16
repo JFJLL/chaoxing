@@ -124,6 +124,29 @@ describe("AI text streaming", () => {
     ]);
   });
 
+  it("sends static images as Gemini inline multimodal data", async () => {
+    clearAiEnv();
+    process.env.GEMINI_API_KEY = "secret-key";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(
+      'data: {"candidates":[{"content":{"parts":[{"text":"看到了"}]}}]}\n\n',
+      { status: 200, headers: { "Content-Type": "text/event-stream" } }
+    ));
+
+    const stream = await createTextCompletionStream({
+      system: "system",
+      messages: [{ role: "user", content: "分析图片", images: [{ mimeType: "image/png", data: "aW1hZ2U=" }] }]
+    });
+    await expect(collect(stream!)).resolves.toBe("看到了");
+    const payload = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+    expect(payload.contents[0]).toEqual({
+      role: "user",
+      parts: [
+        { text: "分析图片" },
+        { inlineData: { mimeType: "image/png", data: "aW1hZ2U=" } }
+      ]
+    });
+  });
+
   it("rejects malformed Gemini stream frames instead of silently returning a partial answer", async () => {
     clearAiEnv();
     process.env.GEMINI_API_KEY = "secret-key";

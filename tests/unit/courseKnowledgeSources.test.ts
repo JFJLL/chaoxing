@@ -134,24 +134,26 @@ describe("interactive AI persistence schema", () => {
   const root = process.cwd();
   const schema = readFileSync(join(root, "prisma/schema.prisma"), "utf8");
   const migration = readFileSync(
-    join(root, "prisma/migrations/20260713004000_ai_interactive_workflows/migration.sql"),
+    join(root, "prisma/migrations/20260716000000_course_copilot/migration.sql"),
     "utf8"
   );
 
-  it("defines course-owned conversations, messages, and coach tasks with lookup indexes", () => {
+  it("defines course-owned Copilot skills, conversations, attachments, and anonymous usage events", () => {
     expect(schema).toContain("model CourseAiConversation");
     expect(schema).toContain("model CourseAiMessage");
-    expect(schema).toContain("model AiCoachTask");
+    expect(schema).toContain("model CopilotSkill");
+    expect(schema).toContain("model CopilotConversationFile");
+    expect(schema).toContain("model CopilotUsageEvent");
+    expect(schema).not.toContain("model AiCoachTask");
     expect(schema).toContain("@@index([courseId, userId, kind, updatedAt])");
-    expect(schema).toContain("@@index([coachTaskId, userId, createdAt])");
+    expect(schema).toContain("@@index([activeSkillId, updatedAt])");
     expect(schema).toContain("@@index([conversationId, createdAt])");
     expect(schema).toContain("@@index([courseId, status, updatedAt])");
   });
 
-  it("preserves same-course coach lineage with insert and update triggers", () => {
-    expect(migration).toContain("CourseAiConversation_coach_course_insert");
-    expect(migration).toContain("CourseAiConversation_coach_course_update");
-    expect(migration).toContain("AI_COACH_COURSE_MISMATCH");
-    expect(migration).toMatch(/task\."courseId"\s*=\s*NEW\."courseId"/);
+  it("removes AI coach data and its database triggers", () => {
+    expect(migration).toContain("DELETE FROM \"CourseAiConversation\" WHERE \"kind\" = 'COACH'");
+    expect(migration).toContain("DROP TRIGGER IF EXISTS \"CourseAiConversation_coach_course_insert\"");
+    expect(migration).toContain("DROP TABLE IF EXISTS \"AiCoachTask\"");
   });
 });

@@ -3,9 +3,10 @@ import { extractText } from "@/lib/document/extractText";
 import { generateCourseOutline } from "@/lib/ai/generateCourseOutline";
 import { createKnowledgeMapDraft } from "@/lib/knowledgeMap/generateKnowledgeMap";
 import { withImportFilePath } from "@/lib/storage";
+import { withDriveFilePath } from "@/lib/modules/driveFiles";
 
 export async function runImportJob(jobId: string) {
-  const job = await db.documentImportJob.findUnique({ where: { id: jobId } });
+  const job = await db.documentImportJob.findUnique({ where: { id: jobId }, include: { driveFile: true } });
   if (!job || !job.filePath) {
     throw new Error("导入任务不存在或缺少文件");
   }
@@ -15,7 +16,10 @@ export async function runImportJob(jobId: string) {
       where: { id: jobId },
       data: { status: "EXTRACTING", currentStage: "文档解析", errorMessage: null, startedAt: new Date(), finishedAt: null }
     });
-    const extracted = await withImportFilePath(job.filePath, (localPath) => extractText(localPath, job.mimeType));
+    const extract = (localPath: string) => extractText(localPath, job.mimeType);
+    const extracted = job.driveFile
+      ? await withDriveFilePath(job.driveFile, extract)
+      : await withImportFilePath(job.filePath, extract);
     await db.documentImportJob.update({
       where: { id: jobId },
       data: {

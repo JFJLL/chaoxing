@@ -15,6 +15,7 @@ type Fixture = {
   activeCourseId: string;
   enrolledCourseId: string;
   driveFileId: string;
+  copilotFileId: string;
   groupId: string;
   liveSessionId: string;
 };
@@ -73,6 +74,16 @@ beforeAll(async () => {
       path: ".uploads/test/private.txt"
     }
   });
+  const copilotFolder = await db.driveFile.create({
+    data: { ownerId: teacher.id, name: "课程资料", kind: "folder" }
+  });
+  const copilotSubfolder = await db.driveFile.create({
+    data: { ownerId: teacher.id, parentId: copilotFolder.id, name: "第一章", kind: "folder" }
+  });
+  const copilotFile = await db.driveFile.create({
+    data: { ownerId: teacher.id, parentId: copilotSubfolder.id, name: "lecture.md", kind: "file", path: ".uploads/test/lecture.md", extractionStatus: "READY", extractedText: "课程内容" }
+  });
+  await db.course.update({ where: { id: enrolledCourse.id }, data: { copilotFolderId: copilotFolder.id } });
   const group = await db.group.create({
     data: {
       name: "闭合小组",
@@ -95,6 +106,7 @@ beforeAll(async () => {
     activeCourseId: activeCourse.id,
     enrolledCourseId: enrolledCourse.id,
     driveFileId: driveFile.id,
+    copilotFileId: copilotFile.id,
     groupId: group.id,
     liveSessionId: liveSession.id
   };
@@ -131,6 +143,14 @@ describe("drive permissions", () => {
     await expect(requireDriveFileOwner(fixture.teacher, fixture.driveFileId)).resolves.toMatchObject({
       id: fixture.driveFileId
     });
+  });
+
+  it("grants enrolled students recursive read-only access through the bound course folder", async () => {
+    await expect(requireDriveFileReadable(fixture.student, fixture.copilotFileId)).resolves.toMatchObject({
+      id: fixture.copilotFileId
+    });
+    await expect(requireDriveFileReadable(fixture.outsider, fixture.copilotFileId)).rejects.toThrow("无权访问文件");
+    await expect(requireDriveFileOwner(fixture.student, fixture.copilotFileId)).rejects.toThrow("无权管理文件");
   });
 });
 

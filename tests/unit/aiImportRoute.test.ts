@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   findMany: vi.fn(),
   updateMany: vi.fn(),
-  storeImportFile: vi.fn(),
+  driveFileFindFirst: vi.fn(),
+  storeDriveUpload: vi.fn(),
   runImportJob: vi.fn()
 }));
 
@@ -24,13 +25,11 @@ vi.mock("@/lib/db", () => ({
       update: mocks.update,
       findMany: mocks.findMany,
       updateMany: mocks.updateMany
-    }
+    },
+    driveFile: { findFirst: mocks.driveFileFindFirst }
   }
 }));
-vi.mock("@/lib/storage", async (importOriginal) => ({
-  ...await importOriginal<typeof import("../../src/lib/storage")>(),
-  storeImportFile: mocks.storeImportFile
-}));
+vi.mock("@/lib/copilot/files", () => ({ storeDriveUpload: mocks.storeDriveUpload }));
 vi.mock("@/lib/imports/runImportJob", () => ({ runImportJob: mocks.runImportJob }));
 
 import { POST } from "../../src/app/api/courses/[courseId]/ai-import/route";
@@ -56,14 +55,15 @@ describe("POST /api/courses/:courseId/ai-import", () => {
     resetImportRequestGuard();
     resetImportAdmissionState();
     mocks.requireUser.mockResolvedValue({ id: "teacher-1", role: "TEACHER" });
-    mocks.requireCourseOwner.mockResolvedValue({ id: "course-1", institutionId: "institution-1" });
+    mocks.requireCourseOwner.mockResolvedValue({ id: "course-1", institutionId: "institution-1", copilotFolderId: "folder-1" });
     mocks.aggregate.mockResolvedValue({ _sum: { fileSize: 0 } });
     mocks.count.mockResolvedValue(0);
     mocks.create.mockResolvedValue({ id: "job-1" });
     mocks.update.mockResolvedValue({ id: "job-1" });
     mocks.findMany.mockResolvedValue([]);
     mocks.updateMany.mockResolvedValue({ count: 0 });
-    mocks.storeImportFile.mockResolvedValue(".uploads/job-1.pdf");
+    mocks.driveFileFindFirst.mockResolvedValue({ ownerId: "teacher-1" });
+    mocks.storeDriveUpload.mockResolvedValue({ id: "file-1", path: ".uploads/drive/course.pdf" });
     mocks.runImportJob.mockResolvedValue(undefined);
   });
 
@@ -96,17 +96,31 @@ describe("POST /api/courses/:courseId/ai-import", () => {
   });
 
   it("allows one active upload per user and course and releases the guard in finally", async () => {
-    const stored = deferred<string>();
-    mocks.storeImportFile.mockReturnValueOnce(stored.promise);
+    const stored = deferred<{ id: string; path: string }>();
+    mocks.storeDriveUpload.mockReturnValueOnce(stored.promise);
     const first = POST(uploadRequest() as never, context);
-    await vi.waitFor(() => expect(mocks.storeImportFile).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(mocks.storeDriveUpload).toHaveBeenCalledOnce());
 
     const concurrent = await POST(uploadRequest() as never, context);
     expect(concurrent.status).toBe(429);
     await expect(concurrent.json()).resolves.toMatchObject({ code: "AI_IMPORT_RATE_LIMITED", retryable: true });
 
-    stored.resolve(".uploads/job-1.pdf");
+    stored.resolve({ id: "file-1", path: ".uploads/drive/course.pdf" });
     await expect(first).resolves.toMatchObject({ status: 202 });
+    expect(mocks.storeDriveUpload).toHaveBeenCalledWith(expect.objectContaining({
+      ownerId: "teacher-1",
+      parentId: "folder-1"
+    }));
+  });
+
+  it("rejects the upload when the bound cloud folder has been deleted", async () => {
+    mocks.driveFileFindFirst.mockResolvedValue(null);
+
+    const response = await POST(uploadRequest() as never, context);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: "COPILOT_FOLDER_UNAVAILABLE", retryable: false });
+    expect(mocks.storeDriveUpload).not.toHaveBeenCalled();
   });
 
   it("returns service unavailable without creating a job when global active backlog is full", async () => {
@@ -117,6 +131,6 @@ describe("POST /api/courses/:courseId/ai-import", () => {
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({ code: "AI_IMPORT_GLOBAL_BACKLOG_FULL", retryable: true });
     expect(mocks.create).not.toHaveBeenCalled();
-    expect(mocks.storeImportFile).not.toHaveBeenCalled();
+    expect(mocks.storeDriveUpload).not.toHaveBeenCalled();
   });
 });

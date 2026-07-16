@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isTeacher, requireCourseOwner, requireTeacher } from "@/lib/permissions";
 import { requireDriveFileOwner, requireDriveFileReadable } from "@/lib/modules/drivePermissions";
-import { storeDriveFile } from "@/lib/modules/driveFiles";
+import { storeDriveUpload } from "@/lib/copilot/files";
 
 export const runtime = "nodejs";
 
@@ -42,26 +42,15 @@ export async function POST(request: NextRequest) {
       const parentId = form.get("parentId");
       if (!(file instanceof File) || file.size === 0) return NextResponse.json({ error: "请先选择要上传的文件" }, { status: 400 });
       if (typeof parentId === "string" && parentId) {
-        await requireDriveFileOwner(user, parentId);
+        const parent = await requireDriveFileOwner(user, parentId);
+        if (parent.kind !== "folder") return NextResponse.json({ error: "目标位置不是文件夹" }, { status: 400 });
       }
-      const path = await storeDriveFile({
+      const record = await storeDriveUpload({
         ownerId: user.id,
-        fileName: file.name,
-        bytes: Buffer.from(await file.arrayBuffer()),
-        mimeType: file.type || null
+        parentId: typeof parentId === "string" && parentId ? parentId : null,
+        file
       });
-      const record = await db.driveFile.create({
-        data: {
-          ownerId: user.id,
-          parentId: typeof parentId === "string" && parentId ? parentId : null,
-          name: file.name,
-          kind: "file",
-          mimeType: file.type || null,
-          size: file.size,
-          path
-        }
-      });
-      return NextResponse.json({ file: record, storage: path.startsWith("oss://") ? "oss" : "local" }, { status: 201 });
+      return NextResponse.json({ file: record, storage: record.path?.startsWith("oss://") ? "oss" : "local" }, { status: 201 });
     } catch (error) {
       return errorResponse(error, "上传失败");
     }
@@ -76,7 +65,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ resource }, { status: 201 });
     }
     if (body.parentId) {
-      await requireDriveFileOwner(user, body.parentId);
+      const parent = await requireDriveFileOwner(user, body.parentId);
+      if (parent.kind !== "folder") return NextResponse.json({ error: "目标位置不是文件夹" }, { status: 400 });
     }
     const folder = await db.driveFile.create({ data: { ownerId: user.id, parentId: body.parentId || null, name: body.name, kind: "folder" } });
     return NextResponse.json({ file: folder }, { status: 201 });

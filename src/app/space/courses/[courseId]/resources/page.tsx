@@ -5,6 +5,8 @@ import { requireCourseAccess } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { CourseModulePanel } from "@/components/course-workspace/CourseModulePanel";
 import { PrepWorkflowNavigation } from "@/components/course-workspace/PrepWorkflowNavigation";
+import { CourseResourceUpload } from "@/components/course-workspace/CourseResourceUpload";
+import { isTeacher } from "@/lib/permissions";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
@@ -56,6 +58,7 @@ export default async function ResourcesPage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
   const course = await requireCourseAccess(user, courseId);
+  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
   const resources = await db.resource.findMany({
     where: { courseId: course.id },
     orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
@@ -78,6 +81,7 @@ export default async function ResourcesPage({ params }: PageProps) {
         <section>
           <h2 className="text-lg font-semibold text-slate-900">课程资料库</h2>
           <p className="mt-1 text-sm text-slate-500">集中维护当前课程可直接引用、并可作为 AI 生成依据的资料。</p>
+          {canManage ? <div className="mt-4"><CourseResourceUpload courseId={course.id} folderConfigured={Boolean(course.copilotFolderId)} /></div> : null}
           {resources.length ? (
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {resources.map((resource) => <ResourceCard key={resource.id} resource={resource} />)}

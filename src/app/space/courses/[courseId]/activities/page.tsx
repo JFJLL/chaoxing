@@ -1,4 +1,4 @@
-import { Bot, CheckCircle2, MessagesSquare } from "lucide-react";
+import { CheckCircle2, MessagesSquare, Sparkles } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { isTeacher } from "@/lib/permissions";
@@ -9,7 +9,7 @@ import Link from "next/link";
 type PageProps = { params: Promise<{ courseId: string }> };
 
 const activities = [
-  { title: "AI陪练", description: "基于当前课程任务模拟访谈、问答或课堂练习场景。", icon: Bot, hrefSegment: "ai-coach" },
+  { title: "Copilot", description: "选择教师开放的 Skill，并结合课程云盘文件完成提问。", icon: Sparkles, hrefSegment: "activities/copilot" },
   { title: "签到", description: "教师展示动态二维码，学生扫码或输入短码完成签到。", icon: CheckCircle2, hrefSegment: "attendance" }
 ];
 
@@ -31,7 +31,7 @@ export default async function ActivitiesPage({ params }: PageProps) {
     <FanyaCourseShell user={user} course={course} activeTab="activities">
       <CourseModulePanel
         title="上课"
-        description={canManage ? "使用 AI 助教处理课堂问答，并组织 AI 陪练和动态二维码签到。" : "参加老师发布的 AI 陪练和课堂签到。"}
+        description={canManage ? "使用 Copilot、AI 助教和动态二维码组织课堂。" : "使用课程 Copilot，并参加课堂签到。"}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleActivities.map((activity) => {

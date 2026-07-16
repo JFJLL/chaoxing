@@ -20,6 +20,12 @@ type JsonCompletionInput = CompletionInput;
 export type TextCompletionMessage = {
   role: "user" | "assistant";
   content: string;
+  images?: TextCompletionImage[];
+};
+
+export type TextCompletionImage = {
+  mimeType: string;
+  data: string;
 };
 
 export type TextCompletionStreamInput = {
@@ -286,13 +292,28 @@ async function* createOpenAiCompatibleTextStream(config: AiModelConfig, input: T
     apiKey: config.apiKey,
     baseURL: config.baseURL
   });
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: "system", content: input.system },
+    ...input.messages.map((message): OpenAI.Chat.Completions.ChatCompletionMessageParam => {
+      if (message.role === "assistant") return { role: "assistant", content: message.content };
+      return {
+        role: "user",
+        content: message.images?.length
+          ? [
+              { type: "text", text: message.content },
+              ...message.images.map((image) => ({
+                type: "image_url" as const,
+                image_url: { url: `data:${image.mimeType};base64,${image.data}` }
+              }))
+            ]
+          : message.content
+      };
+    })
+  ];
   const completion = await client.chat.completions.create({
     model: config.model,
     stream: true,
-    messages: [
-      { role: "system", content: input.system },
-      ...input.messages
-    ]
+    messages
   }, { signal: input.signal });
 
   for await (const chunk of completion) {
@@ -355,7 +376,12 @@ async function createGeminiTextStream(config: AiModelConfig, input: TextCompleti
       systemInstruction: { parts: [{ text: input.system }] },
       contents: input.messages.map((message) => ({
         role: message.role === "assistant" ? "model" : "user",
-        parts: [{ text: message.content }]
+        parts: [
+          { text: message.content },
+          ...(message.images ?? []).map((image) => ({
+            inlineData: { mimeType: image.mimeType, data: image.data }
+          }))
+        ]
       })),
       generationConfig: { temperature: 0.2 }
     }),

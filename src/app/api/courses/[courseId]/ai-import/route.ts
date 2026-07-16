@@ -4,9 +4,9 @@ import { db } from "@/lib/db";
 import { requireCourseOwner } from "@/lib/permissions";
 import {
   assertSupportedUpload,
-  assertUploadSize,
-  storeImportFile
+  assertUploadSize
 } from "@/lib/storage";
+import { storeDriveUpload } from "@/lib/copilot/files";
 import {
   ImportAdmissionError,
   acquireImportRequest,
@@ -109,6 +109,24 @@ export async function POST(request: NextRequest, context: RouteContext) {
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "文件不符合上传要求" }, { status: 400 });
     }
+    if (!course.copilotFolderId) {
+      return NextResponse.json({
+        code: "COPILOT_FOLDER_REQUIRED",
+        error: "请先在 Copilot 设置中绑定课程云盘文件夹",
+        retryable: false
+      }, { status: 409 });
+    }
+    const copilotFolder = await db.driveFile.findFirst({
+      where: { id: course.copilotFolderId, kind: "folder", deletedAt: null },
+      select: { ownerId: true }
+    });
+    if (!copilotFolder) {
+      return NextResponse.json({
+        code: "COPILOT_FOLDER_UNAVAILABLE",
+        error: "课程云盘文件夹已失效，请重新绑定",
+        retryable: false
+      }, { status: 409 });
+    }
 
     let admission;
     try {
@@ -127,6 +145,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     let job: { id: string };
     try {
+      const driveFile = await storeDriveUpload({
+        ownerId: copilotFolder.ownerId,
+        parentId: course.copilotFolderId,
+        file
+      });
       job = await db.documentImportJob.create({
         data: {
           courseId,
@@ -134,23 +157,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
           status: "QUEUED",
           originalName: file.name,
           fileSize: file.size,
-          mimeType: file.type || null
+          mimeType: file.type || null,
+          filePath: driveFile.path,
+          driveFileId: driveFile.id
         }
       });
     } finally {
       admission.release();
     }
-
-    const filePath = await storeImportFile({
-      jobId: job.id,
-      fileName: file.name,
-      bytes: Buffer.from(await file.arrayBuffer())
-    });
-
-    await db.documentImportJob.update({
-      where: { id: job.id },
-      data: { filePath }
-    });
 
     enqueueImportJob(job.id);
 

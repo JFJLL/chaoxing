@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Download, FolderPlus, Pencil, Share2, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -13,9 +14,10 @@ type DriveClientFile = {
   size: number;
   courseTitle?: string;
   shares?: Array<{ code: string }>;
+  copilotCourses?: Array<{ id: string; title: string }>;
 };
 
-export function DriveClient({ files, courses, canManage = false }: { files: DriveClientFile[]; courses: Array<{ id: string; title: string }>; canManage?: boolean }) {
+export function DriveClient({ files, courses, canManage = false, parentId, breadcrumbs }: { files: DriveClientFile[]; courses: Array<{ id: string; title: string }>; canManage?: boolean; parentId: string | null; breadcrumbs: Array<{ id: string; name: string }> }) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [visibleFiles, setVisibleFiles] = useState(files);
@@ -54,7 +56,7 @@ export function DriveClient({ files, courses, canManage = false }: { files: Driv
 
   async function createFolder(formData: FormData) {
     await run(async () => {
-      const body = await request("/api/drive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: formData.get("name") }) }, "文件夹已创建");
+      const body = await request("/api/drive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: formData.get("name"), parentId }) }, "文件夹已创建");
       if (body?.file) setVisibleFiles((current) => [body.file, ...current]);
     });
   }
@@ -91,6 +93,10 @@ export function DriveClient({ files, courses, canManage = false }: { files: Driv
   }
   return (
     <div className="space-y-5">
+      <nav aria-label="云盘路径" className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+        <Link href="/space/drive" className="hover:text-blue-600">我的云盘</Link>
+        {breadcrumbs.map((item) => <span key={item.id} className="flex items-center gap-2"><span>/</span><Link href={`/space/drive?parentId=${encodeURIComponent(item.id)}`} className="hover:text-blue-600">{item.name}</Link></span>)}
+      </nav>
       {canManage ? (
         <div className="grid gap-3 md:grid-cols-2">
           <form action={createFolder} className="flex gap-2">
@@ -98,6 +104,7 @@ export function DriveClient({ files, courses, canManage = false }: { files: Driv
             <Button type="submit" disabled={busy}><FolderPlus className="h-4 w-4" />新建文件夹</Button>
           </form>
           <form action={upload} className="flex flex-col gap-2 rounded-md border border-[var(--cx-border)] bg-white p-3 sm:flex-row sm:items-center">
+            <input type="hidden" name="parentId" value={parentId ?? ""} />
             <input
               ref={fileInputRef}
               id="drive-upload-file"
@@ -122,16 +129,17 @@ export function DriveClient({ files, courses, canManage = false }: { files: Driv
       <div className="space-y-3">
         {visibleFiles.map((file) => (
           <article key={file.id} className="flex flex-wrap items-center gap-3 rounded-md border border-[var(--cx-border)] p-3">
-            <span className="font-medium">{file.kind === "folder" ? "文件夹" : "文件"}：{file.name}</span>
+            {file.kind === "folder" ? <Link href={`/space/drive?parentId=${encodeURIComponent(file.id)}`} className="font-medium text-blue-700 hover:underline">文件夹：{file.name}</Link> : <span className="font-medium">文件：{file.name}</span>}
             {file.courseTitle ? <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">{file.courseTitle}</span> : null}
+            {file.copilotCourses?.length ? <span className="rounded bg-purple-50 px-2 py-1 text-xs text-purple-700">Copilot：{file.copilotCourses.map((course) => course.title).join("、")}</span> : null}
             <span className="text-sm text-slate-500">{file.size} bytes</span>
             {canManage && file.shares?.[0] ? <span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">分享码 {file.shares[0].code}</span> : null}
             {file.kind === "file" ? <a href={`/api/drive/${file.id}?download=1`} className="inline-flex items-center gap-1 text-[var(--cx-blue)]"><Download className="h-4 w-4" />下载</a> : null}
             {canManage ? (
               <>
                 <Button type="button" variant="secondary" className="h-8" disabled={busy} onClick={() => rename(file.id, file.name)}><Pencil className="h-4 w-4" />重命名</Button>
-                <Button type="button" variant="secondary" className="h-8" disabled={busy} onClick={() => share(file.id)}><Share2 className="h-4 w-4" />分享</Button>
-                {courses[0] ? <Button type="button" variant="secondary" className="h-8" disabled={busy} onClick={() => attach(file.id, courses[0].id)}>添加到课程资料</Button> : null}
+                {file.kind === "file" ? <Button type="button" variant="secondary" className="h-8" disabled={busy} onClick={() => share(file.id)}><Share2 className="h-4 w-4" />分享</Button> : null}
+                {file.kind === "file" && courses[0] ? <Button type="button" variant="secondary" className="h-8" disabled={busy} onClick={() => attach(file.id, courses[0].id)}>添加到课程资料</Button> : null}
                 <Button type="button" variant="danger" className="h-8" disabled={busy} onClick={() => remove(file.id)}><Trash2 className="h-4 w-4" />删除</Button>
               </>
             ) : null}
