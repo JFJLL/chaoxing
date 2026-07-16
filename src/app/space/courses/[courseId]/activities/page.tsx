@@ -1,4 +1,4 @@
-import { Bot, CheckCircle2 } from "lucide-react";
+import { Bot, CheckCircle2, MessagesSquare } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { isTeacher } from "@/lib/permissions";
@@ -13,20 +13,28 @@ const activities = [
   { title: "签到", description: "教师展示动态二维码，学生扫码或输入短码完成签到。", icon: CheckCircle2, hrefSegment: "attendance" }
 ];
 
+const teacherTutorActivity = {
+  title: "AI助教",
+  description: "基于当前课程内容回答课堂问题，并定位到可核对的资料来源。",
+  icon: MessagesSquare,
+  hrefSegment: "activities/tutor"
+};
+
 export default async function ActivitiesPage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
   const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const visibleActivities = canManage ? [teacherTutorActivity, ...activities] : activities;
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="activities">
       <CourseModulePanel
         title="上课"
-        description={canManage ? "组织 AI 陪练和动态二维码签到。" : "参加老师发布的 AI 陪练和课堂签到。"}
+        description={canManage ? "使用 AI 助教处理课堂问答，并组织 AI 陪练和动态二维码签到。" : "参加老师发布的 AI 陪练和课堂签到。"}
       >
-        <div className="grid gap-4 md:grid-cols-2">
-          {activities.map((activity) => {
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {visibleActivities.map((activity) => {
             const Icon = activity.icon;
             return (
               <Link

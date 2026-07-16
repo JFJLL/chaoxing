@@ -13,7 +13,7 @@ export async function GET(_request: Request, context: RouteContext) {
   await requireCourseAccess(user, courseId);
 
   const map = await db.courseKnowledgeMap.findFirst({
-    where: { courseId, status: "PUBLISHED" },
+    where: { courseId, status: "PUBLISHED", sourceJobId: { not: null } },
     orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
     include: {
       nodes: { orderBy: [{ type: "asc" }, { order: "asc" }, { createdAt: "asc" }] },

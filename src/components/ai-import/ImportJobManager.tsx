@@ -57,8 +57,11 @@ export function ImportJobManager({
   }
 
   function removeJob() {
-    if (!window.confirm("删除后会移除该导入任务和未发布草稿，已发布内容保留。确认删除？")) return;
-    void action("delete", `/api/ai-import/${jobId}`, { method: "DELETE" }, () => router.push(`/space/courses/${courseId}/ai-import`));
+    if (!window.confirm("删除后会同步移除该任务生成的知识图谱；已发布课件保留。确认删除？")) return;
+    void action("delete", `/api/ai-import/${jobId}`, { method: "DELETE" }, () => {
+      router.replace(`/space/courses/${courseId}/ai-workbench/content`);
+      router.refresh();
+    });
   }
 
   return (

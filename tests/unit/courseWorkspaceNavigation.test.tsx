@@ -1,10 +1,12 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("next/navigation", () => ({ usePathname: () => "/space" }));
 import { CourseWorkspaceSidebar } from "../../src/components/course-workspace/CourseWorkspaceSidebar";
 import { PrepWorkflowNavigation } from "../../src/components/course-workspace/PrepWorkflowNavigation";
 import { getCourseWorkspaceNavParent } from "../../src/lib/courseWorkspace/nav";
 import { UserMenu } from "../../src/components/shell/UserMenu";
+import { SpaceSidebar } from "../../src/components/shell/SpaceSidebar";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
@@ -67,5 +69,20 @@ describe("course workspace navigation", () => {
     expect(html).toContain("退出空间");
     expect(html).not.toContain("账号管理");
     expect(html).not.toContain("切换单位/角色");
+  });
+
+  it("moves Zovii from the global space into every course sidebar", () => {
+    const courseHtml = renderToStaticMarkup(
+      <CourseWorkspaceSidebar course={{ id: "course-1", title: "测试课程" }} activeTab="activities" canManage />
+    );
+    const spaceHtml = renderToStaticMarkup(
+      <SpaceSidebar user={{ id: "teacher-1", name: "李老师", role: "TEACHER", institutionId: "institution-1" }} />
+    );
+
+    expect(courseHtml).toContain('href="https://zovii.studio/"');
+    expect(courseHtml).toContain("zovii智能画布");
+    expect(courseHtml).toContain('target="_blank"');
+    expect(spaceHtml).not.toContain("zovii.studio");
+    expect(spaceHtml).not.toContain("生图");
   });
 });

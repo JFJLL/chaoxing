@@ -17,7 +17,7 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 
   const map = await db.courseKnowledgeMap.findFirst({
-    where: { id: mapId, courseId }
+    where: { id: mapId, courseId, sourceJobId: { not: null } }
   });
   if (!map) {
     return NextResponse.json({ error: "知识图谱不存在" }, { status: 404 });

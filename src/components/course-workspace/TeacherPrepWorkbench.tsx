@@ -1,13 +1,12 @@
 import Link from "next/link";
-import { ArrowRight, BookOpenCheck, BrainCircuit, ClipboardCheck, MessageCircle, Presentation } from "lucide-react";
+import { ArrowRight, BookOpenCheck, BrainCircuit, ClipboardCheck, Presentation } from "lucide-react";
 import { teacherPrepWorkflows, type TeacherPrepWorkflowIcon } from "@/lib/courseWorkspace/capabilities";
 
 const workflowIcons = {
   content: BrainCircuit,
   "lesson-plan": BookOpenCheck,
   assessment: ClipboardCheck,
-  courseware: Presentation,
-  tutor: MessageCircle
+  courseware: Presentation
 } satisfies Record<TeacherPrepWorkflowIcon, typeof BrainCircuit>;
 
 export function TeacherPrepWorkbench({ courseId }: { courseId: string }) {
@@ -17,7 +16,7 @@ export function TeacherPrepWorkbench({ courseId }: { courseId: string }) {
         <h2 className="text-xl font-semibold text-slate-950">备课资源与 AI 能力</h2>
         <p className="mt-1 text-sm text-slate-500">选择要完成的备课目标；相关步骤已经合并到同一条流程中。</p>
       </div>
-      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {teacherPrepWorkflows.map((workflow) => {
           const Icon = workflowIcons[workflow.icon];
           return (

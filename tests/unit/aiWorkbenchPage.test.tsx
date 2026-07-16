@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 
 describe("AiWorkbenchPage", () => {
-  it("renders one consolidated resource-and-AI section with five goal-based workflows", async () => {
+  it("renders one consolidated resource-and-AI section with four prep workflows", async () => {
     mocks.requireUser.mockResolvedValue({ id: "teacher-1", role: "TEACHER" });
 
     const html = renderToStaticMarkup(
@@ -64,7 +64,7 @@ describe("AiWorkbenchPage", () => {
     expect(html).not.toContain("继续处理");
     expect(html).not.toContain("创建教学内容");
     expect(html).not.toContain("管理备课成果");
-    expect(html).toContain("AI助教");
+    expect(html).not.toContain("AI助教");
     expect(html).not.toContain("已发布互动课件");
   });
 

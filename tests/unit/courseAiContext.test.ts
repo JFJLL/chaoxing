@@ -227,7 +227,7 @@ describe("course AI context database boundary", () => {
       where: { courseId: "course-1", status: { in: ["READY_FOR_REVIEW", "APPLIED"] }, extractedText: { not: null } }
     }));
     expect(mocks.findKnowledgeMap).toHaveBeenCalledWith(expect.objectContaining({
-      where: { courseId: "course-1", status: { in: ["DRAFT", "PUBLISHED"] } }
+      where: { courseId: "course-1", status: { in: ["DRAFT", "PUBLISHED"] }, sourceJobId: { not: null } }
     }));
   });
 

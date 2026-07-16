@@ -7,7 +7,6 @@ import { CourseModulePanel } from "@/components/course-workspace/CourseModulePan
 import { LinkButton } from "@/components/ui/Button";
 import { LessonProgressButton } from "@/components/course-workspace/LessonProgressButton";
 import { db } from "@/lib/db";
-import { CourseWorkspaceBreadcrumbs } from "@/components/course-workspace/CourseWorkspaceBreadcrumbs";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
@@ -24,7 +23,6 @@ export default async function StructurePage({ params }: PageProps) {
       <CourseModulePanel
         title="课程结构"
         description="按章、课时查看课程目录。"
-        breadcrumbs={<CourseWorkspaceBreadcrumbs courseId={course.id} courseTitle={course.title} current="课程结构" />}
         actions={
           canManage ? (
             <div className="flex flex-wrap gap-2">

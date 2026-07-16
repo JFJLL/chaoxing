@@ -7,7 +7,6 @@ import { OutlineReviewEditor } from "@/components/ai-import/OutlineReviewEditor"
 import { ImportJobManager } from "@/components/ai-import/ImportJobManager";
 import type { GeneratedCourseOutline } from "@/types/course";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
-import { CourseWorkspaceBreadcrumbs } from "@/components/course-workspace/CourseWorkspaceBreadcrumbs";
 
 type PageProps = {
   params: Promise<{ courseId: string; jobId: string }>;
@@ -42,13 +41,7 @@ export default async function AiImportReviewPage({ params }: PageProps) {
       <section className="rounded-[28px] bg-white p-6 shadow-sm lg:p-8">
         <div className="space-y-6">
           <header className="border-b border-[var(--cx-border)] pb-5">
-            <CourseWorkspaceBreadcrumbs
-              courseId={courseId}
-              courseTitle={job.course.title}
-              current={job.originalName}
-              intermediate={[{ label: "AI文档建课", href: `/space/courses/${courseId}/ai-import` }]}
-            />
-            <h1 className="mt-4 text-2xl font-semibold text-slate-900">AI文档建课</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">AI文档建课</h1>
             <p className="mt-1 text-sm text-slate-500">{job.originalName}</p>
           </header>
           <ImportProgressClient

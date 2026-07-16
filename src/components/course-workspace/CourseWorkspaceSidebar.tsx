@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { clsx } from "clsx";
+import { ExternalLink, ImagePlus } from "lucide-react";
 import { courseWorkspaceNav, getCourseWorkspaceNavParent } from "@/lib/courseWorkspace/nav";
 import type { CourseWorkspaceTab } from "@/types/courseWorkspace";
 
@@ -54,6 +55,18 @@ export function CourseWorkspaceSidebar({ course, activeTab, canManage }: Props) 
             </Link>
           );
         })}
+        <a
+          href="https://zovii.studio/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-normal text-slate-700 transition hover:bg-violet-50 hover:text-violet-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-fuchsia-500 to-violet-500 text-white">
+            <ImagePlus className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <span className="flex-1">zovii智能画布</span>
+          <ExternalLink className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+        </a>
       </nav>
     </aside>
   );

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseOwner } from "@/lib/permissions";
@@ -56,10 +57,12 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   }
 
   await db.$transaction(async (tx) => {
-    await tx.courseKnowledgeMap.deleteMany({ where: { sourceJobId: job.id, status: { not: "PUBLISHED" } } });
+    await tx.courseKnowledgeMap.deleteMany({ where: { sourceJobId: job.id } });
     await tx.courseAiArtifact.deleteMany({ where: { sourceJobId: job.id, status: { not: "PUBLISHED" } } });
     await tx.documentImportJob.delete({ where: { id: job.id } });
   });
+
+  revalidatePath(`/space/courses/${job.courseId}`, "layout");
 
   return NextResponse.json({ ok: true });
 }

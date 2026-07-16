@@ -623,7 +623,7 @@ export async function buildCourseAiContext(input: {
       select: { id: true, originalName: true, extractedText: true, status: true, updatedAt: true }
     }),
     db.courseKnowledgeMap.findFirst({
-      where: { courseId: input.courseId, status: { in: ["DRAFT", "PUBLISHED"] } },
+      where: { courseId: input.courseId, status: { in: ["DRAFT", "PUBLISHED"] }, sourceJobId: { not: null } },
       orderBy: [{ version: "desc" }, { updatedAt: "desc" }],
       select: {
         id: true,

@@ -9,7 +9,6 @@ import {
   Contact,
   FileCheck2,
   Home,
-  ImagePlus,
   Inbox,
   Lightbulb,
   NotebookPen,
@@ -25,7 +24,6 @@ type NavItem = {
   icon: typeof Home;
   hidden?: boolean;
   teacherOnly?: boolean;
-  external?: boolean;
 };
 
 const navItems: NavItem[] = [
@@ -37,7 +35,6 @@ const navItems: NavItem[] = [
   { href: "/space/notes", label: "笔记", icon: NotebookPen },
   { href: "/space/contacts", label: "通讯录", icon: Contact, hidden: true },
   { href: "/space/drive", label: "云盘", icon: Cloud, teacherOnly: true },
-  { href: "https://zovii.studio/", label: "生图", icon: ImagePlus, external: true },
   { href: "/space/plagiarism", label: "论文检测", icon: FileCheck2, hidden: true },
   { href: "/space/live", label: "个人直播间", icon: Radio, hidden: true }
 ];
@@ -66,9 +63,7 @@ export function SpaceSidebar({ user, unreadCount = 0 }: { user: SessionUser; unr
             const Icon = item.icon;
             const content = <><Icon className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{item.label}</span>{item.label === "收件箱" && unreadCount > 0 ? <span className="rounded-full bg-red-500 px-1.5 text-[10px] leading-5 text-white">{unreadCount}</span> : null}</>;
             const className = clsx("flex h-11 items-center gap-3 rounded-md px-3 text-sm transition", active ? "bg-[var(--cx-active)] text-white" : "text-white/85 hover:bg-white/10 hover:text-white");
-            return item.external
-              ? <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer" className={className}>{content}</a>
-              : <Link key={item.href} href={item.href} className={className}>{content}</Link>;
+            return <Link key={item.href} href={item.href} className={className}>{content}</Link>;
           })}
         </nav>
         <button
@@ -85,9 +80,7 @@ export function SpaceSidebar({ user, unreadCount = 0 }: { user: SessionUser; unr
           const Icon = item.icon;
           const content = <><Icon className="h-5 w-5" aria-hidden="true" /><span className="sr-only">{item.label}</span>{item.label === "收件箱" && unreadCount > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" /> : null}</>;
           const className = clsx("relative flex h-11 min-w-11 items-center justify-center rounded-md", active ? "bg-blue-50 text-[var(--cx-blue)]" : "text-slate-500");
-          return item.external
-            ? <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer" title={item.label} className={className}>{content}</a>
-            : <Link key={item.href} href={item.href} title={item.label} className={className}>{content}</Link>;
+          return <Link key={item.href} href={item.href} title={item.label} className={className}>{content}</Link>;
         })}
       </nav>
     </>

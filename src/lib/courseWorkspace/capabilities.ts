@@ -13,7 +13,7 @@ export type CourseGeneratorCapability = {
   prerequisites: CourseCapabilityPrerequisite[];
 };
 
-export type TeacherPrepWorkflowIcon = "content" | "lesson-plan" | "assessment" | "courseware" | "tutor";
+export type TeacherPrepWorkflowIcon = "content" | "lesson-plan" | "assessment" | "courseware";
 
 export type TeacherPrepWorkflow = {
   id: string;
@@ -109,14 +109,6 @@ export const teacherPrepWorkflows: TeacherPrepWorkflow[] = [
     route: (courseId) => `/space/courses/${courseId}/ai-workbench/apps/courseware`,
     icon: "courseware",
     includes: ["生成课件", "互动课件", "已发布课件"]
-  },
-  {
-    id: "tutor",
-    title: "AI助教",
-    description: "基于当前课程内容问答，并把回答定位到可核对的资料来源。",
-    route: (courseId) => `/space/courses/${courseId}/ai-workbench/tutor`,
-    icon: "tutor",
-    includes: ["课程问答", "引用定位"]
   }
 ];
 
