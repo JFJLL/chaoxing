@@ -69,7 +69,7 @@ function parseContextFiles(raw: string | null) {
   }
 }
 
-function boundHistory(messages: Array<{ role: string; content: string }>) {
+export function buildCopilotHistory(messages: Array<{ role: string; content: string }>) {
   const history: TextCompletionMessage[] = [];
   let remaining = MAX_HISTORY_CHARACTERS;
   for (let index = messages.length - 1; index >= 0 && remaining > 0; index -= 1) {
@@ -80,7 +80,9 @@ function boundHistory(messages: Array<{ role: string; content: string }>) {
     history.push({ role: message.role === "ASSISTANT" ? "assistant" : "user", content });
     remaining -= content.length;
   }
-  return history.reverse();
+  const ordered = history.reverse();
+  while (ordered[0]?.role === "assistant") ordered.shift();
+  return ordered;
 }
 
 async function courseContext(user: SessionUser, courseId: string) {
@@ -359,7 +361,7 @@ export async function prepareCopilotTurn(input: {
     testRun: canManage,
     system: buildSystem({ skillInstructions: skill?.instructions, documents: context.documents }),
     messages: [
-      ...boundHistory(historyRows),
+      ...buildCopilotHistory(historyRows),
       { role: "user" as const, content: currentContent, images: context.images.map(({ mimeType, data }) => ({ mimeType, data })) }
     ]
   };

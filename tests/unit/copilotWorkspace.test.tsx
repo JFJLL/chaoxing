@@ -33,6 +33,8 @@ describe("CopilotWorkspace", () => {
     expect(html).toContain("未选择 Skill");
     expect(html).toContain("@文件");
     expect(html).toContain("对话仅你可见");
+    expect(html).toContain("当前 Skill、文件和最近对话会用于后续回复");
+    expect(html).toContain('data-copilot-scroll-region="true"');
     expect(html).not.toContain("Copilot 设置");
     expect(html).not.toContain("教师隐藏指令");
   });

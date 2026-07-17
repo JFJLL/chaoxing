@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Bot,
@@ -22,6 +22,7 @@ import {
   X
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { CopilotAssistantReply } from "@/components/course-workspace/CopilotMessage";
 import { FilePicker } from "@/components/ui/FilePicker";
 import { Input } from "@/components/ui/Input";
 import { readAiStream, type AiStreamEvent } from "@/lib/ai/streamProtocol";
@@ -84,6 +85,13 @@ type AnalyticsDto = {
   skills: Array<{ id: string; name: string; calls: number }>;
 } | null;
 
+type PendingUserMessage = {
+  conversationId: string;
+  content: string;
+  skillName: string | null;
+  contextFiles: Array<{ id: string; name: string }>;
+};
+
 function errorMessage(body: unknown, fallback: string) {
   return body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : fallback;
 }
@@ -117,6 +125,7 @@ export function CopilotWorkspace({
   const [draft, setDraft] = useState("");
   const [streamText, setStreamText] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [pendingUserMessage, setPendingUserMessage] = useState<PendingUserMessage | null>(null);
   const [retryMessageId, setRetryMessageId] = useState("");
   const [filePickerOpen, setFilePickerOpen] = useState(false);
   const [pendingFileIds, setPendingFileIds] = useState<string[]>([]);
@@ -124,13 +133,49 @@ export function CopilotWorkspace({
   const [busy, setBusy] = useState("");
   const [selectedSkillFileName, setSelectedSkillFileName] = useState("");
   const skillInputRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const messageScrollRef = useRef<HTMLDivElement>(null);
+  const shouldFollowMessagesRef = useRef(true);
 
   const selected = useMemo(() => conversations.find((conversation) => conversation.id === selectedId) ?? null, [conversations, selectedId]);
   const selectableSkills = canManage ? skills : skills.filter((skill) => skill.status === "ENABLED");
   const selectedFolder = folders.find((folder) => folder.id === folderId);
+  const selectedMessageCount = selected?.messages.length ?? 0;
+
+  useEffect(() => {
+    shouldFollowMessagesRef.current = true;
+  }, [selectedId]);
+
+  useEffect(() => {
+    const region = messageScrollRef.current;
+    if (!region || !shouldFollowMessagesRef.current) return;
+    region.scrollTo({
+      top: region.scrollHeight,
+      behavior: "auto"
+    });
+  }, [pendingUserMessage?.conversationId, selectedId, selectedMessageCount, streamText, streaming]);
+
+  useEffect(() => {
+    const region = messageScrollRef.current;
+    const content = region?.firstElementChild;
+    if (!region || !content || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (shouldFollowMessagesRef.current) region.scrollTo({ top: region.scrollHeight, behavior: "auto" });
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [selectedId]);
+
+  useEffect(() => {
+    const composer = composerRef.current;
+    if (!composer) return;
+    composer.style.height = "auto";
+    composer.style.height = `${Math.min(composer.scrollHeight, 128)}px`;
+  }, [draft]);
 
   function replaceConversation(conversation: ConversationDto) {
+    shouldFollowMessagesRef.current = true;
     setConversations((current) => [conversation, ...current.filter((item) => item.id !== conversation.id)]);
     setSelectedId(conversation.id);
   }
@@ -228,10 +273,22 @@ export function CopilotWorkspace({
     if (!conversation || (!retryMessageId && !message)) return;
     const controller = new AbortController();
     abortRef.current = controller;
+    shouldFollowMessagesRef.current = true;
     setStreaming(true);
     setRetryMessageId(retryMessageId ?? "");
     setStreamText("");
     setStatus(null);
+    if (!retryMessageId) {
+      setPendingUserMessage({
+        conversationId: conversation.id,
+        content: message,
+        skillName: conversation.activeSkill?.name ?? null,
+        contextFiles: conversation.attachments
+          .filter((attachment) => attachment.id)
+          .map((attachment) => ({ id: attachment.id!, name: attachment.name }))
+      });
+      setDraft("");
+    }
     let userMessageId = retryMessageId ?? "";
     try {
       const body = retryMessageId ? { retryMessageId } : { message, requestId: crypto.randomUUID() };
@@ -246,9 +303,10 @@ export function CopilotWorkspace({
           userMessageId = event.userMessageId;
           setRetryMessageId(event.userMessageId);
           if (!retryMessageId) {
-            setDraft("");
+            setPendingUserMessage(null);
             setConversations((current) => current.map((item) => item.id !== conversation!.id ? item : {
               ...item,
+              title: item.messages.some((stored) => stored.role === "USER") ? item.title : message.slice(0, 40),
               messages: item.messages.some((stored) => stored.id === event.userMessageId) ? item.messages : [...item.messages, {
                 id: event.userMessageId,
                 role: "USER",
@@ -262,19 +320,24 @@ export function CopilotWorkspace({
         } else if (event.type === "delta") {
           setStreamText((current) => current + event.text);
         } else if (event.type === "done") {
-          setConversations((current) => current.map((item) => item.id !== conversation!.id ? item : {
-            ...item,
-            messages: [...item.messages, {
-              id: event.assistantMessage.id,
-              role: "ASSISTANT",
-              content: event.assistantMessage.content,
-              skillName: null,
-              contextFiles: [],
-              createdAt: event.assistantMessage.createdAt
-            }],
-            updatedAt: event.assistantMessage.createdAt,
-            title: item.messages.some((stored) => stored.role === "USER") ? item.title : message.slice(0, 40)
-          }));
+          setPendingUserMessage(null);
+          setConversations((current) => {
+            const item = current.find((stored) => stored.id === conversation!.id);
+            if (!item) return current;
+            const updated = {
+              ...item,
+              messages: item.messages.some((stored) => stored.id === event.assistantMessage.id) ? item.messages : [...item.messages, {
+                id: event.assistantMessage.id,
+                role: "ASSISTANT",
+                content: event.assistantMessage.content,
+                skillName: null,
+                contextFiles: [],
+                createdAt: event.assistantMessage.createdAt
+              }],
+              updatedAt: event.assistantMessage.createdAt
+            };
+            return [updated, ...current.filter((stored) => stored.id !== item.id)];
+          });
           setStreamText("");
           setRetryMessageId("");
         } else {
@@ -282,9 +345,11 @@ export function CopilotWorkspace({
         }
       });
     } catch (error) {
-      setStatus({ tone: "error", text: controller.signal.aborted ? "已停止生成，可重试上一条问题" : error instanceof Error ? error.message : "Copilot 调用失败" });
+      setStatus({ tone: "error", text: controller.signal.aborted ? (userMessageId ? "已停止生成，可重试上一条问题" : "已停止生成，问题已保留") : error instanceof Error ? error.message : "Copilot 调用失败" });
+      if (!userMessageId && !retryMessageId) setDraft((current) => current || message);
     } finally {
       abortRef.current = null;
+      setPendingUserMessage(null);
       setStreaming(false);
       if (!userMessageId && !retryMessageId) setStreamText("");
     }
@@ -388,13 +453,13 @@ export function CopilotWorkspace({
       {status ? <div role="status" className={`flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm ${status.tone === "error" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}><span>{status.text}</span>{status.tone === "error" && retryMessageId && !streaming ? <Button type="button" variant="secondary" className="h-8" onClick={() => void send(retryMessageId)}>重试上一条</Button> : null}</div> : null}
 
       {view === "chat" ? (
-        <div className="grid min-h-[620px] overflow-hidden rounded-2xl border border-slate-100 bg-white lg:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="border-b border-slate-100 bg-slate-50 p-4 lg:border-b-0 lg:border-r">
+        <div className="grid h-[calc(100dvh-330px)] min-h-[560px] max-h-[780px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[240px_minmax(0,1fr)] lg:grid-rows-1">
+          <aside className="flex min-h-0 max-h-44 flex-col border-b border-slate-100 bg-slate-50 p-4 lg:max-h-none lg:border-b-0 lg:border-r">
             <Button className="w-full" onClick={() => void createConversation()} disabled={busy === "conversation" || streaming}><MessageSquarePlus className="h-4 w-4" />新对话</Button>
-            <div className="mt-4 space-y-2">
+            <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
               {conversations.map((conversation) => (
                 <div key={conversation.id} className={`group flex items-center rounded-xl ${selectedId === conversation.id ? "bg-white shadow-sm" : "hover:bg-white/70"}`}>
-                  <button type="button" onClick={() => { if (!streaming) { setSelectedId(conversation.id); setRetryMessageId(""); } }} className="min-w-0 flex-1 px-3 py-3 text-left">
+                  <button type="button" onClick={() => { if (!streaming) { shouldFollowMessagesRef.current = true; setSelectedId(conversation.id); setRetryMessageId(""); } }} className="min-w-0 flex-1 px-3 py-3 text-left">
                     <span className="block truncate text-sm font-medium text-slate-800">{conversation.title || "新对话"}</span>
                     <span className="mt-1 block text-xs text-slate-400">{conversation.messages.length} 条消息</span>
                   </button>
@@ -406,8 +471,8 @@ export function CopilotWorkspace({
             </div>
           </aside>
 
-          <section className="flex min-h-[620px] flex-col">
-            <div className="border-b border-slate-100 p-4">
+          <section className="flex min-h-0 flex-col">
+            <div className="shrink-0 border-b border-slate-100 p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <label className="relative">
                   <span className="sr-only">选择 Skill</span>
@@ -419,7 +484,10 @@ export function CopilotWorkspace({
                   <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
                 </label>
                 <Button type="button" variant="secondary" onClick={() => void openFilePicker()} disabled={!selected || streaming || busy === "context"}><Paperclip className="h-4 w-4" />@文件</Button>
-                <span className="text-xs text-slate-400">对话仅你可见 · 每天最多 100 次</span>
+                <div className="text-xs leading-5 text-slate-400 lg:ml-auto lg:text-right">
+                  <span className="block">对话仅你可见 · 每天最多 100 次</span>
+                  <span className="block">当前 Skill、文件和最近对话会用于后续回复</span>
+                </div>
               </div>
               {selected?.attachments.length ? (
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -433,21 +501,55 @@ export function CopilotWorkspace({
               ) : null}
             </div>
 
-            <div className="flex-1 space-y-4 overflow-y-auto p-5">
-              {selected?.messages.map((message) => (
-                <article key={message.id} className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === "USER" ? "ml-auto bg-blue-600 text-white" : "bg-slate-100 text-slate-800"}`}>
-                  {message.role === "USER" && (message.skillName || message.contextFiles.length) ? <p className="mb-2 text-xs text-blue-100">{message.skillName ? `Skill：${message.skillName}` : ""}{message.skillName && message.contextFiles.length ? " · " : ""}{message.contextFiles.length ? `${message.contextFiles.length} 个文件` : ""}</p> : null}
-                  <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
-                </article>
-              ))}
-              {streamText ? <article className="max-w-[85%] rounded-2xl bg-slate-100 px-4 py-3 text-slate-800"><p className="whitespace-pre-wrap text-sm leading-7">{streamText}</p></article> : null}
-              {!selected?.messages.length && !streamText ? <div className="mx-auto mt-20 max-w-md text-center"><Bot className="mx-auto h-10 w-10 text-blue-600" /><h2 className="mt-4 font-semibold text-slate-900">开始使用课程 Copilot</h2><p className="mt-2 text-sm leading-6 text-slate-500">Skill 是可选项；你也可以直接聊天，或添加课程文件后提问。</p></div> : null}
+            <div
+              ref={messageScrollRef}
+              data-copilot-scroll-region="true"
+              aria-label="对话消息"
+              onScroll={(event) => {
+                const region = event.currentTarget;
+                shouldFollowMessagesRef.current = region.scrollHeight - region.scrollTop - region.clientHeight < 120;
+              }}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6"
+            >
+              <div className="space-y-6">
+                {selected?.messages.map((message) => message.role === "USER" ? (
+                  <div key={message.id} className="mx-auto flex w-full max-w-3xl justify-end">
+                    <article className="max-w-[85%] rounded-2xl rounded-br-md bg-blue-600 px-4 py-3 text-white shadow-sm sm:max-w-[78%]">
+                      {message.skillName || message.contextFiles.length ? <p className="mb-2 text-xs text-blue-100">{message.skillName ? `Skill：${message.skillName}` : ""}{message.skillName && message.contextFiles.length ? " · " : ""}{message.contextFiles.length ? `${message.contextFiles.length} 个文件` : ""}</p> : null}
+                      <p className="whitespace-pre-wrap break-words text-sm leading-7">{message.content}</p>
+                    </article>
+                  </div>
+                ) : <CopilotAssistantReply key={message.id} content={message.content} />)}
+                {pendingUserMessage && pendingUserMessage.conversationId === selected?.id ? (
+                  <div className="mx-auto flex w-full max-w-3xl justify-end">
+                    <article className="max-w-[85%] rounded-2xl rounded-br-md bg-blue-600 px-4 py-3 text-white shadow-sm sm:max-w-[78%]">
+                      {pendingUserMessage.skillName || pendingUserMessage.contextFiles.length ? <p className="mb-2 text-xs text-blue-100">{pendingUserMessage.skillName ? `Skill：${pendingUserMessage.skillName}` : ""}{pendingUserMessage.skillName && pendingUserMessage.contextFiles.length ? " · " : ""}{pendingUserMessage.contextFiles.length ? `${pendingUserMessage.contextFiles.length} 个文件` : ""}</p> : null}
+                      <p className="whitespace-pre-wrap break-words text-sm leading-7">{pendingUserMessage.content}</p>
+                    </article>
+                  </div>
+                ) : null}
+                {streaming ? <CopilotAssistantReply content={streamText} pending /> : null}
+                {!selected?.messages.length && !pendingUserMessage && !streaming ? <div className="mx-auto flex min-h-64 max-w-md flex-col items-center justify-center text-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50"><Bot className="h-6 w-6 text-blue-600" /></span><h2 className="mt-4 font-semibold text-slate-900">开始使用课程 Copilot</h2><p className="mt-2 text-sm leading-6 text-slate-500">直接提问即可开始；需要特定方法时选择 Skill，需要结合课程材料时添加文件。</p></div> : null}
+              </div>
             </div>
 
-            <div className="border-t border-slate-100 p-4">
-              <div className="flex items-end gap-3 rounded-2xl border border-slate-200 bg-white p-3 focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-50">
-                <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} disabled={streaming} placeholder={selected ? "输入问题，Enter 发送，Shift+Enter 换行" : "请先新建对话"} className="min-h-14 flex-1 resize-none border-0 bg-transparent text-sm outline-none" />
-                {streaming ? <Button type="button" variant="secondary" onClick={() => abortRef.current?.abort()}><X className="h-4 w-4" />停止</Button> : <Button type="button" onClick={() => void send()} disabled={!draft.trim()}><Send className="h-4 w-4" />发送</Button>}
+            <div className="shrink-0 border-t border-slate-100 bg-white px-4 py-3 sm:px-6 sm:py-4">
+              <div className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-50">
+                <textarea
+                  ref={composerRef}
+                  value={draft}
+                  rows={1}
+                  maxLength={4_000}
+                  aria-label="输入 Copilot 问题"
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }}
+                  placeholder="输入问题，Enter 发送，Shift+Enter 换行"
+                  className="max-h-32 min-h-12 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 text-sm leading-6 outline-none placeholder:text-slate-400"
+                />
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span className="text-xs text-slate-400">AI 生成内容仅供参考 · 最多 4000 字</span>
+                  {streaming ? <Button type="button" variant="secondary" onClick={() => abortRef.current?.abort()}><Loader2 className="h-4 w-4 animate-spin" />停止生成</Button> : <Button type="button" onClick={() => void send()} disabled={!draft.trim()}><Send className="h-4 w-4" />发送</Button>}
+                </div>
               </div>
             </div>
           </section>
