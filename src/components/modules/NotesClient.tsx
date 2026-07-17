@@ -11,6 +11,7 @@ export function NotesClient({ notes, courses }: { notes: Array<{ id: string; tit
   const [q, setQ] = useState("");
   const [tag, setTag] = useState("");
   const [editingId, setEditingId] = useState("");
+  const [creating, setCreating] = useState(false);
   const allTags = useMemo(() => Array.from(new Set(notes.flatMap((note) => note.tags.map((item) => item.name)))).sort(), [notes]);
   const visibleNotes = notes.filter((note) => {
     const matchesText = `${note.title} ${note.body}`.toLowerCase().includes(q.toLowerCase());
@@ -19,6 +20,7 @@ export function NotesClient({ notes, courses }: { notes: Array<{ id: string; tit
   });
   async function create(formData: FormData) {
     await fetch("/api/notes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: formData.get("title"), body: formData.get("body"), courseId: formData.get("courseId") || undefined, tags: String(formData.get("tags") || "").split(",").filter(Boolean) }) });
+    setCreating(false);
     router.refresh();
   }
   async function update(id: string, formData: FormData) {
@@ -48,17 +50,20 @@ export function NotesClient({ notes, courses }: { notes: Array<{ id: string; tit
       </section>
 
       <section className="rounded-2xl border border-[var(--cx-border)] bg-slate-50/70 p-4 sm:p-5">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--cx-blue-soft)] text-[var(--cx-blue)]"><NotebookPen className="h-5 w-5" aria-hidden="true" /></span>
-          <div><h2 className="font-semibold text-slate-900">新建笔记</h2><p className="mt-0.5 text-xs text-slate-500">记录正文，并按需关联课程和标签。</p></div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--cx-blue-soft)] text-[var(--cx-blue)]"><NotebookPen className="h-5 w-5" aria-hidden="true" /></span>
+            <div><h2 className="font-semibold text-slate-900">记录新内容</h2><p className="mt-0.5 text-xs text-slate-500">需要时再展开编辑区，保持笔记列表清爽。</p></div>
+          </div>
+          <Button type="button" variant={creating ? "secondary" : "primary"} aria-expanded={creating} aria-controls="new-note-form" onClick={() => setCreating((current) => !current)}>{creating ? <X className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}{creating ? "收起" : "新建笔记"}</Button>
         </div>
-        <form action={create} className="mt-4 grid gap-4 md:grid-cols-2">
+        {creating ? <form id="new-note-form" action={create} className="mt-4 grid gap-4 border-t border-slate-200 pt-4 md:grid-cols-2">
           <label className="space-y-1.5"><span className="text-sm font-medium text-slate-700">标题</span><Input name="title" placeholder="输入笔记标题" required /></label>
           <label className="space-y-1.5"><span className="text-sm font-medium text-slate-700">标签</span><Input name="tags" placeholder="多个标签用逗号分隔" /></label>
           <label className="space-y-1.5"><span className="text-sm font-medium text-slate-700">关联课程</span><Select name="courseId"><option value="">不关联课程</option>{courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}</Select></label>
           <label className="space-y-1.5 md:col-span-2"><span className="text-sm font-medium text-slate-700">正文</span><Textarea name="body" placeholder="记录灵感、课堂重点或待办事项" required /></label>
           <div className="md:col-span-2 md:flex md:justify-end"><Button type="submit" className="w-full md:w-auto"><Plus className="h-4 w-4" aria-hidden="true" />保存笔记</Button></div>
-        </form>
+        </form> : null}
       </section>
 
       <div className="grid gap-4 md:grid-cols-2">

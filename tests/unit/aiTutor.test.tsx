@@ -50,4 +50,29 @@ describe("AI tutor UI", () => {
     expect(markup).toContain("[1] 访谈方法");
     expect(markup).toContain('aria-pressed="true"');
   });
+
+  it("renders assistant Markdown structure while keeping course citations", () => {
+    const conversations: TutorConversationDto[] = [{
+      id: "conversation-md",
+      title: "结构化回答",
+      status: "ACTIVE",
+      createdAt: "2026-07-13T00:00:00.000Z",
+      updatedAt: "2026-07-13T00:01:00.000Z",
+      messages: [{
+        id: "message-md",
+        role: "ASSISTANT",
+        content: "## 重点\n\n- **先观察**\n- 再提问",
+        createdAt: "2026-07-13T00:01:00.000Z",
+        citations: []
+      }]
+    }];
+    const markup = renderToStaticMarkup(
+      <AiTutor courseId="course-1" courseTitle="访谈方法" initialConversations={conversations} />
+    );
+
+    expect(markup).toContain("<h2");
+    expect(markup).toContain("<ul");
+    expect(markup).toContain("<strong");
+    expect(markup).not.toContain("## 重点");
+  });
 });

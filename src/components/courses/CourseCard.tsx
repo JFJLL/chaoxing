@@ -2,8 +2,8 @@ import Link from "next/link";
 import { BookOpen, User } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
-import { CourseDeleteButton } from "@/components/courses/CourseDeleteButton";
 import { CoursePublishButton } from "@/components/courses/CoursePublishButton";
+import { CourseActionsMenu } from "@/components/courses/CourseActionsMenu";
 
 type CourseCardProps = {
   course: {
@@ -86,10 +86,10 @@ export function CourseCard({ course, mode }: CourseCardProps) {
             <BookOpen className="h-4 w-4" aria-hidden="true" />
             进入课程
           </LinkButton>
-          {mode === "taught" && course.status ? (
+          {mode === "taught" && course.status && course.status !== "ACTIVE" ? (
             <CoursePublishButton courseId={course.id} status={course.status} className="h-9 w-full px-3 sm:w-auto" />
           ) : null}
-          {mode === "taught" ? <CourseDeleteButton courseId={course.id} title={course.title} className="w-full sm:ml-auto sm:w-auto" /> : null}
+          {mode === "taught" && course.status ? <CourseActionsMenu courseId={course.id} title={course.title} status={course.status} /> : null}
         </div>
       </div>
     </article>

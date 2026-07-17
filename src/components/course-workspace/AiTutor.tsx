@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { Bot, LoaderCircle, Plus, RotateCcw, Send, Square } from "lucide-react";
 import Link from "next/link";
 import { readAiStream, type AiCitation, type AiStreamEvent } from "@/lib/ai/streamProtocol";
+import { CopilotMarkdown } from "@/components/course-workspace/CopilotMessage";
 
 export type TutorMessageDto = {
   id: string;
@@ -228,7 +229,8 @@ function MessageBubble({ assistant, content, citations, streaming = false }: { a
   return (
     <div className={`flex ${assistant ? "justify-start" : "justify-end"}`}>
       <div aria-busy={streaming || undefined} className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-6 sm:max-w-[86%] ${assistant ? "rounded-tl-md border border-slate-100 bg-slate-50 text-slate-700" : "rounded-tr-md bg-[var(--cx-blue)] text-white shadow-sm"}`}>
-        <p className="whitespace-pre-wrap">{content}{streaming ? <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-blue-500 align-middle" /> : null}</p>
+        {assistant ? <CopilotMarkdown content={content} /> : <p className="whitespace-pre-wrap">{content}</p>}
+        {streaming ? <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-blue-500 align-middle" aria-label="正在生成" /> : null}
         {assistant && citations.length ? (
           <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
             {citations.map((citation, index) => <Link key={citation.id} href={citation.href} className="cx-focus-ring cx-tactile rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-[var(--cx-blue)] shadow-sm hover:border-indigo-200 hover:bg-[var(--cx-blue-soft)]" title={citation.snippet}>[{index + 1}] {citation.label}</Link>)}

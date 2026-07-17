@@ -61,6 +61,8 @@ export async function POST(request: NextRequest) {
     if (body.courseId && body.driveFileId) {
       const driveFile = await requireDriveFileReadable(user, body.driveFileId);
       await requireCourseOwner(user, body.courseId);
+      const existing = await db.resource.findFirst({ where: { courseId: body.courseId, driveFileId: body.driveFileId } });
+      if (existing) return NextResponse.json({ resource: existing, alreadyAttached: true });
       const resource = await db.resource.create({ data: { courseId: body.courseId, title: driveFile?.name || "云盘资料", type: "drive", driveFileId: body.driveFileId } });
       return NextResponse.json({ resource }, { status: 201 });
     }

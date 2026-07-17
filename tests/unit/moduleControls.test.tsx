@@ -16,8 +16,9 @@ describe("module form controls", () => {
 
     expect(html).toContain("搜索标题或正文");
     expect(html).toContain("新建笔记");
-    expect(html).toContain("关联课程");
-    expect(html).toContain("保存笔记");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("关联课程");
+    expect(html).not.toContain("保存笔记");
     expect(html).toContain("没有符合条件的笔记");
   });
 
@@ -27,16 +28,51 @@ describe("module form controls", () => {
         canManage
         parentId={null}
         breadcrumbs={[]}
+        folders={[]}
         courses={[{ id: "course-1", title: "设计基础" }]}
         files={[{ id: "file-1", name: "课程说明.pdf", kind: "file", size: 1536 }]}
       />
     );
 
     expect(html).toContain("选择要上传的文件");
+    expect(html).toContain("上传期间会显示进度");
     expect(html).toContain("新建文件夹");
     expect(html).toContain("2 KB");
+    expect(html).toContain("移动");
     expect(html).toContain("添加到课程资料");
     expect(html).not.toContain("h-8");
+  });
+
+  it("makes a folder row an explicit navigation target", () => {
+    const html = renderToStaticMarkup(
+      <DriveClient
+        canManage
+        parentId={null}
+        breadcrumbs={[]}
+        folders={[{ id: "folder-1", name: "课件", parentId: null }]}
+        courses={[]}
+        files={[{ id: "folder-1", parentId: null, name: "课件", kind: "folder", size: 0 }]}
+      />
+    );
+
+    expect(html).toContain('href="/space/drive?parentId=folder-1"');
+    expect(html).toContain("文件夹 · 点击进入");
+  });
+
+  it("returns to the deterministic parent instead of browser history", () => {
+    const html = renderToStaticMarkup(
+      <DriveClient
+        canManage
+        parentId="child"
+        breadcrumbs={[{ id: "parent", name: "课程资料" }, { id: "child", name: "第一章" }]}
+        folders={[]}
+        courses={[]}
+        files={[]}
+      />
+    );
+
+    expect(html).toContain("返回上一级");
+    expect(html).toContain('href="/space/drive?parentId=parent"');
   });
 
   it("communicates the selected state without exposing a native file input", () => {

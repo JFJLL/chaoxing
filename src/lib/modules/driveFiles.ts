@@ -41,7 +41,7 @@ function ossObjectUrl(bucket: string, key: string, endpoint: URL) {
 }
 
 function ossAuthorization(input: {
-  method: "GET" | "PUT";
+  method: "DELETE" | "GET" | "PUT";
   bucket: string;
   key: string;
   contentType: string;
@@ -57,12 +57,12 @@ function ossAuthorization(input: {
 }
 
 function safeObjectName(fileName: string) {
-  return basename(fileName).replace(/[^\w.-]+/g, "_") || "file";
+  return basename(fileName).replace(/[<>:"/\\|?*\u0000-\u001f\u007f]+/g, "_").trim() || "file";
 }
 
 function ossKey(ownerId: string, fileName: string) {
   const config = ossConfig();
-  return `${config.prefix}/${ownerId}/${randomUUID()}-${safeObjectName(fileName)}`;
+  return `${config.prefix}/${ownerId}/${randomUUID()}/${safeObjectName(fileName)}`;
 }
 
 async function uploadDriveFileToOss(input: { ownerId: string; fileName: string; bytes: Buffer; mimeType?: string | null }) {
@@ -103,7 +103,7 @@ function parseOssUri(uri: string) {
   return { bucket: match[1], key: match[2] };
 }
 
-async function downloadDriveFileFromOss(uri: string, contentType: string) {
+async function downloadDriveFileFromOss(uri: string) {
   const config = ossConfig();
   const { bucket, key } = parseOssUri(uri);
   const url = ossObjectUrl(bucket, key, config.endpoint);
@@ -111,7 +111,7 @@ async function downloadDriveFileFromOss(uri: string, contentType: string) {
     method: "GET",
     bucket,
     key,
-    contentType,
+    contentType: "",
     accessKeyId: config.accessKeyId,
     accessKeySecret: config.accessKeySecret
   });
@@ -131,6 +131,31 @@ async function downloadDriveFileFromOss(uri: string, contentType: string) {
   return Buffer.from(await response.arrayBuffer());
 }
 
+async function deleteDriveFileFromOss(uri: string) {
+  const config = ossConfig();
+  const { bucket, key } = parseOssUri(uri);
+  const url = ossObjectUrl(bucket, key, config.endpoint);
+  const signed = ossAuthorization({
+    method: "DELETE",
+    bucket,
+    key,
+    contentType: "",
+    accessKeyId: config.accessKeyId,
+    accessKeySecret: config.accessKeySecret
+  });
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Authorization: signed.authorization,
+      Date: signed.date
+    }
+  });
+  if (!response.ok && response.status !== 404) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`阿里云 OSS 删除失败：${response.status}${detail ? ` ${detail.slice(0, 180)}` : ""}`);
+  }
+}
+
 export type DriveFileStorageRecord = {
   id?: string;
   kind: string;
@@ -142,8 +167,19 @@ export type DriveFileStorageRecord = {
 export async function readDriveFileBytes(file: DriveFileStorageRecord) {
   if (file.kind !== "file" || !file.path) throw new Error("文件不存在");
   return file.path.startsWith("oss://")
-    ? downloadDriveFileFromOss(file.path, file.mimeType || "application/octet-stream")
+    ? downloadDriveFileFromOss(file.path)
     : readFile(file.path);
+}
+
+export async function deleteDriveFileFromStorage(file: DriveFileStorageRecord) {
+  if (file.kind !== "file" || !file.path) return;
+  if (file.path.startsWith("oss://")) {
+    await deleteDriveFileFromOss(file.path);
+    return;
+  }
+  await unlink(file.path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error;
+  });
 }
 
 export async function withDriveFilePath<T>(file: DriveFileStorageRecord, callback: (localPath: string) => Promise<T>) {

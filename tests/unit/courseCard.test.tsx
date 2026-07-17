@@ -18,13 +18,24 @@ const course = {
 };
 
 describe("CourseCard", () => {
-  it("keeps course lifecycle actions on the taught-course card", () => {
+  it("hides destructive lifecycle actions behind the taught-course menu", () => {
     const html = renderToStaticMarkup(<CourseCard course={course} mode="taught" />);
 
     expect(html).toContain("已发布");
-    expect(html).toContain("撤回发布");
+    expect(html).toContain("更多课程操作：测试课程");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("撤回发布");
+    expect(html).not.toContain("删除课程");
     expect(html).toContain("进入课程");
     expect(html).not.toContain("学习进度");
+  });
+
+  it("keeps publishing a draft visible while its delete action stays in the menu", () => {
+    const html = renderToStaticMarkup(<CourseCard course={{ ...course, status: "DRAFT" }} mode="taught" />);
+
+    expect(html).toContain("发布课程");
+    expect(html).toContain("更多课程操作：测试课程");
+    expect(html).not.toContain("删除课程");
   });
 
   it("does not expose teacher lifecycle actions on a learned-course card", () => {
@@ -32,6 +43,7 @@ describe("CourseCard", () => {
 
     expect(html).not.toContain("撤回发布");
     expect(html).not.toContain("删除课程");
+    expect(html).not.toContain("更多课程操作");
     expect(html).not.toContain("已发布");
     expect(html).toContain('role="progressbar"');
     expect(html).toContain('aria-valuenow="78"');

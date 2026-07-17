@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { streamDriveFile } from "@/lib/modules/driveFiles";
+import { deleteDriveFileFromStorage, streamDriveFile } from "@/lib/modules/driveFiles";
 import { requireDriveFileOwner, requireDriveFileReadable } from "@/lib/modules/drivePermissions";
 import { requireTeacher } from "@/lib/permissions";
 import { assertDriveMoveAllowed } from "@/lib/copilot/files";
@@ -28,7 +28,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     requireTeacher(user);
     const file = await requireDriveFileOwner(user, fileId);
-    await assertDriveMoveAllowed(user.id, file.id, body.parentId ?? file.parentId);
+    const nextParentId = Object.prototype.hasOwnProperty.call(body, "parentId") ? body.parentId ?? null : file.parentId;
+    await assertDriveMoveAllowed(user.id, file.id, nextParentId);
     const updated = await db.driveFile.update({
       where: { id: file.id },
       data: { name: body.name, parentId: body.parentId }
@@ -45,12 +46,39 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     requireTeacher(user);
     const file = await requireDriveFileOwner(user, fileId);
-    await db.driveFile.update({
-      where: { id: file.id },
-      data: { deletedAt: new Date() }
+    const activeFiles = await db.driveFile.findMany({
+      where: { ownerId: user.id, deletedAt: null },
+      select: { id: true, parentId: true, kind: true, name: true, mimeType: true, path: true }
     });
-    return NextResponse.json({ ok: true });
+    const children = new Map<string, string[]>();
+    for (const item of activeFiles) {
+      if (item.parentId) children.set(item.parentId, [...(children.get(item.parentId) ?? []), item.id]);
+    }
+    const ids = new Set<string>([file.id]);
+    const queue = [file.id];
+    while (queue.length) {
+      const current = queue.shift()!;
+      for (const childId of children.get(current) ?? []) {
+        if (ids.has(childId)) continue;
+        ids.add(childId);
+        queue.push(childId);
+      }
+    }
+    const deletedFiles = activeFiles.filter((item) => ids.has(item.id));
+    await Promise.all(deletedFiles.map(deleteDriveFileFromStorage));
+    const deletedAt = new Date();
+    await db.$transaction([
+      db.resource.deleteMany({ where: { driveFileId: { in: [...ids] } } }),
+      db.driveShare.deleteMany({ where: { fileId: { in: [...ids] } } }),
+      db.driveFile.updateMany({ where: { id: { in: [...ids] } }, data: { deletedAt } })
+    ]);
+    return NextResponse.json({ ok: true, deletedCount: ids.size });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理文件" }, { status: 403 });
+    console.error("[drive-delete]", error);
+    const forbidden = error instanceof Error && error.message === "无权管理文件";
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "删除失败" },
+      { status: forbidden ? 403 : 502 }
+    );
   }
 }
