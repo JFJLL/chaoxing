@@ -37,7 +37,7 @@ export function CourseDeleteButton({ courseId, title, className }: { courseId: s
       <Button
         type="button"
         variant="danger"
-        className="h-9 px-3"
+        className="h-9 w-full px-3 sm:w-auto"
         onClick={onDelete}
         disabled={deleting}
         aria-label={`删除课程 ${title}`}

@@ -14,6 +14,8 @@ describe("AI tutor UI", () => {
     expect(markup).toContain("AI 助教");
     expect(markup).toContain("仅依据《访谈方法》中你有权限查看的内容回答");
     expect(markup).toContain("询问当前课程内容");
+    expect(markup).toContain('aria-label="课程问题"');
+    expect(markup).toContain('role="log"');
     expect(markup).not.toContain("本地模板");
     expect(markup).not.toContain("示例回答");
   });
@@ -46,5 +48,6 @@ describe("AI tutor UI", () => {
     expect(markup).toContain("开放式问题适合收集经验 [1]");
     expect(markup).toContain('href="/space/courses/course-1/structure"');
     expect(markup).toContain("[1] 访谈方法");
+    expect(markup).toContain('aria-pressed="true"');
   });
 });

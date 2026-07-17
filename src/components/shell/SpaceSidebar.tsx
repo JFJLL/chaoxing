@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,
-  ChevronLeft,
   Cloud,
   Contact,
   FileCheck2,
@@ -45,10 +44,10 @@ export function SpaceSidebar({ user, unreadCount = 0 }: { user: SessionUser; unr
 
   return (
     <>
-      <aside className="fixed bottom-0 left-0 top-20 z-20 hidden w-[220px] bg-[var(--cx-blue)] text-white md:block">
-        <div className="border-b border-white/15 p-5">
+      <aside className="fixed bottom-0 left-0 top-20 z-20 hidden w-[220px] overflow-hidden bg-[linear-gradient(180deg,var(--cx-sidebar),#111c30)] text-white shadow-xl md:block">
+        <div className="border-b border-white/10 p-5">
           <div className="flex items-center gap-3">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-lg font-semibold">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/10 text-lg font-semibold shadow-inner">
               {user.name.slice(0, 1)}
             </span>
             <div className="min-w-0">
@@ -57,30 +56,23 @@ export function SpaceSidebar({ user, unreadCount = 0 }: { user: SessionUser; unr
             </div>
           </div>
         </div>
-        <nav className="space-y-1 p-3">
+        <nav aria-label="个人空间导航" className="space-y-1 p-3">
           {visibleNavItems.map((item) => {
             const active = pathname === item.href || (item.href !== "/space" && pathname.startsWith(item.href));
             const Icon = item.icon;
-            const content = <><Icon className="h-4 w-4" aria-hidden="true" /><span className="flex-1">{item.label}</span>{item.label === "收件箱" && unreadCount > 0 ? <span className="rounded-full bg-red-500 px-1.5 text-[10px] leading-5 text-white">{unreadCount}</span> : null}</>;
-            const className = clsx("flex h-11 items-center gap-3 rounded-md px-3 text-sm transition", active ? "bg-[var(--cx-active)] text-white" : "text-white/85 hover:bg-white/10 hover:text-white");
-            return <Link key={item.href} href={item.href} className={className}>{content}</Link>;
+            const content = <><span className={clsx("absolute inset-y-3 left-0 w-1 rounded-r-full bg-indigo-300 transition", active ? "scale-y-100" : "scale-y-0")} /><Icon className={clsx("h-4 w-4", active ? "text-indigo-200" : "text-white/60")} aria-hidden="true" /><span className="flex-1">{item.label}</span>{item.label === "收件箱" && unreadCount > 0 ? <span className="rounded-full bg-red-500 px-1.5 text-[10px] leading-5 text-white shadow-sm">{unreadCount}</span> : null}</>;
+            const className = clsx("cx-focus-ring cx-tactile relative flex h-11 items-center gap-3 rounded-lg px-3 text-sm", active ? "bg-[var(--cx-active)] font-medium text-white" : "text-white/80 hover:bg-white/10 hover:text-white");
+            return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={className}>{content}</Link>;
           })}
         </nav>
-        <button
-          type="button"
-          className="absolute bottom-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white/80"
-          aria-label="收起侧边栏"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
       </aside>
-      <nav className="fixed bottom-0 left-0 right-0 z-30 flex h-16 items-center gap-1 overflow-x-auto border-t border-[var(--cx-border)] bg-white px-2 shadow-lg md:hidden">
+      <nav aria-label="个人空间移动导航" className="fixed bottom-0 left-0 right-0 z-30 flex h-[72px] items-center gap-1 border-t border-[var(--cx-border)] bg-white/95 px-2 shadow-[0_-10px_30px_rgba(43,54,105,0.08)] backdrop-blur-xl md:hidden">
         {visibleNavItems.map((item) => {
           const active = pathname === item.href || (item.href !== "/space" && pathname.startsWith(item.href));
           const Icon = item.icon;
-          const content = <><Icon className="h-5 w-5" aria-hidden="true" /><span className="sr-only">{item.label}</span>{item.label === "收件箱" && unreadCount > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" /> : null}</>;
-          const className = clsx("relative flex h-11 min-w-11 items-center justify-center rounded-md", active ? "bg-blue-50 text-[var(--cx-blue)]" : "text-slate-500");
-          return <Link key={item.href} href={item.href} title={item.label} className={className}>{content}</Link>;
+          const content = <><Icon className="h-5 w-5" aria-hidden="true" /><span className="text-[10px] font-medium leading-none">{item.label}</span>{item.label === "收件箱" && unreadCount > 0 ? <span className="absolute right-2 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" /> : null}</>;
+          const className = clsx("cx-focus-ring cx-tactile relative flex h-14 min-w-14 flex-1 flex-col items-center justify-center gap-1 rounded-xl", active ? "bg-[var(--cx-blue-soft)] text-[var(--cx-blue)]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800");
+          return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={className}>{content}</Link>;
         })}
       </nav>
     </>

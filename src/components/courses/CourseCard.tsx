@@ -23,8 +23,8 @@ type CourseCardProps = {
 const coverStyles: Record<string, string> = {
   document: "from-sky-500 to-cyan-400",
   tool: "from-emerald-500 to-teal-400",
-  ai: "from-indigo-500 to-blue-400",
-  plain: "from-slate-500 to-slate-400"
+  ai: "from-[#5669c9] to-[#7b6bd8]",
+  plain: "from-[#5264bd] to-[#7a70d6]"
 };
 
 function getCoverStyle(cover?: string | null) {
@@ -33,22 +33,23 @@ function getCoverStyle(cover?: string | null) {
 }
 
 export function CourseCard({ course, mode }: CourseCardProps) {
-  const progress = course.progress ?? 0;
+  const progress = Math.max(0, Math.min(course.progress ?? 0, 100));
 
   return (
-    <article className="overflow-hidden rounded-md border border-[var(--cx-border)] bg-white transition hover:-translate-y-0.5 hover:shadow-panel">
-      <Link href={`/space/courses/${course.id}`} className={`flex h-32 bg-gradient-to-br ${getCoverStyle(course.cover)} p-4 text-white`}>
-        <div className="mt-auto">
-          <p className="text-xs opacity-80">{course.term ?? "本学期"}</p>
-          <h2 className="mt-1 line-clamp-2 text-lg font-semibold">{course.title}</h2>
+    <article className="group overflow-hidden rounded-2xl border border-[var(--cx-border)] bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-floating">
+      <Link href={`/space/courses/${course.id}`} className={`cx-focus-ring relative flex h-36 bg-gradient-to-br ${getCoverStyle(course.cover)} p-4 text-white`}>
+        <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.25),transparent_44%)]" aria-hidden="true" />
+        <div className="relative mt-auto">
+          <p className="text-xs font-medium text-white/75">{course.term ?? "本学期"}</p>
+          <h2 className="mt-1 line-clamp-2 text-lg font-semibold leading-6">{course.title}</h2>
         </div>
       </Link>
       <div className="space-y-4 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="line-clamp-1 font-medium text-slate-900">{course.title}</p>
+            <p className="line-clamp-1 font-semibold text-slate-900">{course.title}</p>
             <p className="mt-1 flex items-center gap-1 text-sm text-slate-500">
-              <User className="h-3.5 w-3.5" />
+              <User className="h-3.5 w-3.5" aria-hidden="true" />
               {course.owner?.name ?? "本地教师"}
             </p>
           </div>
@@ -65,23 +66,30 @@ export function CourseCard({ course, mode }: CourseCardProps) {
               <span>学习进度</span>
               <span>{progress}%</span>
             </div>
-            <div className="mt-2 h-2 rounded-full bg-slate-100">
-              <div className="h-2 rounded-full bg-[var(--cx-blue)]" style={{ width: `${Math.min(progress, 100)}%` }} />
+            <div
+              role="progressbar"
+              aria-label="学习进度"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress}
+              className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"
+            >
+              <div className="h-2 rounded-full bg-gradient-to-r from-[var(--cx-blue)] to-[#8770df] transition-[width]" style={{ width: `${progress}%` }} />
             </div>
           </div>
         ) : (
           <p className="text-sm text-slate-500">学生 {course.enrollments?.length ?? 0} 人</p>
         )}
 
-        <div className="flex flex-wrap items-start gap-2">
-          <LinkButton href={`/space/courses/${course.id}`} variant="secondary" className="h-9 px-3">
-            <BookOpen className="h-4 w-4" />
+        <div className="grid grid-cols-2 items-start gap-2 border-t border-slate-100 pt-3 sm:flex sm:flex-wrap">
+          <LinkButton href={`/space/courses/${course.id}`} variant="secondary" className="col-span-2 h-9 px-3 sm:col-span-1 sm:flex-1">
+            <BookOpen className="h-4 w-4" aria-hidden="true" />
             进入课程
           </LinkButton>
           {mode === "taught" && course.status ? (
-            <CoursePublishButton courseId={course.id} status={course.status} className="h-9 px-3" />
+            <CoursePublishButton courseId={course.id} status={course.status} className="h-9 w-full px-3 sm:w-auto" />
           ) : null}
-          {mode === "taught" ? <CourseDeleteButton courseId={course.id} title={course.title} className="ml-auto" /> : null}
+          {mode === "taught" ? <CourseDeleteButton courseId={course.id} title={course.title} className="w-full sm:ml-auto sm:w-auto" /> : null}
         </div>
       </div>
     </article>

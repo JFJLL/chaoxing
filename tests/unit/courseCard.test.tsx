@@ -13,7 +13,8 @@ const course = {
   title: "测试课程",
   status: "ACTIVE",
   owner: { name: "李老师" },
-  enrollments: []
+  enrollments: [],
+  progress: 78
 };
 
 describe("CourseCard", () => {
@@ -23,6 +24,7 @@ describe("CourseCard", () => {
     expect(html).toContain("已发布");
     expect(html).toContain("撤回发布");
     expect(html).toContain("进入课程");
+    expect(html).not.toContain("学习进度");
   });
 
   it("does not expose teacher lifecycle actions on a learned-course card", () => {
@@ -30,5 +32,18 @@ describe("CourseCard", () => {
 
     expect(html).not.toContain("撤回发布");
     expect(html).not.toContain("删除课程");
+    expect(html).not.toContain("已发布");
+    expect(html).toContain('role="progressbar"');
+    expect(html).toContain('aria-valuenow="78"');
+  });
+
+  it("clamps learner progress to the progressbar range", () => {
+    const over = renderToStaticMarkup(<CourseCard mode="learned" course={{ ...course, progress: 140 }} />);
+    const under = renderToStaticMarkup(<CourseCard mode="learned" course={{ ...course, progress: -12 }} />);
+
+    expect(over).toContain('aria-valuenow="100"');
+    expect(over).toContain('width:100%');
+    expect(under).toContain('aria-valuenow="0"');
+    expect(under).toContain('width:0%');
   });
 });

@@ -5,10 +5,10 @@ import { clsx } from "clsx";
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 const variants: Record<ButtonVariant, string> = {
-  primary: "bg-[var(--cx-blue)] text-white hover:bg-[var(--cx-blue-dark)]",
-  secondary: "border border-[var(--cx-border)] bg-white text-slate-700 hover:bg-slate-50",
-  ghost: "text-slate-600 hover:bg-slate-100",
-  danger: "bg-red-600 text-white hover:bg-red-700"
+  primary: "bg-[var(--cx-blue)] text-white shadow-sm hover:bg-[var(--cx-blue-dark)] hover:shadow-md",
+  secondary: "border border-[var(--cx-border-strong)] bg-white text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50",
+  ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+  danger: "bg-red-600 text-white shadow-sm hover:bg-red-700 hover:shadow-md"
 };
 
 type BaseProps = {
@@ -24,7 +24,7 @@ export function Button({ children, variant = "primary", className, ...props }: B
   return (
     <button
       className={clsx(
-        "inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+        "cx-focus-ring cx-tactile inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60",
         variants[variant],
         className
       )}
@@ -40,7 +40,7 @@ export function LinkButton({ children, variant = "primary", className, href, ...
     <Link
       href={href}
       className={clsx(
-        "inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition",
+        "cx-focus-ring cx-tactile inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 text-sm font-medium",
         variants[variant],
         className
       )}

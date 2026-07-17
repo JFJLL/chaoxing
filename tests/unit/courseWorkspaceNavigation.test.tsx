@@ -34,6 +34,8 @@ describe("course workspace navigation", () => {
 
     expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/space\/courses\/course-1\/ai-workbench"/);
     expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="课程工作区导航"');
+    expect(html).toContain("overflow-x-auto");
     expect(html).not.toContain("课程门户");
     expect(html).not.toContain(">链接<");
   });
@@ -85,6 +87,7 @@ describe("course workspace navigation", () => {
     expect(courseHtml).toContain("bg-slate-100 text-slate-500");
     expect(courseHtml).not.toContain("lucide-external-link");
     expect(courseHtml).not.toContain("from-fuchsia-500");
+    expect(courseHtml).toContain("cx-hide-scrollbar");
     expect(spaceHtml).not.toContain("zovii.studio");
     expect(spaceHtml).not.toContain("生图");
   });

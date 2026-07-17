@@ -6,11 +6,17 @@
   color-scheme: light;
   --cx-blue: #5669c9;
   --cx-blue-dark: #485ab7;
-  --cx-active: #6376db;
+  --cx-blue-soft: #eef0ff;
+  --cx-active: rgba(255, 255, 255, 0.14);
+  --cx-sidebar: #1b2944;
   --cx-page: #f4f6fb;
+  --cx-course-page: #f3f6fc;
+  --cx-surface: #ffffff;
   --cx-border: #e7eaf3;
+  --cx-border-strong: #d9deeb;
   --cx-text: #1f2937;
   --cx-muted: #7b8190;
+  --cx-focus: rgba(86, 105, 201, 0.2);
   --background: var(--cx-page);
   --foreground: var(--cx-text);
 }
@@ -46,6 +52,43 @@ select {
   font: inherit;
 }
 
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgba(86, 105, 201, 0.18);
+}
+
+.cx-tactile {
+  transition:
+    transform 150ms cubic-bezier(0.2, 0.72, 0.2, 1),
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    opacity 180ms ease;
+}
+
+.cx-tactile:active:not(:disabled, [aria-disabled="true"]) {
+  transform: scale(0.98);
+}
+
+.cx-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--cx-focus);
+}
+
+.cx-hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.cx-hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 .cx-route-progress {
   position: fixed;
   left: 0;
@@ -69,6 +112,26 @@ select {
   transform: scaleX(0.86);
 }
 
+.cx-route-progress::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  transform: translateX(-100%);
+}
+
+.cx-route-progress[data-active="true"]::after {
+  animation: cx-progress-shimmer 900ms ease-in-out infinite;
+}
+
+.cx-dialog-overlay {
+  animation: cx-fade-in 180ms ease-out both;
+}
+
+.cx-dialog-panel {
+  animation: cx-dialog-in 220ms cubic-bezier(0.2, 0.72, 0.2, 1) both;
+}
+
 a[data-cx-pending="true"],
 button[data-cx-pending="true"],
 [role="button"][data-cx-pending="true"],
@@ -77,4 +140,42 @@ input[type="submit"][data-cx-pending="true"] {
   opacity: 0.76;
   pointer-events: none;
   transform: translateY(1px);
+}
+
+@keyframes cx-progress-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes cx-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes cx-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .cx-tactile:active:not(:disabled, [aria-disabled="true"]),
+  a[data-cx-pending="true"],
+  button[data-cx-pending="true"],
+  [role="button"][data-cx-pending="true"],
+  input[type="submit"][data-cx-pending="true"] {
+    transform: none;
+  }
 }
