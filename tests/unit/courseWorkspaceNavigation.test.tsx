@@ -110,4 +110,13 @@ describe("course workspace navigation", () => {
     expect(spaceHtml).not.toContain("zovii.studio");
     expect(spaceHtml).not.toContain("生图");
   });
+
+  it("uses the original blue surface for the global space sidebar", () => {
+    const html = renderToStaticMarkup(
+      <SpaceSidebar user={{ id: "teacher-1", name: "李老师", role: "TEACHER", institutionId: "institution-1" }} />
+    );
+
+    expect(html).toContain("bg-[var(--cx-blue)]");
+    expect(html).not.toContain("linear-gradient(180deg");
+  });
 });

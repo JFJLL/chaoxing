@@ -1,9 +1,9 @@
-import { CheckCircle2, MessagesSquare, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, MessagesSquare, Sparkles } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { isTeacher } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
-import { CourseModulePanel } from "@/components/course-workspace/CourseModulePanel";
+import { CourseModulePanel, courseModuleLinkCardClassName } from "@/components/course-workspace/CourseModulePanel";
 import Link from "next/link";
 
 type PageProps = { params: Promise<{ courseId: string }> };
@@ -40,11 +40,16 @@ export default async function ActivitiesPage({ params }: PageProps) {
               <Link
                 key={activity.title}
                 href={`/space/courses/${course.id}/${activity.hrefSegment}`}
-                className="rounded-2xl border border-slate-100 bg-slate-50 p-5 transition hover:border-blue-100 hover:bg-blue-50/50"
+                className={courseModuleLinkCardClassName}
               >
-                <Icon className="h-8 w-8 text-blue-600" />
+                <div className="flex items-start justify-between gap-3">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-[var(--cx-blue)] shadow-sm transition group-hover:shadow-md">
+                    <Icon className="h-6 w-6" aria-hidden="true" />
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[var(--cx-blue)]" aria-hidden="true" />
+                </div>
                 <h2 className="mt-4 font-semibold text-slate-900">{activity.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-500">{activity.description}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{activity.description}</p>
               </Link>
             );
           })}

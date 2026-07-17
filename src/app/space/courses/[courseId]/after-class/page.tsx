@@ -1,9 +1,9 @@
-import { Bot, ClipboardList, PenLine, ScrollText } from "lucide-react";
+import { ArrowRight, Bot, ClipboardList, PenLine, ScrollText } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { isTeacher } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
-import { CourseModulePanel } from "@/components/course-workspace/CourseModulePanel";
+import { CourseModulePanel, courseModuleLinkCardClassName } from "@/components/course-workspace/CourseModulePanel";
 import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { db } from "@/lib/db";
@@ -51,10 +51,15 @@ export default async function AfterClassPage({ params }: PageProps) {
           {modules.filter((module) => canManage || module.title !== "题库").map((module) => {
             const Icon = module.icon;
             return (
-              <Link key={module.title} href={module.href} className="rounded-2xl border border-slate-100 bg-slate-50 p-5 transition hover:border-blue-100 hover:bg-blue-50/50">
+              <Link key={module.title} href={module.href} className={courseModuleLinkCardClassName}>
                 <div className="flex items-start justify-between gap-3">
-                  <Icon className="h-7 w-7 text-[#2165f3]" />
-                  <Badge tone={module.count ? "blue" : "gray"}>{module.count} 项</Badge>
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-[var(--cx-blue)] shadow-sm transition group-hover:shadow-md">
+                    <Icon className="h-6 w-6" aria-hidden="true" />
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Badge tone={module.count ? "blue" : "gray"}>{module.count} 项</Badge>
+                    <ArrowRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[var(--cx-blue)]" aria-hidden="true" />
+                  </span>
                 </div>
                 <h2 className="mt-4 font-semibold text-slate-900">{module.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">{module.description}</p>

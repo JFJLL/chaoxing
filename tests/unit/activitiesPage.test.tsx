@@ -39,6 +39,9 @@ describe("ActivitiesPage", () => {
     expect(html).toContain('href="/space/courses/course-1/activities/copilot"');
     expect(html).not.toContain("AI陪练");
     expect(html).toContain("签到");
+    expect(html).toContain("hover:-translate-y-0.5");
+    expect(html).toContain("hover:shadow-floating");
+    expect(html).toContain("group-hover:translate-x-0.5");
   });
 
   it("keeps the teacher-only tutor card out of the student classroom page", async () => {

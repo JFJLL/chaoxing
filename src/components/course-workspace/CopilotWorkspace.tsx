@@ -22,6 +22,7 @@ import {
   X
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { FilePicker } from "@/components/ui/FilePicker";
 import { Input } from "@/components/ui/Input";
 import { readAiStream, type AiStreamEvent } from "@/lib/ai/streamProtocol";
 
@@ -121,6 +122,7 @@ export function CopilotWorkspace({
   const [pendingFileIds, setPendingFileIds] = useState<string[]>([]);
   const [status, setStatus] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [busy, setBusy] = useState("");
+  const [selectedSkillFileName, setSelectedSkillFileName] = useState("");
   const skillInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -333,6 +335,7 @@ export function CopilotWorkspace({
       const body = await api(`/api/courses/${courseId}/copilot/skills`, { method: "POST", body: formData });
       setSkills((current) => [body.skill, ...current]);
       setStatus({ tone: "success", text: `Skill「${body.skill.name}」已上传，测试后可启用` });
+      setSelectedSkillFileName("");
       if (skillInputRef.current) skillInputRef.current.value = "";
     } catch (error) {
       setStatus({ tone: "error", text: error instanceof Error ? error.message : "Skill 上传失败" });
@@ -463,7 +466,23 @@ export function CopilotWorkspace({
 
           <section className="rounded-2xl border border-slate-100 bg-white p-5">
             <h2 className="font-semibold text-slate-900">课程 Skill</h2><p className="mt-1 text-sm text-slate-500">支持 Markdown 和 ZIP，最大 10MB；上传后先测试，再启用给学生。</p>
-            <form action={uploadSkill} className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-4"><input ref={skillInputRef} name="file" type="file" accept=".md,.zip" required className="min-w-0 flex-1 text-sm" /><Button type="submit" disabled={busy === "skill-upload"}><UploadCloud className="h-4 w-4" />上传 Skill</Button></form>
+            <form action={uploadSkill} className="mt-4 grid gap-3 rounded-2xl border border-[var(--cx-border)] bg-slate-50/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <FilePicker
+                ref={skillInputRef}
+                id="copilot-skill-upload"
+                name="file"
+                accept=".md,.zip"
+                required
+                label="选择 Skill 文件"
+                hint="Markdown 或 ZIP，最大 10MB"
+                selectedFileName={selectedSkillFileName}
+                onChange={(event) => setSelectedSkillFileName(event.target.files?.[0]?.name ?? "")}
+              />
+              <Button type="submit" className="w-full sm:w-auto" disabled={busy === "skill-upload" || !selectedSkillFileName}>
+                {busy === "skill-upload" ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                {busy === "skill-upload" ? "上传中" : "上传 Skill"}
+              </Button>
+            </form>
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               {skills.map((skill) => <article key={skill.id} className="rounded-xl border border-slate-100 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-medium text-slate-900">{skill.name}</h3><p className="mt-1 text-sm text-slate-500">{skill.description}</p></div><span className={`rounded-full px-2.5 py-1 text-xs ${skill.status === "ENABLED" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{skill.status === "ENABLED" ? "已启用" : "待启用"}</span></div>{skill.instructions ? <details className="mt-3"><summary className="cursor-pointer text-xs font-medium text-blue-600">预览完整指令</summary><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-xs text-slate-100">{skill.instructions}</pre></details> : null}<div className="mt-4 flex gap-2"><Button variant="secondary" onClick={() => { setView("chat"); if (!selected) { void createConversation().then((conversation) => conversation && void chooseSkill(skill.id, conversation.id)); } else { void chooseSkill(skill.id, selected.id); } }}><Sparkles className="h-4 w-4" />测试</Button><Button variant="secondary" disabled={busy === `skill-${skill.id}`} onClick={() => void changeSkillStatus(skill)}>{skill.status === "ENABLED" ? "停用" : "启用"}</Button><Button variant="danger" disabled={skill.status !== "DISABLED" || busy === `skill-${skill.id}`} onClick={() => void deleteSkill(skill)}><Trash2 className="h-4 w-4" />删除</Button></div></article>)}
               {!skills.length ? <p className="rounded-xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">还没有 Skill。</p> : null}

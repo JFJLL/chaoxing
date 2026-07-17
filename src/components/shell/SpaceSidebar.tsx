@@ -44,7 +44,7 @@ export function SpaceSidebar({ user, unreadCount = 0 }: { user: SessionUser; unr
 
   return (
     <>
-      <aside className="fixed bottom-0 left-0 top-20 z-20 hidden w-[220px] overflow-hidden bg-[linear-gradient(180deg,var(--cx-sidebar),#111c30)] text-white shadow-xl md:block">
+      <aside className="fixed bottom-0 left-0 top-20 z-20 hidden w-[220px] overflow-hidden bg-[var(--cx-blue)] text-white shadow-xl md:block">
         <div className="border-b border-white/10 p-5">
           <div className="flex items-center gap-3">
             <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/10 text-lg font-semibold shadow-inner">
