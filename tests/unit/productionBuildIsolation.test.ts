@@ -76,4 +76,27 @@ describe("production build isolation", () => {
       .toBe("chunk:build-interrupted");
     expect(readFileSync(join(runtimePath, ".runtime-ready"), "utf8")).toBe("build-interrupted");
   });
+
+  it("removes inactive runtime snapshots while preserving current and active builds", () => {
+    const root = mkdtempSync(join(tmpdir(), "chaoxing-runtime-cleanup-"));
+    temporaryDirectories.push(root);
+    writeBuild(root, "build-current", "current-layout.js");
+
+    const inactiveRuntime = join(root, ".next-runtime-build-inactive");
+    const activeRuntime = join(root, ".next-runtime-build-active");
+    mkdirSync(inactiveRuntime, { recursive: true });
+    mkdirSync(activeRuntime, { recursive: true });
+    writeFileSync(join(inactiveRuntime, ".runtime-active.json"), JSON.stringify({ pid: 999_999_999 }));
+    writeFileSync(join(activeRuntime, ".runtime-active.json"), JSON.stringify({ pid: process.pid }));
+
+    const prepare = spawnSync(process.execPath, [startScript, "--prepare-only"], {
+      cwd: root,
+      encoding: "utf8"
+    });
+
+    expect(prepare.status, prepare.stderr).toBe(0);
+    expect(existsSync(join(root, ".next-runtime-build-current"))).toBe(true);
+    expect(existsSync(activeRuntime)).toBe(true);
+    expect(existsSync(inactiveRuntime)).toBe(false);
+  });
 });
