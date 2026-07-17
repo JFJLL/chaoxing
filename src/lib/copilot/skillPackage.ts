@@ -35,6 +35,18 @@ function validateTextLength(text: string) {
   }
 }
 
+function findSkillRoot(entries: JSZip.JSZipObject[]) {
+  const directRoot = entries.find((entry) => entry.name.toLowerCase() === "skill.md");
+  if (directRoot) return { rootSkill: directRoot, wrapperPrefix: "" };
+
+  const topLevelFolder = entries[0]?.name.split("/")[0];
+  if (!topLevelFolder) return null;
+  const wrapperPrefix = `${topLevelFolder}/`;
+  if (!entries.every((entry) => entry.name.startsWith(wrapperPrefix))) return null;
+  const rootSkill = entries.find((entry) => entry.name.toLowerCase() === `${wrapperPrefix}skill.md`.toLowerCase());
+  return rootSkill ? { rootSkill, wrapperPrefix } : null;
+}
+
 async function parseZip(bytes: Buffer) {
   let zip: JSZip;
   try {
@@ -44,8 +56,9 @@ async function parseZip(bytes: Buffer) {
   }
   const entries = Object.values(zip.files).filter((entry) => !entry.dir && !entry.name.startsWith("__MACOSX/"));
   if (entries.length === 0 || entries.length > MAX_ZIP_FILES) throw new CopilotSkillPackageError("ZIP 最多包含 100 个文件");
-  const rootSkill = entries.find((entry) => entry.name.toLowerCase() === "skill.md");
-  if (!rootSkill) throw new CopilotSkillPackageError("ZIP 根目录必须包含 SKILL.md");
+  const skillRoot = findSkillRoot(entries);
+  if (!skillRoot) throw new CopilotSkillPackageError("ZIP 根目录或唯一顶层文件夹必须包含 SKILL.md");
+  const { rootSkill, wrapperPrefix } = skillRoot;
 
   let uncompressed = 0;
   for (const entry of entries) {
@@ -65,7 +78,8 @@ async function parseZip(bytes: Buffer) {
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     if (entry === rootSkill) continue;
     const text = await entry.async("string");
-    references.push(`\n\n---\n参考文件：${entry.name}\n\n${text}`);
+    const referenceName = wrapperPrefix ? entry.name.slice(wrapperPrefix.length) : entry.name;
+    references.push(`\n\n---\n参考文件：${referenceName}\n\n${text}`);
   }
   const instructions = `${skillText}${references.join("")}`;
   validateTextLength(instructions);

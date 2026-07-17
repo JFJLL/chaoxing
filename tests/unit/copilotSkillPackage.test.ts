@@ -28,6 +28,29 @@ describe("Copilot Skill package", () => {
     expect(parsed.instructions).toContain("先判断背景");
   });
 
+  it("parses a ZIP wrapped in one top-level folder", async () => {
+    const zip = new JSZip();
+    zip.file("熊海峰策划六步流程/SKILL.md", skill);
+    zip.file("熊海峰策划六步流程/案例_青岛国际啤酒节.md", "先分析活动目标，再设计执行方案。");
+    const bytes = Uint8Array.from(await zip.generateAsync({ type: "uint8array" }));
+
+    const parsed = await parseCopilotSkillPackage(new File([bytes.buffer], "熊海峰策划六步流程.zip", { type: "application/zip" }));
+
+    expect(parsed.name).toBe("案例分析");
+    expect(parsed.instructions).toContain("参考文件：案例_青岛国际啤酒节.md");
+    expect(parsed.instructions).not.toContain("参考文件：熊海峰策划六步流程/");
+  });
+
+  it("rejects a wrapped Skill whose files span multiple top-level folders", async () => {
+    const zip = new JSZip();
+    zip.file("skill-package/SKILL.md", skill);
+    zip.file("other-folder/reference.md", "不应跨目录合并。");
+    const bytes = Uint8Array.from(await zip.generateAsync({ type: "uint8array" }));
+
+    await expect(parseCopilotSkillPackage(new File([bytes.buffer], "mixed.zip", { type: "application/zip" })))
+      .rejects.toThrow("ZIP 根目录或唯一顶层文件夹必须包含 SKILL.md");
+  });
+
   it("rejects executable files inside ZIP", async () => {
     const zip = new JSZip();
     zip.file("SKILL.md", skill);
