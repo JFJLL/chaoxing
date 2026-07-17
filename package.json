@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack --hostname 127.0.0.1",
     "build": "next build",
-    "start": "next start --hostname 127.0.0.1",
+    "start": "node scripts/start.mjs",
     "clean": "node scripts/clean.mjs",
     "verify": "node scripts/verify.mjs",
     "lint": "next lint",

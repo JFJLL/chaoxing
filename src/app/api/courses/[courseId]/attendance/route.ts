@@ -14,14 +14,19 @@ const createSchema = z.object({
 export async function GET(_request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
-  const course = await requireCourseAccess(user, courseId);
+  let course;
+  try {
+    course = await requireCourseAccess(user, courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权访问课程" }, { status: 403 });
+  }
   const canManage = user.role === "ADMIN" || course.ownerId === user.id;
   const sessions = await db.attendanceSession.findMany({
     where: { courseId, ...(canManage ? {} : { status: { in: ["ACTIVE", "ENDED"] } }) },
     include: { records: canManage ? { include: { user: { select: { id: true, name: true } } } } : { where: { userId: user.id } } },
     orderBy: { createdAt: "desc" }
   });
-  return NextResponse.json({ sessions });
+  return NextResponse.json({ sessions, canManage });
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {

@@ -10,7 +10,24 @@ import { Dialog } from "@/components/ui/Dialog";
 
 type StudentRecord = { userId: string; name: string; status: string; signedAt: string | null };
 type AttendanceSessionDto = { id: string; title: string; status: string; startsAt: string | null; endsAt: string | null; records: StudentRecord[]; myStatus?: string | null };
+type AttendanceApiSession = Omit<AttendanceSessionDto, "records"> & {
+  records: Array<Omit<StudentRecord, "name"> & { user?: { name?: string | null } | null }>;
+};
 const statusLabel: Record<string, string> = { PRESENT: "已签到", LEAVE: "请假", ABSENT: "缺勤" };
+
+function normalizeAttendanceSession(session: AttendanceApiSession): AttendanceSessionDto {
+  const expired = session.status === "ACTIVE" && session.endsAt && new Date(session.endsAt) <= new Date();
+  return {
+    ...session,
+    status: expired ? "ENDED" : session.status,
+    records: session.records.map((record) => ({
+      userId: record.userId,
+      name: record.user?.name ?? "学生",
+      status: record.status,
+      signedAt: record.signedAt
+    }))
+  };
+}
 
 export function AttendanceClient({ courseId, canManage, sessions, students }: { courseId: string; canManage: boolean; sessions: AttendanceSessionDto[]; students: Array<{ id: string; name: string }> }) {
   const router = useRouter();
@@ -29,17 +46,54 @@ export function AttendanceClient({ courseId, canManage, sessions, students }: { 
   const endedCount = sessionItems.filter((session) => session.status === "ENDED").length;
 
   useEffect(() => {
-    setSessionItems((current) => [
-      ...sessions,
-      ...current.filter((session) => !sessions.some((serverSession) => serverSession.id === session.id))
-    ]);
-  }, [sessions]);
+    setSessionItems(sessions);
+    setSelectedSessionId((current) => sessions.some((session) => session.id === current)
+      ? current
+      : sessions.find((session) => session.status === "ACTIVE")?.id ?? "");
+  }, [courseId, sessions]);
 
   useEffect(() => {
     if (!canManage || activeCount === 0) return;
-    const timer = window.setInterval(() => router.refresh(), 3_000);
-    return () => window.clearInterval(timer);
-  }, [activeCount, canManage, router]);
+    let cancelled = false;
+    let stopped = false;
+    let inFlight = false;
+    const controller = new AbortController();
+
+    async function refreshSessions() {
+      if (cancelled || stopped || inFlight) return;
+      inFlight = true;
+      try {
+        const response = await fetch(`/api/courses/${courseId}/attendance`, {
+          cache: "no-store",
+          signal: controller.signal
+        });
+        const body = await response.json().catch(() => null) as { canManage?: boolean; error?: string; sessions?: AttendanceApiSession[] } | null;
+        if (response.status === 401 || response.status === 403 || body?.canManage === false) {
+          stopped = true;
+          setError(body?.error ?? "当前账号已无权管理该课程，请刷新页面");
+          return;
+        }
+        if (!response.ok || !body?.sessions || cancelled) return;
+        const nextSessions = body.sessions.map(normalizeAttendanceSession);
+        setSessionItems(nextSessions);
+        setSelectedSessionId((current) => nextSessions.some((session) => session.id === current)
+          ? current
+          : nextSessions.find((session) => session.status === "ACTIVE")?.id ?? "");
+      } catch {
+        // Keep the current roster on transient polling failures.
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    void refreshSessions();
+    const timer = window.setInterval(() => void refreshSessions(), 3_000);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearInterval(timer);
+    };
+  }, [activeCount, canManage, courseId]);
 
   async function request(url: string, init: RequestInit, successText = "操作成功") {
     setBusy(true); setError(""); setSuccess("");
@@ -56,22 +110,49 @@ export function AttendanceClient({ courseId, canManage, sessions, students }: { 
   useEffect(() => {
     if (!canManage || !selectedSessionId || selectedSession?.status !== "ACTIVE") { setCredential(null); setQrDataUrl(""); return; }
     let cancelled = false;
+    let stopped = false;
+    let inFlight = false;
+    const controller = new AbortController();
     async function refreshCredential() {
-      const response = await fetch(`/api/courses/${courseId}/attendance/${selectedSessionId}/token`);
-      const body = await response.json().catch(() => null) as { token?: string; code?: string; expiresAt?: string } | null;
-      if (!response.ok || !body?.token || !body.code || !body.expiresAt || cancelled) {
-        if (response.status === 409 && !cancelled) { setCredential(null); setQrDataUrl(""); router.refresh(); }
-        return;
+      if (cancelled || stopped || inFlight) return;
+      inFlight = true;
+      try {
+        const response = await fetch(`/api/courses/${courseId}/attendance/${selectedSessionId}/token`, {
+          cache: "no-store",
+          signal: controller.signal
+        });
+        const body = await response.json().catch(() => null) as { error?: string; token?: string; code?: string; expiresAt?: string } | null;
+        if (cancelled) return;
+        if (response.status === 401 || response.status === 403) {
+          stopped = true;
+          setCredential(null);
+          setQrDataUrl("");
+          setError(body?.error ?? "当前账号已无权管理该课程，请刷新页面");
+          return;
+        }
+        if (response.status === 409) {
+          stopped = true;
+          setCredential(null);
+          setQrDataUrl("");
+          setSessionItems((current) => current.map((session) => session.id === selectedSessionId ? { ...session, status: "ENDED" } : session));
+          return;
+        }
+        if (!response.ok || !body?.token || !body.code || !body.expiresAt) return;
+        const next = { token: body.token, code: body.code, expiresAt: body.expiresAt };
+        setCredential(next);
+        const url = `${window.location.origin}/space/courses/${courseId}/attendance?sessionId=${encodeURIComponent(selectedSessionId)}&credential=${encodeURIComponent(next.token)}`;
+        const { default: QRCode } = await import("qrcode");
+        const dataUrl = await QRCode.toDataURL(url, { width: 320, margin: 2, errorCorrectionLevel: "M" });
+        if (!cancelled && !stopped) setQrDataUrl(dataUrl);
+      } catch {
+        // Keep the current credential and retry after a transient network failure.
+      } finally {
+        inFlight = false;
       }
-      const next = { token: body.token, code: body.code, expiresAt: body.expiresAt };
-      setCredential(next);
-      const url = `${window.location.origin}/space/courses/${courseId}/attendance?sessionId=${encodeURIComponent(selectedSessionId)}&credential=${encodeURIComponent(next.token)}`;
-      const { default: QRCode } = await import("qrcode");
-      setQrDataUrl(await QRCode.toDataURL(url, { width: 320, margin: 2, errorCorrectionLevel: "M" }));
     }
     void refreshCredential();
     const timer = window.setInterval(() => void refreshCredential(), 10_000);
-    return () => { cancelled = true; window.clearInterval(timer); };
+    return () => { cancelled = true; controller.abort(); window.clearInterval(timer); };
   }, [canManage, courseId, selectedSession?.status, selectedSessionId]);
 
   useEffect(() => {

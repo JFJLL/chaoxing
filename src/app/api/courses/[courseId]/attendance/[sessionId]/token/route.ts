@@ -9,7 +9,11 @@ type RouteContext = { params: Promise<{ courseId: string; sessionId: string }> }
 export async function GET(_request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId, sessionId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  try {
+    await requireCourseOwner(user, courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
+  }
   const session = await db.attendanceSession.findFirst({ where: { id: sessionId, courseId, status: "ACTIVE" } });
   if (!session || (session.endsAt && session.endsAt <= new Date())) return NextResponse.json({ error: "签到已结束" }, { status: 409 });
   const secret = process.env.SESSION_SECRET;

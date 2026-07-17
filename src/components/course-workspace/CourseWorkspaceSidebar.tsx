@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { clsx } from "clsx";
 import { ImagePlus } from "lucide-react";
 import { courseWorkspaceNav, getCourseWorkspaceNavParent } from "@/lib/courseWorkspace/nav";
@@ -40,9 +39,8 @@ function CourseNavLink({
   const label = getNavigationLabel(item, canManage);
 
   return (
-    <Link
+    <a
       href={`/space/courses/${courseId}/${item.hrefSegment}`}
-      prefetch={item.id === "ai-workbench"}
       aria-current={active ? "page" : undefined}
       className={clsx(
         "cx-focus-ring cx-tactile flex h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-sm lg:h-11 lg:w-full lg:gap-3",
@@ -62,7 +60,7 @@ function CourseNavLink({
         <Icon className="h-4 w-4" aria-hidden="true" />
       </span>
       <span>{label}</span>
-    </Link>
+    </a>
   );
 }
 

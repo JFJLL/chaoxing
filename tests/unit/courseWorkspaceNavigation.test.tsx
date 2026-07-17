@@ -2,6 +2,11 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation", () => ({ usePathname: () => "/space" }));
+vi.mock("next/link", () => ({
+  default: ({ children, prefetch: _prefetch, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { prefetch?: boolean }) => (
+    <a {...props} href={href} data-next-link="true">{children}</a>
+  )
+}));
 import { CourseWorkspaceSidebar } from "../../src/components/course-workspace/CourseWorkspaceSidebar";
 import { PrepWorkflowNavigation } from "../../src/components/course-workspace/PrepWorkflowNavigation";
 import { getCourseWorkspaceNavParent } from "../../src/lib/courseWorkspace/nav";
@@ -32,12 +37,26 @@ describe("course workspace navigation", () => {
       />
     );
 
-    expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/space\/courses\/course-1\/ai-workbench"/);
+    expect(html).toMatch(/<a(?=[^>]*href="\/space\/courses\/course-1\/ai-workbench")(?=[^>]*aria-current="page")[^>]*>/);
     expect(html.match(/aria-current="page"/g)).toHaveLength(1);
     expect(html).toContain('aria-label="课程工作区导航"');
     expect(html).toContain("overflow-x-auto");
     expect(html).not.toContain("课程门户");
     expect(html).not.toContain(">链接<");
+  });
+
+  it("uses document navigation for primary course sections", () => {
+    const html = renderToStaticMarkup(
+      <CourseWorkspaceSidebar
+        course={{ id: "course-1", title: "测试课程" }}
+        activeTab="activities"
+        canManage
+      />
+    );
+
+    expect(html).not.toContain('data-next-link="true"');
+    expect(html).toContain('href="/space/courses/course-1/after-class"');
+    expect(html).toContain('href="/space/courses/course-1/analytics"');
   });
 
   it("uses task steps instead of a file-path breadcrumb for prep workflows", () => {

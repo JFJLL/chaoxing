@@ -17,4 +17,6 @@ tsconfig.tsbuildinfo
 outputs/
 .uploads/
 .next/
+.next-dev/
+.next-runtime-*/
 product-audit/
