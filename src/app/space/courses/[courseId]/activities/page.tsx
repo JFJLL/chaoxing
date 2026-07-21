@@ -8,11 +8,6 @@ import Link from "next/link";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
-const activities = [
-  { title: "Copilot", description: "选择教师开放的 Skill，并结合课程云盘文件完成提问。", icon: Sparkles, hrefSegment: "activities/copilot" },
-  { title: "签到", description: "教师展示动态二维码，学生扫码或输入短码完成签到。", icon: CheckCircle2, hrefSegment: "attendance" }
-];
-
 const teacherTutorActivity = {
   title: "AI助教",
   description: "基于当前课程内容回答课堂问题，并定位到可核对的资料来源。",
@@ -25,20 +20,24 @@ export default async function ActivitiesPage({ params }: PageProps) {
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
   const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const activities = [
+    { title: course.copilotName, description: "选择教师开放的 Skill，并结合课程云盘文件完成提问。", icon: Sparkles, hrefSegment: "activities/copilot" },
+    { title: "签到", description: "教师展示动态二维码，学生扫码或输入短码完成签到。", icon: CheckCircle2, hrefSegment: "attendance" }
+  ];
   const visibleActivities = canManage ? [teacherTutorActivity, ...activities] : activities;
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="activities">
       <CourseModulePanel
         title="上课"
-        description={canManage ? "使用 Copilot、AI 助教和动态二维码组织课堂。" : "使用课程 Copilot，并参加课堂签到。"}
+        description={canManage ? `使用${course.copilotName}、AI 助教和动态二维码组织课堂。` : `使用课程${course.copilotName}，并参加课堂签到。`}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleActivities.map((activity) => {
             const Icon = activity.icon;
             return (
               <Link
-                key={activity.title}
+                key={activity.hrefSegment}
                 href={`/space/courses/${course.id}/${activity.hrefSegment}`}
                 className={courseModuleLinkCardClassName}
               >

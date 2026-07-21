@@ -84,6 +84,7 @@ model Course {
   folder             CourseFolder?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
   copilotFolderId    String?
   copilotFolder      DriveFile?             @relation("CourseCopilotFolder", fields: [copilotFolderId], references: [id], onDelete: SetNull)
+  copilotName        String                 @default("Copilot")
   enrollments        CourseEnrollment[]
   chapters           Chapter[]
   resources          Resource[]

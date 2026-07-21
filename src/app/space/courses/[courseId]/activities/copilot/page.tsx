@@ -39,12 +39,13 @@ export default async function CopilotPage({ params }: PageProps) {
   return (
     <FanyaCourseShell user={user} course={course} activeTab="activities">
       <CourseModulePanel
-        title="Copilot"
-        description={canManage ? "测试课程 Copilot，管理 Skill 和课程云盘文件夹。" : "选择 Skill 和课程文件，让 Copilot 帮你完成学习任务。"}
+        title={course.copilotName}
+        description={canManage ? `测试${course.copilotName}，管理名称、Skill 和课程云盘文件夹。` : `选择 Skill 和课程文件，让${course.copilotName}帮你完成学习任务。`}
       >
         <CopilotWorkspace
           courseId={courseId}
           canManage={canManage}
+          initialCopilotName={course.copilotName}
           initialFolderId={course.copilotFolderId}
           initialConversations={conversationDtos}
           initialSkills={skills.map((skill) => ({ ...skill, createdAt: skill.createdAt.toISOString(), updatedAt: skill.updatedAt.toISOString() }))}

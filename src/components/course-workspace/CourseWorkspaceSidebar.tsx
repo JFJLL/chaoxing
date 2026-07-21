@@ -52,9 +52,9 @@ function CourseNavLink({
       <span
         className={clsx(
           "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
-          item.id === "ai-workbench"
+          active
             ? "bg-gradient-to-br from-[#5669c9] to-[#8b6de0] text-white shadow-sm"
-            : active ? "bg-white text-[var(--cx-blue)] shadow-sm" : "bg-slate-100 text-slate-500"
+            : "bg-slate-100 text-slate-500"
         )}
       >
         <Icon className="h-4 w-4" aria-hidden="true" />

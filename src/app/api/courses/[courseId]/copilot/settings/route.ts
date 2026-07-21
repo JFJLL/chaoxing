@@ -6,7 +6,10 @@ import { assertOwnerFolder, listOwnerDriveFolders } from "@/lib/copilot/files";
 import { getCopilotAnalytics } from "@/lib/courseWorkspace/copilot";
 
 type RouteContext = { params: Promise<{ courseId: string }> };
-const settingsSchema = z.object({ folderId: z.string().min(1).max(160).nullable() }).strict();
+const settingsSchema = z.object({
+  folderId: z.string().min(1).max(160).nullable().optional(),
+  copilotName: z.string().trim().min(1).max(40).optional()
+}).strict().refine((value) => Object.keys(value).length > 0, "没有可更新的设置");
 
 export async function GET(_request: Request, context: RouteContext) {
   const user = await requireUser();
@@ -14,7 +17,7 @@ export async function GET(_request: Request, context: RouteContext) {
   try {
     const course = await requireCourseOwner(user, courseId);
     const [folders, analytics] = await Promise.all([listOwnerDriveFolders(user), getCopilotAnalytics(user, courseId)]);
-    return Response.json({ folderId: course.copilotFolderId, folders, analytics });
+    return Response.json({ folderId: course.copilotFolderId, copilotName: course.copilotName, folders, analytics });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Copilot 设置加载失败" }, { status: 403 });
   }
@@ -26,10 +29,16 @@ export async function PUT(request: Request, context: RouteContext) {
   try {
     await requireCourseOwner(user, courseId);
     const parsed = settingsSchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) return Response.json({ error: "请选择有效的云盘文件夹" }, { status: 400 });
+    if (!parsed.success) return Response.json({ error: "Copilot 设置无效：名称为 1–40 个字符" }, { status: 400 });
     if (parsed.data.folderId) await assertOwnerFolder(user, parsed.data.folderId);
-    const course = await db.course.update({ where: { id: courseId }, data: { copilotFolderId: parsed.data.folderId } });
-    return Response.json({ folderId: course.copilotFolderId });
+    const course = await db.course.update({
+      where: { id: courseId },
+      data: {
+        copilotFolderId: parsed.data.folderId,
+        copilotName: parsed.data.copilotName
+      }
+    });
+    return Response.json({ folderId: course.copilotFolderId, copilotName: course.copilotName });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Copilot 设置更新失败" }, { status: 403 });
   }

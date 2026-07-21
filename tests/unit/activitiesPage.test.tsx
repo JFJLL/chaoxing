@@ -19,7 +19,7 @@ import ActivitiesPage from "../../src/app/space/courses/[courseId]/activities/pa
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
-const course = { id: "course-1", title: "测试课程", ownerId: "teacher-1", status: "ACTIVE", chapters: [] };
+const course = { id: "course-1", title: "测试课程", ownerId: "teacher-1", copilotName: "课程小助手", status: "ACTIVE", chapters: [] };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -35,7 +35,7 @@ describe("ActivitiesPage", () => {
 
     expect(html).toContain("AI助教");
     expect(html).toContain('href="/space/courses/course-1/activities/tutor"');
-    expect(html).toContain("Copilot");
+    expect(html).toContain("课程小助手");
     expect(html).toContain('href="/space/courses/course-1/activities/copilot"');
     expect(html).not.toContain("AI陪练");
     expect(html).toContain("签到");
@@ -50,7 +50,7 @@ describe("ActivitiesPage", () => {
     const html = renderToStaticMarkup(await ActivitiesPage({ params: Promise.resolve({ courseId: "course-1" }) }));
 
     expect(html).not.toContain('href="/space/courses/course-1/activities/tutor"');
-    expect(html).toContain("Copilot");
+    expect(html).toContain("课程小助手");
     expect(html).toContain('href="/space/courses/course-1/activities/copilot"');
     expect(html).not.toContain("AI陪练");
     expect(html).toContain("签到");

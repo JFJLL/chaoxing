@@ -12,6 +12,7 @@ import { PrepWorkflowNavigation } from "../../src/components/course-workspace/Pr
 import { getCourseWorkspaceNavParent } from "../../src/lib/courseWorkspace/nav";
 import { UserMenu } from "../../src/components/shell/UserMenu";
 import { SpaceSidebar } from "../../src/components/shell/SpaceSidebar";
+import { SpaceHeader } from "../../src/components/shell/SpaceHeader";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
@@ -57,6 +58,18 @@ describe("course workspace navigation", () => {
     expect(html).not.toContain('data-next-link="true"');
     expect(html).toContain('href="/space/courses/course-1/after-class"');
     expect(html).toContain('href="/space/courses/course-1/analytics"');
+    expect(html.match(/from-\[#5669c9\] to-\[#8b6de0\] text-white shadow-sm/g)).toHaveLength(1);
+  });
+
+  it("removes the invite-code shortcut from both role variants", () => {
+    for (const role of ["TEACHER", "STUDENT"] as const) {
+      const html = renderToStaticMarkup(
+        <SpaceHeader user={{ id: `${role.toLowerCase()}-1`, name: "测试用户", role, institutionId: "institution-1" }} institutionName="测试学校" />
+      );
+      expect(html).toContain("资源发现");
+      expect(html).not.toContain("输入邀请码");
+      expect(html).not.toContain('action="/api/invite"');
+    }
   });
 
   it("uses task steps instead of a file-path breadcrumb for prep workflows", () => {

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Bot,
   Check,
@@ -99,6 +100,7 @@ function errorMessage(body: unknown, fallback: string) {
 export function CopilotWorkspace({
   courseId,
   canManage,
+  initialCopilotName,
   initialFolderId,
   initialConversations,
   initialSkills,
@@ -108,6 +110,7 @@ export function CopilotWorkspace({
 }: {
   courseId: string;
   canManage: boolean;
+  initialCopilotName: string;
   initialFolderId: string | null;
   initialConversations: ConversationDto[];
   initialSkills: SkillDto[];
@@ -115,6 +118,7 @@ export function CopilotWorkspace({
   initialFolders: FolderDto[];
   initialAnalytics: AnalyticsDto;
 }) {
+  const router = useRouter();
   const [view, setView] = useState<"chat" | "settings">("chat");
   const [conversations, setConversations] = useState(initialConversations);
   const [selectedId, setSelectedId] = useState(initialConversations[0]?.id ?? null);
@@ -122,6 +126,8 @@ export function CopilotWorkspace({
   const [files, setFiles] = useState(initialFiles);
   const [folders, setFolders] = useState(initialFolders);
   const [folderId, setFolderId] = useState(initialFolderId ?? "");
+  const [copilotName, setCopilotName] = useState(initialCopilotName);
+  const [copilotNameDraft, setCopilotNameDraft] = useState(initialCopilotName);
   const [draft, setDraft] = useState("");
   const [streamText, setStreamText] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -226,6 +232,11 @@ export function CopilotWorkspace({
   async function chooseSkill(skillId: string, conversationId?: string) {
     const skill = skills.find((item) => item.id === skillId);
     await updateConversation({ skillId: skillId || null }, skill ? `已切换为「${skill.name}」，仅影响后续回复` : "已取消 Skill，仅影响后续回复", conversationId);
+  }
+
+  async function chooseSkillFromToolbar(skillId: string) {
+    const conversation = selected ?? await createConversation();
+    if (conversation) await chooseSkill(skillId, conversation.id);
   }
 
   async function openFilePicker() {
@@ -375,6 +386,28 @@ export function CopilotWorkspace({
     }
   }
 
+  async function saveCopilotName() {
+    const name = copilotNameDraft.trim();
+    if (!name || name === copilotName) return;
+    setBusy("copilot-name");
+    setStatus(null);
+    try {
+      const body = await api(`/api/courses/${courseId}/copilot/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ copilotName: name })
+      });
+      setCopilotName(body.copilotName);
+      setCopilotNameDraft(body.copilotName);
+      setStatus({ tone: "success", text: `名称已修改为「${body.copilotName}」，学生端将同步显示` });
+      router.refresh();
+    } catch (error) {
+      setStatus({ tone: "error", text: error instanceof Error ? error.message : "Copilot 名称保存失败" });
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function createFolder(formData: FormData) {
     const name = String(formData.get("name") || "").trim();
     if (!name) return;
@@ -476,7 +509,7 @@ export function CopilotWorkspace({
               <div className="flex flex-wrap items-center gap-3">
                 <label className="relative">
                   <span className="sr-only">选择 Skill</span>
-                  <select value={selected?.activeSkill?.id ?? ""} onChange={(event) => void chooseSkill(event.target.value)} disabled={!selected || streaming || busy === "context"} className="h-10 appearance-none rounded-xl border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-700 outline-none focus:border-blue-400">
+                  <select value={selected?.activeSkill?.id ?? ""} onChange={(event) => void chooseSkillFromToolbar(event.target.value)} disabled={streaming || busy === "context" || busy === "conversation"} className="h-10 appearance-none rounded-xl border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-700 outline-none focus:border-blue-400">
                     <option value="">未选择 Skill</option>
                     {selectableSkills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}{canManage && skill.status !== "ENABLED" ? "（未启用）" : ""}</option>)}
                   </select>
@@ -529,7 +562,7 @@ export function CopilotWorkspace({
                   </div>
                 ) : null}
                 {streaming ? <CopilotAssistantReply content={streamText} pending /> : null}
-                {!selected?.messages.length && !pendingUserMessage && !streaming ? <div className="mx-auto flex min-h-64 max-w-md flex-col items-center justify-center text-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50"><Bot className="h-6 w-6 text-blue-600" /></span><h2 className="mt-4 font-semibold text-slate-900">开始使用课程 Copilot</h2><p className="mt-2 text-sm leading-6 text-slate-500">直接提问即可开始；需要特定方法时选择 Skill，需要结合课程材料时添加文件。</p></div> : null}
+                {!selected?.messages.length && !pendingUserMessage && !streaming ? <div className="mx-auto flex min-h-64 max-w-md flex-col items-center justify-center text-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50"><Bot className="h-6 w-6 text-blue-600" /></span><h2 className="mt-4 font-semibold text-slate-900">开始使用{copilotName}</h2><p className="mt-2 text-sm leading-6 text-slate-500">直接提问即可开始；需要特定方法时选择 Skill，需要结合课程材料时添加文件。</p></div> : null}
               </div>
             </div>
 
@@ -556,6 +589,17 @@ export function CopilotWorkspace({
         </div>
       ) : (
         <div className="space-y-6">
+          <section className="rounded-2xl border border-slate-100 bg-white p-5">
+            <h2 className="font-semibold text-slate-900">Copilot 名称</h2>
+            <p className="mt-1 text-sm text-slate-500">学生会在上课入口和对话页看到这个名称。</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+              <Input aria-label="Copilot 名称" value={copilotNameDraft} maxLength={40} onChange={(event) => setCopilotNameDraft(event.target.value)} />
+              <Button onClick={() => void saveCopilotName()} disabled={busy === "copilot-name" || !copilotNameDraft.trim() || copilotNameDraft.trim() === copilotName}>
+                {busy === "copilot-name" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}保存名称
+              </Button>
+            </div>
+          </section>
+
           <section className="rounded-2xl border border-slate-100 bg-white p-5">
             <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="font-semibold text-slate-900">课程云盘文件夹</h2><p className="mt-1 text-sm text-slate-500">文件夹及全部子目录会实时对课程学生开放只读访问。</p></div><Link href="/space/drive" className="inline-flex items-center gap-2 text-sm font-medium text-blue-600"><FolderOpen className="h-4 w-4" />前往云盘管理</Link></div>
             <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">

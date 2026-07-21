@@ -1,7 +1,5 @@
 import { Search } from "lucide-react";
 import type { SessionUser } from "@/lib/auth";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
 import { UserMenu } from "@/components/shell/UserMenu";
 
 type SpaceHeaderProps = {
@@ -25,12 +23,6 @@ export function SpaceHeader({ user, institutionName }: SpaceHeaderProps) {
           <span className="text-sm text-slate-500">资源发现</span>
         </div>
       </div>
-      <form action="/api/invite" method="post" className="mr-4 hidden items-center gap-2 md:flex">
-        <Input name="code" placeholder="输入邀请码" className="w-36 rounded-full" />
-        <Button type="submit" variant="secondary" className="rounded-full px-4">
-          加入
-        </Button>
-      </form>
       <UserMenu user={user} />
     </header>
   );

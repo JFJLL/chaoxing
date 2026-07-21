@@ -1,6 +1,10 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { vi } from "vitest";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
 import { CopilotWorkspace } from "@/components/course-workspace/CopilotWorkspace";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
@@ -28,7 +32,7 @@ const skill = {
 
 describe("CopilotWorkspace", () => {
   it("keeps teacher settings out of the student chat", () => {
-    const html = renderToStaticMarkup(<CopilotWorkspace courseId="course-1" canManage={false} initialFolderId={null} initialConversations={[conversation]} initialSkills={[skill]} initialFiles={[]} initialFolders={[]} initialAnalytics={null} />);
+    const html = renderToStaticMarkup(<CopilotWorkspace courseId="course-1" canManage={false} initialCopilotName="课程小助手" initialFolderId={null} initialConversations={[conversation]} initialSkills={[skill]} initialFiles={[]} initialFolders={[]} initialAnalytics={null} />);
 
     expect(html).toContain("未选择 Skill");
     expect(html).toContain("@文件");
@@ -37,10 +41,18 @@ describe("CopilotWorkspace", () => {
     expect(html).toContain('data-copilot-scroll-region="true"');
     expect(html).not.toContain("Copilot 设置");
     expect(html).not.toContain("教师隐藏指令");
+    expect(html).toContain("开始使用课程小助手");
+  });
+
+  it("lets a student choose a Skill before a conversation exists", () => {
+    const html = renderToStaticMarkup(<CopilotWorkspace courseId="course-1" canManage={false} initialCopilotName="课程小助手" initialFolderId={null} initialConversations={[]} initialSkills={[skill]} initialFiles={[]} initialFolders={[]} initialAnalytics={null} />);
+
+    expect(html).toMatch(/<select(?![^>]*disabled)[^>]*>/);
+    expect(html).toContain("案例分析");
   });
 
   it("offers test and settings modes to course managers", () => {
-    const html = renderToStaticMarkup(<CopilotWorkspace courseId="course-1" canManage initialFolderId={null} initialConversations={[conversation]} initialSkills={[skill]} initialFiles={[]} initialFolders={[]} initialAnalytics={{ calls: 0, activeUsers: 0, success: 0, failed: 0, skills: [] }} />);
+    const html = renderToStaticMarkup(<CopilotWorkspace courseId="course-1" canManage initialCopilotName="课程小助手" initialFolderId={null} initialConversations={[conversation]} initialSkills={[skill]} initialFiles={[]} initialFolders={[]} initialAnalytics={{ calls: 0, activeUsers: 0, success: 0, failed: 0, skills: [] }} />);
 
     expect(html).toContain("测试 Copilot");
     expect(html).toContain("Copilot 设置");

@@ -29,6 +29,22 @@ export function driveContentHash(bytes: Buffer) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+export function copilotExtractionCanBeSelected(status: string) {
+  return status === "READY" || status === "PENDING" || status === "FAILED";
+}
+
+export function copilotExtractionNeedsIndexing(status: string) {
+  return status === "PENDING" || status === "FAILED";
+}
+
+export function copilotExtractionErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "文档解析失败";
+  if (message.includes("SignatureDoesNotMatch")) {
+    return "OSS 文件读取验证失败，请重新选择文件重试；若仍失败，请检查 OSS 配置";
+  }
+  return message.slice(0, 500);
+}
+
 export async function storeDriveUpload(input: {
   ownerId: string;
   parentId: string | null;
@@ -113,7 +129,7 @@ export async function indexDriveFile(fileId: string) {
       data: {
         extractionStatus: "FAILED",
         extractedText: null,
-        extractionError: error instanceof Error ? error.message.slice(0, 500) : "文档解析失败",
+        extractionError: copilotExtractionErrorMessage(error),
         extractedAt: new Date()
       }
     });
@@ -198,7 +214,7 @@ export async function listCourseCopilotFiles(user: SessionUser, courseId: string
         path: filePath(rowsById, row, course.copilotFolderId!),
         contextKind,
         contextReady: row.extractionStatus === "READY" && supported,
-        contextSelectable: supported && (row.extractionStatus === "READY" || row.extractionStatus === "PENDING"),
+        contextSelectable: supported && copilotExtractionCanBeSelected(row.extractionStatus),
         extractionError: imageTooLarge ? "图片超过单张 10MB 限制" : row.extractionError
       };
     })
@@ -217,11 +233,11 @@ export async function assertCourseCopilotFiles(user: SessionUser, courseId: stri
     const file = files.find((item) => item && !item.contextSelectable)!;
     throw new Error(file.extractionError || "文件当前不可用");
   }
-  const pendingIds = files.filter((file) => file!.extractionStatus === "PENDING").map((file) => file!.id);
-  for (let offset = 0; offset < pendingIds.length; offset += 3) {
-    await Promise.allSettled(pendingIds.slice(offset, offset + 3).map((fileId) => indexDriveFile(fileId)));
+  const indexingIds = files.filter((file) => copilotExtractionNeedsIndexing(file!.extractionStatus)).map((file) => file!.id);
+  for (let offset = 0; offset < indexingIds.length; offset += 3) {
+    await Promise.allSettled(indexingIds.slice(offset, offset + 3).map((fileId) => indexDriveFile(fileId)));
   }
-  if (pendingIds.length) {
+  if (indexingIds.length) {
     allowed = await listCourseCopilotFiles(user, courseId);
     byId = new Map(allowed.map((file) => [file.id, file]));
     files = fileIds.map((id) => byId.get(id));
