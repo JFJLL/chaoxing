@@ -114,8 +114,12 @@ describe("course workspace navigation", () => {
     );
 
     expect(courseHtml).toContain('href="https://zovii.studio/"');
-    expect(courseHtml).toContain("zovii智能画布");
+    expect(courseHtml).toContain("Zovii 智能画布");
+    expect(courseHtml).toContain("首次使用需登录");
+    expect(courseHtml).toMatch(/<span class="[^"]*lg:hidden[^"]*">首次登录<\/span>/);
+    expect(courseHtml).toContain('aria-label="打开 Zovii 智能画布（首次使用需登录）"');
     expect(courseHtml).toContain('target="_blank"');
+    expect(courseHtml).toContain('rel="noopener noreferrer"');
     expect(courseHtml).toContain("bg-slate-100 text-slate-500");
     expect(courseHtml).not.toContain("lucide-external-link");
     expect(courseHtml).not.toContain("from-fuchsia-500");

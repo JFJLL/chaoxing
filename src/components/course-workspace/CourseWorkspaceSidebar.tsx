@@ -90,12 +90,20 @@ export function CourseWorkspaceSidebar({ course, activeTab, canManage }: Props) 
           href="https://zovii.studio/"
           target="_blank"
           rel="noopener noreferrer"
-          className="cx-focus-ring cx-tactile flex h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-sm font-normal text-slate-600 hover:bg-slate-50 hover:text-slate-900 lg:h-11 lg:w-full lg:gap-3"
+          aria-label="打开 Zovii 智能画布（首次使用需登录）"
+          title="首次使用需登录，后续由 Zovii 保持登录状态"
+          className="cx-focus-ring cx-tactile flex h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-sm font-normal text-slate-600 hover:bg-slate-50 hover:text-slate-900 lg:h-14 lg:w-full lg:gap-3"
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
             <ImagePlus className="h-4 w-4" aria-hidden="true" />
           </span>
-          <span>zovii智能画布</span>
+          <span className="min-w-0 text-left">
+            <span className="block whitespace-nowrap">
+              Zovii 智能画布
+              <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-400 lg:hidden">首次登录</span>
+            </span>
+            <span className="hidden text-[11px] leading-4 text-slate-400 lg:block">首次使用需登录</span>
+          </span>
         </a>
       </nav>
     </aside>
