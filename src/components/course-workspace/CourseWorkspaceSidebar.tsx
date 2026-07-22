@@ -1,12 +1,14 @@
 import { clsx } from "clsx";
-import { ImagePlus } from "lucide-react";
 import { courseWorkspaceNav, getCourseWorkspaceNavParent } from "@/lib/courseWorkspace/nav";
 import type { CourseWorkspaceTab } from "@/types/courseWorkspace";
+import { ZoviiCanvasLauncher } from "@/components/course-workspace/ZoviiCanvasLauncher";
+import type { ZoviiDemoCredential } from "@/lib/zoviiDemoCredentials";
 
 type Props = {
   course: { id: string; title: string; cover?: string | null };
   activeTab: CourseWorkspaceTab;
   canManage: boolean;
+  zoviiCredential?: ZoviiDemoCredential | null;
 };
 
 type CourseNavItem = (typeof courseWorkspaceNav)[number];
@@ -64,7 +66,7 @@ function CourseNavLink({
   );
 }
 
-export function CourseWorkspaceSidebar({ course, activeTab, canManage }: Props) {
+export function CourseWorkspaceSidebar({ course, activeTab, canManage, zoviiCredential = null }: Props) {
   const visibleNav = courseWorkspaceNav;
   const activeParent = getCourseWorkspaceNavParent(activeTab);
 
@@ -86,19 +88,7 @@ export function CourseWorkspaceSidebar({ course, activeTab, canManage }: Props) 
           const active = item.id === activeParent;
           return <CourseNavLink key={item.id} item={item} courseId={course.id} active={active} canManage={canManage} />;
         })}
-        <a
-          href="https://zovii.studio/"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="打开 Zovii 智能画布"
-          title="在新标签页打开 Zovii 智能画布"
-          className="cx-focus-ring cx-tactile flex h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-sm font-normal text-slate-600 hover:bg-slate-50 hover:text-slate-900 lg:h-11 lg:w-full lg:gap-3"
-        >
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
-            <ImagePlus className="h-4 w-4" aria-hidden="true" />
-          </span>
-          <span>Zovii 智能画布</span>
-        </a>
+        <ZoviiCanvasLauncher credential={zoviiCredential} />
       </nav>
     </aside>
   );

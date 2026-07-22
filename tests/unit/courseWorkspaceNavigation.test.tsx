@@ -113,13 +113,9 @@ describe("course workspace navigation", () => {
       <SpaceSidebar user={{ id: "teacher-1", name: "李老师", role: "TEACHER", institutionId: "institution-1" }} />
     );
 
-    expect(courseHtml).toContain('href="https://zovii.studio/"');
     expect(courseHtml).toContain("Zovii 智能画布");
-    expect(courseHtml).toContain('aria-label="打开 Zovii 智能画布"');
-    expect(courseHtml).not.toContain("首次使用需登录");
-    expect(courseHtml).not.toContain("首次登录");
-    expect(courseHtml).toContain('target="_blank"');
-    expect(courseHtml).toContain('rel="noopener noreferrer"');
+    expect(courseHtml).toContain('aria-haspopup="dialog"');
+    expect(courseHtml).not.toContain('href="https://zovii.studio/"');
     expect(courseHtml).toContain("bg-slate-100 text-slate-500");
     expect(courseHtml).not.toContain("lucide-external-link");
     expect(courseHtml).not.toContain("from-fuchsia-500");
