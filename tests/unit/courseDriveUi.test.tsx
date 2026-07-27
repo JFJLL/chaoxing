@@ -81,7 +81,10 @@ describe("course drive UI", () => {
     expect(html).toContain(">课程云盘<");
     expect(html).not.toContain("返回上一级");
     expect(html).not.toContain(">我的云盘<");
-    expect(html).toContain("学生不可查看/下载 · AI 不可引用");
+    expect(html).toContain("更多操作：课程文档");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("学生不可查看/下载 · AI 不可引用");
+    expect(html).not.toContain("允许学生查看与 AI 引用");
     expect(html).toContain(">新建文件夹<");
     expect(html).toContain(">上传文件<");
     expect(html).not.toContain("例如：课程课件");

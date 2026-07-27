@@ -22,7 +22,7 @@ describe("module form controls", () => {
     expect(html).toContain("没有符合条件的笔记");
   });
 
-  it("uses the shared file picker and full-size actions in drive management", () => {
+  it("keeps drive items compact and hides actions behind the item menu", () => {
     const html = renderToStaticMarkup(
       <DriveClient
         canManage
@@ -39,10 +39,12 @@ describe("module form controls", () => {
     expect(html).toContain("选择操作后再填写内容");
     expect(html).not.toContain("选择要上传的文件");
     expect(html).not.toContain("文件夹名称");
-    expect(html).toContain("2 KB");
-    expect(html).toContain("移动");
-    expect(html).toContain("添加到课程资料");
-    expect(html).not.toContain("h-8");
+    expect(html).toContain("sm:grid-cols-2");
+    expect(html).toContain("更多操作：课程说明.pdf");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("2 KB");
+    expect(html).not.toContain(">移动<");
+    expect(html).not.toContain("添加到课程资料");
   });
 
   it("makes a folder row an explicit navigation target", () => {
@@ -58,7 +60,8 @@ describe("module form controls", () => {
     );
 
     expect(html).toContain('href="/space/drive?parentId=folder-1"');
-    expect(html).toContain("文件夹 · 点击进入");
+    expect(html).toContain("更多操作：课件");
+    expect(html).not.toContain("文件夹 · 点击进入");
   });
 
   it("returns to the deterministic parent instead of browser history", () => {

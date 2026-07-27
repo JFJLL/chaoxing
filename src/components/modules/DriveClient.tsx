@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ChevronRight, Download, Eye, EyeOff, File as FileIcon, Folder, FolderPlus, LoaderCircle, Move, Pencil, Share2, Trash2, UploadCloud } from "lucide-react";
+import { ArrowLeft, ChevronRight, Download, Eye, EyeOff, File as FileIcon, Folder, FolderPlus, LoaderCircle, MoreHorizontal, Move, Pencil, Share2, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { FilePicker } from "@/components/ui/FilePicker";
@@ -162,6 +162,137 @@ function uploadDriveFile(formData: FormData, onProgress: (percent: number) => vo
     xhr.addEventListener("abort", () => reject(new Error("上传已取消")));
     xhr.send(formData);
   });
+}
+
+const driveMenuItemClassName =
+  "cx-focus-ring flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50";
+
+function DriveItemActionsMenu({
+  file,
+  folderHref,
+  canManage,
+  courseId,
+  coursesLength,
+  pendingAction,
+  onRename,
+  onShare,
+  onStudentAccess,
+  onMove,
+  onAttach,
+  onRemove
+}: {
+  file: DriveClientFile;
+  folderHref: string;
+  canManage: boolean;
+  courseId?: string;
+  coursesLength: number;
+  pendingAction: string | null;
+  onRename: () => void;
+  onShare: () => void;
+  onStudentAccess: () => void;
+  onMove: () => void;
+  onAttach: () => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const disabled = pendingAction !== null;
+
+  useEffect(() => {
+    if (!open) return;
+    function close(event: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  function runAction(action: () => void) {
+    setOpen(false);
+    action();
+  }
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        aria-label={`更多操作：${file.name}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        className="cx-focus-ring cx-tactile inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          aria-label={`${file.name}的操作`}
+          className="absolute right-0 top-12 z-30 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--cx-border)] bg-white p-2 shadow-floating"
+        >
+          {file.kind === "folder" ? (
+            <Link href={folderHref} role="menuitem" onClick={() => setOpen(false)} className={driveMenuItemClassName}>
+              <Folder className="h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />
+              打开文件夹
+            </Link>
+          ) : (
+            <a href={`/api/drive/${file.id}?download=1`} role="menuitem" onClick={() => setOpen(false)} className={driveMenuItemClassName}>
+              <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
+              下载
+            </a>
+          )}
+          {canManage ? (
+            <>
+              <button type="button" role="menuitem" disabled={disabled} onClick={() => runAction(onRename)} className={driveMenuItemClassName}>
+                <Pencil className="h-4 w-4 shrink-0" aria-hidden="true" />
+                重命名
+              </button>
+              {file.kind === "file" ? (
+                <button type="button" role="menuitem" disabled={disabled} onClick={() => runAction(onShare)} className={driveMenuItemClassName}>
+                  <Share2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  分享
+                </button>
+              ) : null}
+              {courseId && file.studentAccess ? (
+                <button type="button" role="menuitem" disabled={disabled} onClick={() => runAction(onStudentAccess)} className={driveMenuItemClassName}>
+                  {file.studentAccess === "ALLOW" ? <EyeOff className="h-4 w-4 shrink-0" aria-hidden="true" /> : <Eye className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                  {file.studentAccess === "ALLOW" ? "禁止学生查看与 AI 引用" : "允许学生查看与 AI 引用"}
+                </button>
+              ) : null}
+              <button type="button" role="menuitem" disabled={disabled} onClick={() => runAction(onMove)} className={driveMenuItemClassName}>
+                <Move className="h-4 w-4 shrink-0" aria-hidden="true" />
+                移动
+              </button>
+              {file.kind === "file" && coursesLength ? (
+                <button type="button" role="menuitem" disabled={disabled} onClick={() => runAction(onAttach)} className={driveMenuItemClassName}>
+                  <FolderPlus className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  添加到课程资料
+                </button>
+              ) : null}
+              <button
+                type="button"
+                role="menuitem"
+                disabled={disabled}
+                onClick={() => runAction(onRemove)}
+                className={`${driveMenuItemClassName} text-red-600 hover:bg-red-50 hover:text-red-700`}
+              >
+                <Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {pendingAction === `delete:${file.id}` ? "删除中" : "删除"}
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function DriveClient({
@@ -363,16 +494,7 @@ export function DriveClient({
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--cx-blue-soft)] text-[var(--cx-blue)]">
         {file.kind === "folder" ? <Folder className="h-5 w-5" aria-hidden="true" /> : <FileIcon className="h-5 w-5" aria-hidden="true" />}
       </span>
-      <div className="min-w-0 flex-1">
-        <h2 className="truncate font-semibold text-slate-900">{file.name}</h2>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <span>{file.kind === "folder" ? "文件夹 · 点击进入" : formatBytes(file.size)}</span>
-          {file.courseTitle ? <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">{file.courseTitle}</span> : null}
-          {file.copilotCourses?.length ? <span className="rounded-full bg-purple-50 px-2.5 py-1 text-purple-700">Copilot：{file.copilotCourses.map((course) => course.title).join("、")}</span> : null}
-          {canManage && file.shares?.[0] ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">分享码 {file.shares[0].code}</span> : null}
-        </div>
-      </div>
-      {file.kind === "folder" ? <ChevronRight className="mt-3 h-5 w-5 shrink-0 text-slate-300" aria-hidden="true" /> : null}
+      <h2 className="min-w-0 flex-1 truncate font-semibold text-slate-900" title={file.name}>{file.name}</h2>
     </>
   );
 
@@ -400,35 +522,29 @@ export function DriveClient({
 
       {status ? <p role="status" aria-live="polite" className={`rounded-xl border px-4 py-3 text-sm ${status.tone === "error" ? "border-red-100 bg-red-50 text-red-700" : "border-emerald-100 bg-emerald-50 text-emerald-700"}`}>{status.text}</p> : null}
 
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {visibleFiles.map((file) => (
-          <article key={file.id} className="rounded-2xl border border-[var(--cx-border)] bg-white p-4 shadow-sm sm:p-5">
+          <article key={file.id} className="relative flex min-w-0 items-center gap-2 rounded-2xl border border-[var(--cx-border)] bg-white p-3 shadow-sm transition hover:border-blue-200 hover:shadow-md sm:p-4">
             {file.kind === "folder" ? (
-              <Link href={folderHref(file.id)} className="cx-focus-ring -m-1 flex min-w-0 items-start gap-3 rounded-xl p-1 transition hover:bg-slate-50">{fileSummary(file)}</Link>
-            ) : <div className="flex min-w-0 items-start gap-3">{fileSummary(file)}</div>}
-            <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-              {file.kind === "file" ? <a href={`/api/drive/${file.id}?download=1`} className="cx-focus-ring cx-tactile inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[var(--cx-border-strong)] bg-white px-4 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"><Download className="h-4 w-4" aria-hidden="true" />下载</a> : null}
-              {canManage ? (
-                <>
-                  <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => rename(file.id, file.name)}><Pencil className="h-4 w-4" aria-hidden="true" />重命名</Button>
-                  {file.kind === "file" ? <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => share(file.id)}><Share2 className="h-4 w-4" aria-hidden="true" />分享</Button> : null}
-                  {courseId && file.studentAccess ? (
-                    <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => void setStudentAccess(file)}>
-                      {file.studentAccess === "ALLOW" ? <Eye className="h-4 w-4" aria-hidden="true" /> : <EyeOff className="h-4 w-4" aria-hidden="true" />}
-                      {file.studentAccess === "ALLOW"
-                        ? "学生可查看/下载 · AI 可引用"
-                        : "学生不可查看/下载 · AI 不可引用"}
-                    </Button>
-                  ) : null}
-                  <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => { setMoveTarget(file); setMoveParentId(file.parentId === rootParentId ? "" : file.parentId ?? ""); }}><Move className="h-4 w-4" aria-hidden="true" />移动</Button>
-                  {file.kind === "file" && courses.length ? <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => { setAttachTarget(file); setAttachCourseId(courses.length === 1 ? courses[0].id : ""); }}>添加到课程资料</Button> : null}
-                  <Button type="button" variant="danger" disabled={pendingAction !== null} onClick={() => remove(file)}><Trash2 className="h-4 w-4" aria-hidden="true" />{pendingAction === `delete:${file.id}` ? "删除中" : "删除"}</Button>
-                </>
-              ) : null}
-            </div>
+              <Link href={folderHref(file.id)} className="cx-focus-ring flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 transition hover:bg-slate-50">{fileSummary(file)}</Link>
+            ) : <div className="flex min-w-0 flex-1 items-center gap-3 p-1">{fileSummary(file)}</div>}
+            <DriveItemActionsMenu
+              file={file}
+              folderHref={folderHref(file.id)}
+              canManage={canManage}
+              courseId={courseId}
+              coursesLength={courses.length}
+              pendingAction={pendingAction}
+              onRename={() => void rename(file.id, file.name)}
+              onShare={() => void share(file.id)}
+              onStudentAccess={() => void setStudentAccess(file)}
+              onMove={() => { setMoveTarget(file); setMoveParentId(file.parentId === rootParentId ? "" : file.parentId ?? ""); }}
+              onAttach={() => { setAttachTarget(file); setAttachCourseId(courses.length === 1 ? courses[0].id : ""); }}
+              onRemove={() => void remove(file)}
+            />
           </article>
         ))}
-        {!visibleFiles.length ? <div className="rounded-2xl border border-dashed border-[var(--cx-border-strong)] bg-white p-8 text-center"><Folder className="mx-auto h-8 w-8 text-slate-300" aria-hidden="true" /><p className="mt-3 text-sm font-medium text-slate-700">{canManage ? "这个文件夹还是空的" : "暂无已发布课程资料"}</p><p className="mt-1 text-xs text-slate-500">{canManage ? "在上方新建文件夹，或选择文件上传。" : "老师发布后，课程资料会显示在这里。"}</p></div> : null}
+        {!visibleFiles.length ? <div className="rounded-2xl border border-dashed border-[var(--cx-border-strong)] bg-white p-8 text-center sm:col-span-2"><Folder className="mx-auto h-8 w-8 text-slate-300" aria-hidden="true" /><p className="mt-3 text-sm font-medium text-slate-700">{canManage ? "这个文件夹还是空的" : "暂无已发布课程资料"}</p><p className="mt-1 text-xs text-slate-500">{canManage ? "在上方新建文件夹，或选择文件上传。" : "老师发布后，课程资料会显示在这里。"}</p></div> : null}
       </div>
 
       <Dialog open={createDialogOpen} title="新建文件夹" onClose={() => { if (!pendingAction) setCreateDialogOpen(false); }}>
@@ -496,10 +612,4 @@ export function DriveClient({
       </Dialog>
     </div>
   );
-}
-
-function formatBytes(size: number) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`;
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
