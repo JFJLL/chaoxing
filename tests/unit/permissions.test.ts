@@ -1,9 +1,13 @@
 import { randomUUID } from "crypto";
+import { rm } from "fs/promises";
+import { resolve } from "path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../src/lib/db";
 import type { SessionUser } from "../../src/lib/auth";
 import { requireCourseAccess, requireCourseOwner, requireTeacher } from "../../src/lib/permissions";
 import { requireDriveFileOwner, requireDriveFileReadable } from "../../src/lib/modules/drivePermissions";
+import { ensureCoursePurposeFolder } from "../../src/lib/courseDrive/service";
+import { publishCourseResourceUpload } from "../../src/lib/courseWorkspace/courseResources";
 import { requireGroupMember, requireGroupOwner } from "../../src/lib/modules/groupPermissions";
 import { requireLiveParticipantOrHost } from "../../src/lib/modules/livePermissions";
 
@@ -15,6 +19,7 @@ type Fixture = {
   activeCourseId: string;
   enrolledCourseId: string;
   driveFileId: string;
+  copilotSubfolderId: string;
   copilotFileId: string;
   groupId: string;
   liveSessionId: string;
@@ -83,7 +88,7 @@ beforeAll(async () => {
   const copilotFile = await db.driveFile.create({
     data: { ownerId: teacher.id, parentId: copilotSubfolder.id, name: "lecture.md", kind: "file", path: ".uploads/test/lecture.md", extractionStatus: "READY", extractedText: "课程内容" }
   });
-  await db.course.update({ where: { id: enrolledCourse.id }, data: { copilotFolderId: copilotFolder.id } });
+  await db.course.update({ where: { id: enrolledCourse.id }, data: { driveRootFolderId: copilotFolder.id } });
   const group = await db.group.create({
     data: {
       name: "闭合小组",
@@ -106,6 +111,7 @@ beforeAll(async () => {
     activeCourseId: activeCourse.id,
     enrolledCourseId: enrolledCourse.id,
     driveFileId: driveFile.id,
+    copilotSubfolderId: copilotSubfolder.id,
     copilotFileId: copilotFile.id,
     groupId: group.id,
     liveSessionId: liveSession.id
@@ -145,12 +151,86 @@ describe("drive permissions", () => {
     });
   });
 
-  it("grants enrolled students recursive read-only access through the bound course folder", async () => {
+  it("requires a user-specific grant instead of exposing every file that has a share code", async () => {
+    const share = await db.driveShare.create({
+      data: {
+        fileId: fixture.driveFileId,
+        ownerId: fixture.teacher.id,
+        code: `SHARE-${randomUUID()}`
+      }
+    });
+    await expect(requireDriveFileReadable(fixture.outsider, fixture.driveFileId)).rejects.toThrow("无权访问文件");
+    await db.driveShareGrant.create({
+      data: { shareId: share.id, userId: fixture.student.id }
+    });
+    await expect(requireDriveFileReadable(fixture.student, fixture.driveFileId)).resolves.toMatchObject({
+      id: fixture.driveFileId
+    });
+    await expect(requireDriveFileReadable(fixture.outsider, fixture.driveFileId)).rejects.toThrow("无权访问文件");
+  });
+
+  it("defaults to deny, then grants enrolled students inherited access through an explicit rule", async () => {
+    await expect(requireDriveFileReadable(fixture.student, fixture.copilotFileId)).rejects.toThrow("无权访问文件");
+    await db.courseDriveAccessRule.create({
+      data: {
+        courseId: fixture.enrolledCourseId,
+        driveFileId: fixture.copilotSubfolderId,
+        access: "ALLOW",
+        updatedById: fixture.teacher.id
+      }
+    });
     await expect(requireDriveFileReadable(fixture.student, fixture.copilotFileId)).resolves.toMatchObject({
       id: fixture.copilotFileId
     });
     await expect(requireDriveFileReadable(fixture.outsider, fixture.copilotFileId)).rejects.toThrow("无权访问文件");
     await expect(requireDriveFileOwner(fixture.student, fixture.copilotFileId)).rejects.toThrow("无权管理文件");
+  });
+});
+
+describe("course drive purpose folders", () => {
+  it("creates AI outputs beneath one shared AI产物 folder and remains idempotent", async () => {
+    const lessonPlans = await ensureCoursePurposeFolder(fixture.teacher, fixture.enrolledCourseId, "AI_LESSON_PLAN_OUTPUT");
+    const lessonPlansAgain = await ensureCoursePurposeFolder(fixture.teacher, fixture.enrolledCourseId, "AI_LESSON_PLAN_OUTPUT");
+    const papers = await ensureCoursePurposeFolder(fixture.teacher, fixture.enrolledCourseId, "AI_PAPER_OUTPUT");
+    expect(lessonPlansAgain.id).toBe(lessonPlans.id);
+    expect(papers.parentId).toBe(lessonPlans.parentId);
+    await expect(db.driveFile.findUnique({ where: { id: lessonPlans.parentId! } })).resolves.toMatchObject({
+      name: "AI产物",
+      parentId: expect.any(String)
+    });
+  });
+
+  it("publishes an uploaded resource inside the course root with one student/AI access rule", async () => {
+    const previousProvider = process.env.DRIVE_STORAGE_PROVIDER;
+    const previousUploadDir = process.env.UPLOAD_DIR;
+    const uploadDir = resolve(".verification", "tmp", `course-resource-${randomUUID()}`);
+    try {
+      process.env.DRIVE_STORAGE_PROVIDER = "local";
+      process.env.UPLOAD_DIR = uploadDir;
+      const resource = await publishCourseResourceUpload(
+        fixture.teacher,
+        fixture.enrolledCourseId,
+        new File(["公开课程内容"], "公开讲义.txt", { type: "text/plain" })
+      );
+      expect(resource.driveFile?.parentId).toBeTruthy();
+      await expect(db.courseDriveAccessRule.findUnique({
+        where: {
+          courseId_driveFileId: {
+            courseId: fixture.enrolledCourseId,
+            driveFileId: resource.driveFileId!
+          }
+        }
+      })).resolves.toMatchObject({ access: "ALLOW" });
+      await expect(requireDriveFileReadable(fixture.student, resource.driveFileId!)).resolves.toMatchObject({
+        id: resource.driveFileId
+      });
+    } finally {
+      if (previousProvider === undefined) delete process.env.DRIVE_STORAGE_PROVIDER;
+      else process.env.DRIVE_STORAGE_PROVIDER = previousProvider;
+      if (previousUploadDir === undefined) delete process.env.UPLOAD_DIR;
+      else process.env.UPLOAD_DIR = previousUploadDir;
+      await rm(uploadDir, { recursive: true, force: true });
+    }
   });
 });
 

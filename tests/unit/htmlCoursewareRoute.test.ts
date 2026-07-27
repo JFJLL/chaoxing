@@ -43,11 +43,11 @@ describe("legacy HTML courseware route", () => {
       body: JSON.stringify({ mapId: "map-1" })
     }), context);
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(410);
     await expect(response.json()).resolves.toEqual({
-      code: "AI_PREREQUISITE_REQUIRED",
-      error: "请先在 AI 工作台生成并确认 AI 课件，再生成 HTML 课件",
-      href: "/space/courses/course-1/ai-workbench/apps/html_courseware"
+      code: "HTML_COURSEWARE_RETIRED",
+      error: "HTML 互动课件已停止生成，请使用 PPT 课件",
+      href: "/space/courses/course-1/ai-workbench/apps/ppt_courseware"
     });
     expect(mocks.generateHtml).not.toHaveBeenCalled();
     expect(mocks.createArtifact).not.toHaveBeenCalled();

@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isTeacher, requireCourseOwner, requireTeacher } from "@/lib/permissions";
-import { requireDriveFileOwner, requireDriveFileReadable } from "@/lib/modules/drivePermissions";
+import { requireDriveFileOwner } from "@/lib/modules/drivePermissions";
 import { storeDriveUpload } from "@/lib/copilot/files";
+import { publishExistingDriveFileToCourse } from "@/lib/courseWorkspace/courseResources";
 
 export const runtime = "nodejs";
 
@@ -59,12 +60,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as { name: string; parentId?: string; courseId?: string; driveFileId?: string };
     if (body.courseId && body.driveFileId) {
-      const driveFile = await requireDriveFileReadable(user, body.driveFileId);
-      await requireCourseOwner(user, body.courseId);
-      const existing = await db.resource.findFirst({ where: { courseId: body.courseId, driveFileId: body.driveFileId } });
-      if (existing) return NextResponse.json({ resource: existing, alreadyAttached: true });
-      const resource = await db.resource.create({ data: { courseId: body.courseId, title: driveFile?.name || "云盘资料", type: "drive", driveFileId: body.driveFileId } });
-      return NextResponse.json({ resource }, { status: 201 });
+      const result = await publishExistingDriveFileToCourse(user, body.courseId, body.driveFileId);
+      return NextResponse.json(result, { status: result.alreadyAttached ? 200 : 201 });
     }
     if (body.parentId) {
       const parent = await requireDriveFileOwner(user, body.parentId);

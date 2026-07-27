@@ -101,7 +101,7 @@ export function resolveAiModelConfig(model?: string): AiModelConfig | null {
       defaultBaseURL
     ) ?? defaultBaseURL;
   const inferredProvider = normalizeProvider(providerHint, baseURL);
-  const defaultModel = inferredProvider === "gemini" ? "gemini-2.5-flash" : "gpt-4.1-mini";
+  const defaultModel = inferredProvider === "gemini" ? "gemini-3.6-flash" : "gpt-4.1-mini";
   const resolvedModel =
     firstNonEmpty(
       model,
@@ -219,8 +219,7 @@ async function createGeminiJsonCompletion(config: AiModelConfig, input: JsonComp
         }
       ],
       generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.2
+        responseMimeType: "application/json"
       }
     })
   });
@@ -249,8 +248,7 @@ async function createGeminiTextCompletion(config: AiModelConfig, input: Completi
           role: "user",
           parts: [{ text: `${input.system}\n\n${input.user}` }]
         }
-      ],
-      generationConfig: { temperature: 0.2 }
+      ]
     })
   });
 
@@ -382,8 +380,7 @@ async function createGeminiTextStream(config: AiModelConfig, input: TextCompleti
             inlineData: { mimeType: image.mimeType, data: image.data }
           }))
         ]
-      })),
-      generationConfig: { temperature: 0.2 }
+      }))
     }),
     signal: input.signal
   });

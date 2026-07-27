@@ -139,7 +139,7 @@ describe("GET /api/courses/:courseId/ai-apps", () => {
     expect(mocks.recover).toHaveBeenCalledWith();
 
     expect(mocks.findArtifacts).toHaveBeenCalledWith(expect.objectContaining({
-      where: { courseId: "course-1" },
+      where: { courseId: "course-1", deletedAt: null },
       select: expect.not.objectContaining({ inputSnapshot: true })
     }));
     expect(body.artifacts[0]).toMatchObject({ errorCode: "MODEL_TIMEOUT" });
@@ -176,7 +176,7 @@ describe("GET /api/courses/:courseId/ai-apps", () => {
     const body = await response.json();
 
     expect(mocks.findArtifacts).toHaveBeenCalledWith(expect.objectContaining({
-      where: { courseId: "course-1", status: "PUBLISHED" }
+      where: { courseId: "course-1", deletedAt: null, status: "PUBLISHED" }
     }));
     expect(Object.keys(body.artifacts[0]).sort()).toEqual([
       "appType",
@@ -366,21 +366,21 @@ describe("POST /api/courses/:courseId/ai-apps", () => {
     [{ id: "source-1", appType: "courseware", status: "DRAFT", payload: JSON.stringify({ slides: [{ title: "标题", bullets: ["要点"], speakerNotes: "备注" }] }) }, "draft"],
     [{ id: "source-1", appType: "lesson_plan", status: "APPROVED", payload: JSON.stringify({ slides: [{ title: "标题", bullets: ["要点"], speakerNotes: "备注" }] }) }, "wrong type"],
     [{ id: "source-1", appType: "courseware", status: "APPROVED", payload: "not-json" }, "invalid payload"]
-  ])("rejects an invalid HTML source: %s (%s)", async (source, _label) => {
+  ])("rejects an invalid PPT source: %s (%s)", async (source, _label) => {
     mocks.findSourceArtifact.mockResolvedValue(source);
 
-    const response = await POST(request("html_courseware", { sourceArtifactId: "source-1" }) as never, context);
+    const response = await POST(request("ppt_courseware", { sourceArtifactId: "source-1" }) as never, context);
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
       code: "AI_PREREQUISITE_REQUIRED",
-      error: "请先生成并确认 AI 课件后再生成 HTML 课件"
+      error: "请先生成并确认 AI 课件后再生成 PPT 课件"
     });
     expect(mocks.createArtifact).not.toHaveBeenCalled();
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
-  it("queues HTML generation from a server-loaded approved courseware snapshot and records lineage", async () => {
+  it("creates one PPT history row from an approved courseware snapshot without HTML generation", async () => {
     const sourceCourseware = { slides: [{ title: "标题原文", bullets: ["要点原文"], speakerNotes: "备注原文" }] };
     mocks.findSourceArtifact.mockResolvedValue({
       id: "source-1",
@@ -389,34 +389,37 @@ describe("POST /api/courses/:courseId/ai-apps", () => {
       payload: JSON.stringify(sourceCourseware)
     });
 
-    const response = await POST(request("html_courseware", {
+    const response = await POST(request("ppt_courseware", {
       sourceArtifactId: "source-1",
       prompt: "课堂展示"
     }) as never, context);
 
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(201);
     expect(mocks.findSourceArtifact).toHaveBeenCalledWith({
       where: { id: "source-1", courseId: "course-1" },
       select: { id: true, appType: true, status: true, payload: true }
     });
     const createData = mocks.createArtifact.mock.calls[0][0].data;
     expect(createData.sourceArtifactId).toBe("source-1");
-    expect(JSON.parse(createData.inputSnapshot)).toEqual({
-      appType: "html_courseware",
-      sourceCourseware,
-      prompt: "课堂展示"
-    });
-    expect(JSON.parse(createData.inputSnapshot)).not.toHaveProperty("context");
-    expect(mocks.enqueue).toHaveBeenCalledWith("artifact-1");
+    expect(createData.appType).toBe("ppt_courseware");
+    expect(createData.status).toBe("APPROVED");
+    expect(createData.approvedAt).toBeInstanceOf(Date);
+    expect(createData.inputSnapshot).toBeNull();
+    expect(JSON.parse(createData.payload)).toEqual(sourceCourseware);
+    expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
-  it("requires sourceArtifactId only for HTML generation", async () => {
-    let response = await POST(request("html_courseware") as never, context);
+  it("requires sourceArtifactId only for PPT generation and retires HTML generation", async () => {
+    let response = await POST(request("ppt_courseware") as never, context);
     expect(response.status).toBe(400);
 
     response = await POST(request("lesson_plan", { sourceArtifactId: "source-1" }) as never, context);
     expect(response.status).toBe(400);
     expect(mocks.findSourceArtifact).not.toHaveBeenCalled();
+
+    response = await POST(request("html_courseware", { sourceArtifactId: "source-1" }) as never, context);
+    expect(response.status).toBe(410);
+    await expect(response.json()).resolves.toMatchObject({ code: "HTML_COURSEWARE_RETIRED" });
   });
 
   it("creates a queued artifact and returns 202 without waiting for the model", async () => {

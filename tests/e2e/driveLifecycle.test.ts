@@ -97,14 +97,14 @@ afterAll(async () => {
 });
 
 describe("drive delete lifecycle", () => {
-  it("deletes every storage object before removing course and share references", async () => {
+  it("removes active references before best-effort storage cleanup", async () => {
     const response = await DELETE(
       {} as never,
       { params: Promise.resolve({ fileId: fixture.folderId }) }
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ ok: true, deletedCount: 2 });
+    await expect(response.json()).resolves.toEqual({ ok: true, deletedCount: 2, cleanupPending: 0 });
     expect(mocks.deleteDriveFileFromStorage).toHaveBeenCalledTimes(2);
     const storageTargets = mocks.deleteDriveFileFromStorage.mock.calls.map(([item]) => item);
     expect(storageTargets).toEqual(

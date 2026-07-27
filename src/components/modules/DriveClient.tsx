@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ChevronRight, Download, File as FileIcon, Folder, FolderPlus, LoaderCircle, Move, Pencil, Share2, Trash2, UploadCloud } from "lucide-react";
+import { ArrowLeft, ChevronRight, Download, Eye, EyeOff, File as FileIcon, Folder, FolderPlus, LoaderCircle, Move, Pencil, Share2, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { FilePicker } from "@/components/ui/FilePicker";
@@ -15,6 +15,7 @@ type DriveClientFile = {
   name: string;
   kind: string;
   size: number;
+  studentAccess?: "ALLOW" | "DENY";
   courseTitle?: string;
   shares?: Array<{ code: string }>;
   copilotCourses?: Array<{ id: string; title: string }>;
@@ -23,14 +24,125 @@ type DriveClientFile = {
 type DriveFolder = { id: string; name: string; parentId: string | null };
 type UploadState = { fileName: string; percent: number; phase: "uploading" | "processing" };
 
+export function MoveDestinationBrowser({
+  folders,
+  rootParentId,
+  rootLabel,
+  currentParentId,
+  onNavigate,
+  disabled = false
+}: {
+  folders: DriveFolder[];
+  rootParentId: string | null;
+  rootLabel: string;
+  currentParentId: string | null;
+  onNavigate: (folderId: string | null) => void;
+  disabled?: boolean;
+}) {
+  const byId = useMemo(() => new Map(folders.map((folder) => [folder.id, folder])), [folders]);
+  const breadcrumbs = useMemo(() => {
+    const path: DriveFolder[] = [];
+    const seen = new Set<string>();
+    let current = currentParentId ? byId.get(currentParentId) : undefined;
+    while (current && current.id !== rootParentId && !seen.has(current.id)) {
+      seen.add(current.id);
+      path.unshift(current);
+      current = current.parentId ? byId.get(current.parentId) : undefined;
+    }
+    return path;
+  }, [byId, currentParentId, rootParentId]);
+  const children = useMemo(
+    () => folders
+      .filter((folder) => folder.id !== rootParentId && folder.parentId === currentParentId)
+      .sort((left, right) => left.name.localeCompare(right.name, "zh-CN")),
+    [currentParentId, folders, rootParentId]
+  );
+  const parentDestination = breadcrumbs.length > 1
+    ? breadcrumbs[breadcrumbs.length - 2].id
+    : rootParentId;
+
+  return (
+    <section aria-label="选择目标文件夹" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <nav aria-label="目标文件夹路径" className="flex min-h-11 items-center gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onNavigate(rootParentId)}
+          className={`cx-focus-ring shrink-0 rounded-md px-2 py-1 font-medium ${currentParentId === rootParentId ? "bg-blue-100 text-blue-800" : "text-slate-600 hover:bg-white hover:text-blue-700"}`}
+        >
+          {rootLabel}
+        </button>
+        {breadcrumbs.map((folder) => (
+          <span key={folder.id} className="flex shrink-0 items-center gap-1">
+            <ChevronRight className="h-3.5 w-3.5 text-slate-300" aria-hidden="true" />
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onNavigate(folder.id)}
+              className={`cx-focus-ring rounded-md px-2 py-1 ${folder.id === currentParentId ? "bg-blue-100 font-medium text-blue-800" : "text-slate-600 hover:bg-white hover:text-blue-700"}`}
+            >
+              {folder.name}
+            </button>
+          </span>
+        ))}
+      </nav>
+      <div role="list" aria-label="当前文件夹中的子文件夹" className="max-h-64 space-y-1 overflow-y-auto p-2">
+        {breadcrumbs.length ? (
+          <button
+            type="button"
+            role="listitem"
+            disabled={disabled}
+            onClick={() => onNavigate(parentDestination)}
+            className="cx-focus-ring flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+          >
+            <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="font-medium">上一级</span>
+          </button>
+        ) : null}
+        {children.map((folder) => (
+          <button
+            key={folder.id}
+            type="button"
+            role="listitem"
+            disabled={disabled}
+            onClick={() => onNavigate(folder.id)}
+            className="cx-focus-ring flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 transition hover:bg-blue-50 hover:text-blue-800"
+            aria-label={`打开文件夹 ${folder.name}`}
+          >
+            <Folder className="h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate font-medium">{folder.name}</span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" aria-hidden="true" />
+          </button>
+        ))}
+        {!children.length ? (
+          <p className="px-3 py-8 text-center text-sm text-slate-400">此处没有子文件夹</p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 type DriveClientProps = {
   files: DriveClientFile[];
   folders: DriveFolder[];
   courses: Array<{ id: string; title: string }>;
   canManage?: boolean;
+  courseId?: string;
+  onRefresh?: () => Promise<void>;
   parentId: string | null;
   breadcrumbs: Array<{ id: string; name: string }>;
+  baseHref?: string;
+  rootParentId?: string | null;
+  rootLabel?: string;
 };
+
+export async function refreshDriveAfterMutation(
+  onRefresh: (() => Promise<void>) | undefined,
+  refreshRoute: () => void
+) {
+  if (onRefresh) await onRefresh();
+  else refreshRoute();
+}
 
 function uploadDriveFile(formData: FormData, onProgress: (percent: number) => void, onProcessing: () => void) {
   return new Promise<Record<string, any>>((resolve, reject) => {
@@ -52,7 +164,19 @@ function uploadDriveFile(formData: FormData, onProgress: (percent: number) => vo
   });
 }
 
-export function DriveClient({ files, folders, courses, canManage = false, parentId, breadcrumbs }: DriveClientProps) {
+export function DriveClient({
+  files,
+  folders,
+  courses,
+  canManage = false,
+  courseId,
+  onRefresh,
+  parentId,
+  breadcrumbs,
+  baseHref = "/space/drive",
+  rootParentId = null,
+  rootLabel = "我的云盘"
+}: DriveClientProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [visibleFiles, setVisibleFiles] = useState(files);
@@ -60,12 +184,16 @@ export function DriveClient({ files, folders, courses, canManage = false, parent
   const [status, setStatus] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [uploadState, setUploadState] = useState<UploadState | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [attachTarget, setAttachTarget] = useState<DriveClientFile | null>(null);
   const [attachCourseId, setAttachCourseId] = useState("");
   const [moveTarget, setMoveTarget] = useState<DriveClientFile | null>(null);
   const [moveParentId, setMoveParentId] = useState("");
   const parentBreadcrumb = breadcrumbs.length > 1 ? breadcrumbs[breadcrumbs.length - 2] : null;
-  const upHref = parentBreadcrumb ? `/space/drive?parentId=${encodeURIComponent(parentBreadcrumb.id)}` : "/space/drive";
+  const browsingRoot = parentId === rootParentId;
+  const folderHref = (folderId: string) => `${baseHref}?parentId=${encodeURIComponent(folderId)}`;
+  const upHref = parentBreadcrumb ? folderHref(parentBreadcrumb.id) : baseHref;
 
   useEffect(() => {
     setVisibleFiles(files);
@@ -121,19 +249,22 @@ export function DriveClient({ files, folders, courses, canManage = false, parent
     setPendingAction(actionKey);
     try {
       await action();
-      router.refresh();
+      await refreshDriveAfterMutation(onRefresh, () => router.refresh());
+      return true;
     } catch (error) {
       setStatus({ tone: "error", text: error instanceof Error ? error.message : "操作失败" });
+      return false;
     } finally {
       setPendingAction(null);
     }
   }
 
   async function createFolder(formData: FormData) {
-    await run("create-folder", async () => {
+    const succeeded = await run("create-folder", async () => {
       const body = await request("/api/drive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: formData.get("name"), parentId }) }, "文件夹已创建，可以点击文件夹进入");
       if (body?.file) setVisibleFiles((current) => [body.file, ...current]);
     });
+    if (succeeded) setCreateDialogOpen(false);
   }
 
   async function upload(formData: FormData) {
@@ -141,7 +272,7 @@ export function DriveClient({ files, folders, courses, canManage = false, parent
     if (!(file instanceof File) || file.size === 0) return;
     setStatus(null);
     setUploadState({ fileName: file.name, percent: 0, phase: "uploading" });
-    await run("upload", async () => {
+    const succeeded = await run("upload", async () => {
       const body = await uploadDriveFile(
         formData,
         (percent) => setUploadState((current) => current ? { ...current, percent } : current),
@@ -157,10 +288,29 @@ export function DriveClient({ files, folders, courses, canManage = false, parent
       if (fileInputRef.current) fileInputRef.current.value = "";
     });
     setUploadState(null);
+    if (succeeded) setUploadDialogOpen(false);
   }
 
   async function share(id: string) {
     await run(`share:${id}`, async () => { await request(`/api/drive/${id}/share`, { method: "POST" }, "分享码已生成"); });
+  }
+
+  async function setStudentAccess(file: DriveClientFile) {
+    if (!courseId || !file.studentAccess) return;
+    const nextAccess = file.studentAccess === "ALLOW" ? "DENY" : "ALLOW";
+    await run(`access:${file.id}`, async () => {
+      await request(
+        `/api/courses/${courseId}/drive/access/${file.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ access: nextAccess })
+        },
+        nextAccess === "ALLOW"
+          ? "学生现在可以查看、下载并让 AI 引用"
+          : "学生现在不可查看、下载，AI 也不可引用"
+      );
+    });
   }
 
   async function attach() {
@@ -184,12 +334,12 @@ export function DriveClient({ files, folders, courses, canManage = false, parent
 
   async function move() {
     if (!moveTarget) return;
-    const nextParentId = moveParentId || null;
+    const nextParentId = moveParentId || rootParentId;
     if (nextParentId === (moveTarget.parentId ?? null)) {
       setMoveTarget(null);
       return;
     }
-    const destination = nextParentId ? folderPaths.get(nextParentId) : "我的云盘";
+    const destination = nextParentId === rootParentId ? rootLabel : nextParentId ? folderPaths.get(nextParentId) : rootLabel;
     await run(`move:${moveTarget.id}`, async () => {
       await request(`/api/drive/${moveTarget.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ parentId: nextParentId }) }, `已移动到“${destination}”`);
       setVisibleFiles((current) => current.filter((file) => file.id !== moveTarget.id));
@@ -229,30 +379,22 @@ export function DriveClient({ files, folders, courses, canManage = false, parent
   return (
     <div className="space-y-6">
       <nav aria-label="云盘路径" className="flex flex-wrap items-center gap-1.5 text-sm text-slate-500">
-        {parentId ? <><Link href={upHref} className="cx-focus-ring mr-1 inline-flex items-center gap-1.5 rounded-lg border border-[var(--cx-border)] bg-white px-3 py-1.5 font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-[var(--cx-blue)]"><ArrowLeft className="h-4 w-4" aria-hidden="true" />返回上一级</Link><span className="mx-1 h-4 w-px bg-slate-200" aria-hidden="true" /></> : null}
-        <Link href="/space/drive" className="cx-focus-ring rounded-lg px-2 py-1.5 font-medium text-slate-700 transition hover:bg-[var(--cx-blue-soft)] hover:text-[var(--cx-blue)]">我的云盘</Link>
-        {breadcrumbs.map((item) => <span key={item.id} className="flex items-center gap-1.5"><ChevronRight className="h-3.5 w-3.5 text-slate-300" aria-hidden="true" /><Link href={`/space/drive?parentId=${encodeURIComponent(item.id)}`} className="cx-focus-ring rounded-lg px-2 py-1.5 transition hover:bg-[var(--cx-blue-soft)] hover:text-[var(--cx-blue)]">{item.name}</Link></span>)}
+        {!browsingRoot ? <><Link href={upHref} className="cx-focus-ring mr-1 inline-flex items-center gap-1.5 rounded-lg border border-[var(--cx-border)] bg-white px-3 py-1.5 font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-[var(--cx-blue)]"><ArrowLeft className="h-4 w-4" aria-hidden="true" />返回上一级</Link><span className="mx-1 h-4 w-px bg-slate-200" aria-hidden="true" /></> : null}
+        <Link href={baseHref} className="cx-focus-ring rounded-lg px-2 py-1.5 font-medium text-slate-700 transition hover:bg-[var(--cx-blue-soft)] hover:text-[var(--cx-blue)]">{rootLabel}</Link>
+        {breadcrumbs.filter((item) => item.id !== rootParentId).map((item) => <span key={item.id} className="flex items-center gap-1.5"><ChevronRight className="h-3.5 w-3.5 text-slate-300" aria-hidden="true" /><Link href={folderHref(item.id)} className="cx-focus-ring rounded-lg px-2 py-1.5 transition hover:bg-[var(--cx-blue-soft)] hover:text-[var(--cx-blue)]">{item.name}</Link></span>)}
       </nav>
 
       {canManage ? (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-          <form action={createFolder} className="rounded-2xl border border-[var(--cx-border)] bg-slate-50/70 p-4">
-            <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--cx-blue-soft)] text-[var(--cx-blue)]"><FolderPlus className="h-5 w-5" aria-hidden="true" /></span><div><h2 className="font-semibold text-slate-900">新建文件夹</h2><p className="mt-0.5 text-xs text-slate-500">创建后可点击文件夹进入并继续整理。</p></div></div>
-            <label className="mt-4 block space-y-1.5"><span className="text-sm font-medium text-slate-700">文件夹名称</span><Input name="name" placeholder="例如：课程课件" required /></label>
-            <Button type="submit" className="mt-3 w-full sm:w-auto" disabled={pendingAction !== null}>{pendingAction === "create-folder" ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FolderPlus className="h-4 w-4" aria-hidden="true" />}{pendingAction === "create-folder" ? "正在创建" : "创建文件夹"}</Button>
-          </form>
-          <form action={upload} className="rounded-2xl border border-[var(--cx-border)] bg-slate-50/70 p-4">
-            <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--cx-blue-soft)] text-[var(--cx-blue)]"><UploadCloud className="h-5 w-5" aria-hidden="true" /></span><div><h2 className="font-semibold text-slate-900">上传文件</h2><p className="mt-0.5 text-xs text-slate-500">上传期间会显示进度，完成前请保持页面打开。</p></div></div>
-            <input type="hidden" name="parentId" value={parentId ?? ""} />
-            <FilePicker ref={fileInputRef} id="drive-upload-file" name="file" className="mt-4" label="选择要上传的文件" hint="支持当前课程允许的文件格式" selectedFileName={selectedFileName} onChange={(event) => setSelectedFileName(event.target.files?.[0]?.name ?? "")} />
-            {uploadState ? (
-              <div role="status" aria-live="polite" className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-800">
-                <div className="flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /><span className="min-w-0 truncate font-medium">{uploadState.phase === "uploading" ? `正在上传“${uploadState.fileName}”` : `已传输完成，正在保存并解析“${uploadState.fileName}”`}</span><span className="ml-auto shrink-0 text-xs">{uploadState.percent}%</span></div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-[var(--cx-blue)] transition-[width]" style={{ width: `${uploadState.percent}%` }} /></div>
-              </div>
-            ) : null}
-            <Button type="submit" className="mt-3 w-full sm:w-auto" disabled={pendingAction !== null || !selectedFileName}><UploadCloud className="h-4 w-4" aria-hidden="true" />{pendingAction === "upload" ? "正在上传" : "上传"}</Button>
-          </form>
+        <div className="flex flex-wrap gap-3 rounded-2xl border border-[var(--cx-border)] bg-slate-50/70 p-4">
+          <Button type="button" onClick={() => setCreateDialogOpen(true)} disabled={pendingAction !== null}>
+            <FolderPlus className="h-4 w-4" aria-hidden="true" />
+            新建文件夹
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => setUploadDialogOpen(true)} disabled={pendingAction !== null}>
+            <UploadCloud className="h-4 w-4" aria-hidden="true" />
+            上传文件
+          </Button>
+          <p className="basis-full text-xs text-slate-500 sm:basis-auto sm:self-center">选择操作后再填写内容，文件列表保持紧凑可见。</p>
         </div>
       ) : null}
 
@@ -262,7 +404,7 @@ export function DriveClient({ files, folders, courses, canManage = false, parent
         {visibleFiles.map((file) => (
           <article key={file.id} className="rounded-2xl border border-[var(--cx-border)] bg-white p-4 shadow-sm sm:p-5">
             {file.kind === "folder" ? (
-              <Link href={`/space/drive?parentId=${encodeURIComponent(file.id)}`} className="cx-focus-ring -m-1 flex min-w-0 items-start gap-3 rounded-xl p-1 transition hover:bg-slate-50">{fileSummary(file)}</Link>
+              <Link href={folderHref(file.id)} className="cx-focus-ring -m-1 flex min-w-0 items-start gap-3 rounded-xl p-1 transition hover:bg-slate-50">{fileSummary(file)}</Link>
             ) : <div className="flex min-w-0 items-start gap-3">{fileSummary(file)}</div>}
             <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
               {file.kind === "file" ? <a href={`/api/drive/${file.id}?download=1`} className="cx-focus-ring cx-tactile inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[var(--cx-border-strong)] bg-white px-4 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"><Download className="h-4 w-4" aria-hidden="true" />下载</a> : null}
@@ -270,7 +412,15 @@ export function DriveClient({ files, folders, courses, canManage = false, parent
                 <>
                   <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => rename(file.id, file.name)}><Pencil className="h-4 w-4" aria-hidden="true" />重命名</Button>
                   {file.kind === "file" ? <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => share(file.id)}><Share2 className="h-4 w-4" aria-hidden="true" />分享</Button> : null}
-                  <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => { setMoveTarget(file); setMoveParentId(file.parentId ?? ""); }}><Move className="h-4 w-4" aria-hidden="true" />移动</Button>
+                  {courseId && file.studentAccess ? (
+                    <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => void setStudentAccess(file)}>
+                      {file.studentAccess === "ALLOW" ? <Eye className="h-4 w-4" aria-hidden="true" /> : <EyeOff className="h-4 w-4" aria-hidden="true" />}
+                      {file.studentAccess === "ALLOW"
+                        ? "学生可查看/下载 · AI 可引用"
+                        : "学生不可查看/下载 · AI 不可引用"}
+                    </Button>
+                  ) : null}
+                  <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => { setMoveTarget(file); setMoveParentId(file.parentId === rootParentId ? "" : file.parentId ?? ""); }}><Move className="h-4 w-4" aria-hidden="true" />移动</Button>
                   {file.kind === "file" && courses.length ? <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => { setAttachTarget(file); setAttachCourseId(courses.length === 1 ? courses[0].id : ""); }}>添加到课程资料</Button> : null}
                   <Button type="button" variant="danger" disabled={pendingAction !== null} onClick={() => remove(file)}><Trash2 className="h-4 w-4" aria-hidden="true" />{pendingAction === `delete:${file.id}` ? "删除中" : "删除"}</Button>
                 </>
@@ -281,19 +431,67 @@ export function DriveClient({ files, folders, courses, canManage = false, parent
         {!visibleFiles.length ? <div className="rounded-2xl border border-dashed border-[var(--cx-border-strong)] bg-white p-8 text-center"><Folder className="mx-auto h-8 w-8 text-slate-300" aria-hidden="true" /><p className="mt-3 text-sm font-medium text-slate-700">{canManage ? "这个文件夹还是空的" : "暂无已发布课程资料"}</p><p className="mt-1 text-xs text-slate-500">{canManage ? "在上方新建文件夹，或选择文件上传。" : "老师发布后，课程资料会显示在这里。"}</p></div> : null}
       </div>
 
+      <Dialog open={createDialogOpen} title="新建文件夹" onClose={() => { if (!pendingAction) setCreateDialogOpen(false); }}>
+        <form action={createFolder} className="space-y-4">
+          <p className="text-sm leading-6 text-slate-600">在当前路径下创建文件夹，完成后可进入文件夹继续整理资料。</p>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-slate-700">文件夹名称</span>
+            <Input name="name" placeholder="例如：课程课件" required autoFocus />
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => setCreateDialogOpen(false)}>取消</Button>
+            <Button type="submit" disabled={pendingAction !== null}>
+              {pendingAction === "create-folder" ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FolderPlus className="h-4 w-4" aria-hidden="true" />}
+              {pendingAction === "create-folder" ? "正在创建" : "创建文件夹"}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog open={uploadDialogOpen} title="上传文件" onClose={() => { if (!pendingAction) setUploadDialogOpen(false); }}>
+        <form action={upload} className="space-y-4">
+          <p className="text-sm leading-6 text-slate-600">文件将上传到当前路径。上传完成前请保持页面打开。</p>
+          <input type="hidden" name="parentId" value={parentId ?? ""} />
+          <FilePicker ref={fileInputRef} id="drive-upload-file" name="file" label="选择要上传的文件" hint="支持当前课程允许的文件格式" selectedFileName={selectedFileName} onChange={(event) => setSelectedFileName(event.target.files?.[0]?.name ?? "")} />
+          {uploadState ? (
+            <div role="status" aria-live="polite" className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-800">
+              <div className="flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /><span className="min-w-0 truncate font-medium">{uploadState.phase === "uploading" ? `正在上传“${uploadState.fileName}”` : `已传输完成，正在保存并解析“${uploadState.fileName}”`}</span><span className="ml-auto shrink-0 text-xs">{uploadState.percent}%</span></div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-[var(--cx-blue)] transition-[width]" style={{ width: `${uploadState.percent}%` }} /></div>
+            </div>
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => setUploadDialogOpen(false)}>取消</Button>
+            <Button type="submit" disabled={pendingAction !== null || !selectedFileName}>
+              <UploadCloud className="h-4 w-4" aria-hidden="true" />
+              {pendingAction === "upload" ? "正在上传" : "上传文件"}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
       <Dialog open={Boolean(attachTarget)} title="添加到课程资料" onClose={() => { if (!pendingAction) setAttachTarget(null); }}>
         <div className="space-y-4">
-          <p className="text-sm leading-6 text-slate-600">选择要接收“{attachTarget?.name}”的课程。这里只创建课程资料入口，不复制文件；以后从云盘删除该文件，课程中的入口也会一并移除。</p>
+          <p className="text-sm leading-6 text-slate-600">选择要接收“{attachTarget?.name}”的课程。系统会复制一份到该课程的资料文件夹并立即发布，原云盘文件之后移动或删除都不会影响课程资料。</p>
           <label className="block space-y-1.5"><span className="text-sm font-medium text-slate-700">目标课程</span><Select aria-label="目标课程" value={attachCourseId} onChange={(event) => setAttachCourseId(event.target.value)}><option value="">请选择课程</option>{courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}</Select></label>
           <div className="flex justify-end gap-2"><Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => setAttachTarget(null)}>取消</Button><Button type="button" disabled={!attachCourseId || pendingAction !== null} onClick={() => void attach()}>{pendingAction?.startsWith("attach:") ? "正在添加" : "确认添加"}</Button></div>
         </div>
       </Dialog>
 
-      <Dialog open={Boolean(moveTarget)} title={`移动${moveTarget?.kind === "folder" ? "文件夹" : "文件"}`} onClose={() => { if (!pendingAction) setMoveTarget(null); }}>
+      <Dialog open={Boolean(moveTarget)} title={`移动${moveTarget?.kind === "folder" ? "文件夹" : "文件"}`} panelClassName="max-w-xl" onClose={() => { if (!pendingAction) setMoveTarget(null); }}>
         <div className="space-y-4">
-          <p className="text-sm leading-6 text-slate-600">选择“{moveTarget?.name}”的新位置。</p>
-          <label className="block space-y-1.5"><span className="text-sm font-medium text-slate-700">目标文件夹</span><Select aria-label="目标文件夹" value={moveParentId} onChange={(event) => setMoveParentId(event.target.value)}><option value="">我的云盘</option>{moveFolderOptions.map((folder) => <option key={folder.id} value={folder.id}>{folderPaths.get(folder.id)}</option>)}</Select></label>
-          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => setMoveTarget(null)}>取消</Button><Button type="button" disabled={pendingAction !== null || (moveParentId || null) === (moveTarget?.parentId ?? null)} onClick={() => void move()}>{pendingAction?.startsWith("move:") ? "正在移动" : "确认移动"}</Button></div>
+          <p className="text-sm leading-6 text-slate-600">为“{moveTarget?.name}”逐层选择新位置，进入目标文件夹后点击“移动到此处”。</p>
+          <MoveDestinationBrowser
+            folders={moveFolderOptions}
+            rootParentId={rootParentId}
+            rootLabel={rootLabel}
+            currentParentId={moveParentId || rootParentId}
+            onNavigate={(folderId) => setMoveParentId(folderId === rootParentId ? "" : folderId ?? "")}
+            disabled={pendingAction !== null}
+          />
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            移动到：<span className="font-medium text-slate-900">{(moveParentId || rootParentId) === rootParentId ? rootLabel : folderPaths.get(moveParentId) ?? rootLabel}</span>
+          </p>
+          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => setMoveTarget(null)}>取消</Button><Button type="button" disabled={pendingAction !== null || (moveParentId || rootParentId) === (moveTarget?.parentId ?? null)} onClick={() => void move()}>{pendingAction?.startsWith("move:") ? "正在移动" : "移动到此处"}</Button></div>
         </div>
       </Dialog>
     </div>

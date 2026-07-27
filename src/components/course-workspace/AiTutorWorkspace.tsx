@@ -4,16 +4,18 @@ import { AiTutor, type TutorConversationDto } from "@/components/course-workspac
 export function AiTutorWorkspace({
   courseId,
   courseTitle,
+  canManage = false,
   initialConversations
 }: {
   courseId: string;
   courseTitle: string;
+  canManage?: boolean;
   initialConversations: TutorConversationDto[];
 }) {
   return (
     <div className="space-y-5">
       <AiTutorHeader courseId={courseId} />
-      <AiTutor courseId={courseId} courseTitle={courseTitle} initialConversations={initialConversations} />
+      <AiTutor courseId={courseId} courseTitle={courseTitle} canManage={canManage} initialConversations={initialConversations} />
     </div>
   );
 }

@@ -65,14 +65,36 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       }
     }
     const deletedFiles = activeFiles.filter((item) => ids.has(item.id));
-    await Promise.all(deletedFiles.map(deleteDriveFileFromStorage));
+    const protectedCourse = await db.course.findFirst({
+      where: {
+        ownerId: user.id,
+        driveRootFolderId: { in: [...ids] }
+      },
+      select: { id: true, title: true }
+    });
+    if (protectedCourse) {
+      return NextResponse.json({
+        code: "COURSE_DRIVE_ROOT_PROTECTED",
+        error: `“${protectedCourse.title}”正在使用此文件夹作为课程云盘，不能从普通云盘删除`
+      }, { status: 409 });
+    }
     const deletedAt = new Date();
     await db.$transaction([
       db.resource.deleteMany({ where: { driveFileId: { in: [...ids] } } }),
       db.driveShare.deleteMany({ where: { fileId: { in: [...ids] } } }),
       db.driveFile.updateMany({ where: { id: { in: [...ids] } }, data: { deletedAt } })
     ]);
-    return NextResponse.json({ ok: true, deletedCount: ids.size });
+    const cleanup = await Promise.allSettled(deletedFiles.map(deleteDriveFileFromStorage));
+    const cleanupPending = cleanup.filter((result) => result.status === "rejected").length;
+    if (cleanupPending) {
+      console.error("[drive-delete-cleanup]", cleanup
+        .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+        .map((result) => result.reason));
+    }
+    return NextResponse.json(
+      { ok: true, deletedCount: ids.size, cleanupPending },
+      { status: cleanupPending ? 202 : 200 }
+    );
   } catch (error) {
     console.error("[drive-delete]", error);
     const forbidden = error instanceof Error && error.message === "无权管理文件";

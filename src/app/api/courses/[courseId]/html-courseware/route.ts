@@ -63,8 +63,8 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }
   return NextResponse.json({
-    code: "AI_PREREQUISITE_REQUIRED",
-    error: "请先在 AI 工作台生成并确认 AI 课件，再生成 HTML 课件",
-    href: `/space/courses/${courseId}/ai-workbench/apps/html_courseware`
-  }, { status: 409 });
+    code: "HTML_COURSEWARE_RETIRED",
+    error: "HTML 互动课件已停止生成，请使用 PPT 课件",
+    href: `/space/courses/${courseId}/ai-workbench/apps/ppt_courseware`
+  }, { status: 410 });
 }

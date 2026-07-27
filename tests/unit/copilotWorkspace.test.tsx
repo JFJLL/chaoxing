@@ -35,12 +35,14 @@ describe("CopilotWorkspace", () => {
     const html = renderToStaticMarkup(<CopilotWorkspace courseId="course-1" canManage={false} initialCopilotName="课程小助手" initialFolderId={null} initialConversations={[conversation]} initialSkills={[skill]} initialFiles={[]} initialFolders={[]} initialAnalytics={null} />);
 
     expect(html).toContain("未选择 Skill");
-    expect(html).toContain("@文件");
+    expect(html).toContain("@课程资料");
     expect(html).toContain("对话仅你可见");
     expect(html).toContain("当前 Skill、文件和最近对话会用于后续回复");
     expect(html).toContain('data-copilot-scroll-region="true"');
     expect(html).not.toContain("Copilot 设置");
     expect(html).not.toContain("教师隐藏指令");
+    expect(html).not.toContain("最多 5 个文件");
+    expect(html).not.toMatch(/\d+ 个文件/);
     expect(html).toContain("开始使用课程小助手");
   });
 
@@ -49,6 +51,9 @@ describe("CopilotWorkspace", () => {
 
     expect(html).toMatch(/<select(?![^>]*disabled)[^>]*>/);
     expect(html).toContain("案例分析");
+    const referenceButton = html.match(/<button[^>]*>(?:(?!<\/button>)[\s\S])*@课程资料<\/button>/)?.[0];
+    expect(referenceButton).toBeTruthy();
+    expect(referenceButton).not.toMatch(/\sdisabled(?:=|>)/);
   });
 
   it("offers test and settings modes to course managers", () => {

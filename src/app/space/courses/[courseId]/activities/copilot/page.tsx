@@ -10,7 +10,7 @@ import {
   listCopilotSkills,
   toCopilotConversationDto
 } from "@/lib/courseWorkspace/copilot";
-import { listCourseCopilotFiles, listOwnerDriveFolders } from "@/lib/copilot/files";
+import { listCourseCopilotFiles } from "@/lib/copilot/files";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
@@ -19,11 +19,10 @@ export default async function CopilotPage({ params }: PageProps) {
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
   const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
-  const [conversations, skills, files, folders, analytics] = await Promise.all([
+  const [conversations, skills, files, analytics] = await Promise.all([
     listCopilotConversations(user, courseId),
     listCopilotSkills(user, courseId),
     listCourseCopilotFiles(user, courseId),
-    canManage ? listOwnerDriveFolders(user) : Promise.resolve([]),
     canManage ? getCopilotAnalytics(user, courseId) : Promise.resolve(null)
   ]);
 
@@ -46,11 +45,8 @@ export default async function CopilotPage({ params }: PageProps) {
           courseId={courseId}
           canManage={canManage}
           initialCopilotName={course.copilotName}
-          initialFolderId={course.copilotFolderId}
           initialConversations={conversationDtos}
           initialSkills={skills.map((skill) => ({ ...skill, createdAt: skill.createdAt.toISOString(), updatedAt: skill.updatedAt.toISOString() }))}
-          initialFiles={files}
-          initialFolders={folders}
           initialAnalytics={analytics}
         />
       </CourseModulePanel>

@@ -8,9 +8,13 @@ import {
   safeAiArtifactSelect,
   toSafeAiArtifactDto
 } from "@/lib/courseWorkspace/aiGenerationQueue";
-import { createArtifactRevision, ArtifactRevisionError } from "@/lib/courseWorkspace/artifactRevision";
+import { ArtifactRevisionError, updateArtifactInPlace } from "@/lib/courseWorkspace/artifactRevision";
 import { ArtifactPayloadError, parseArtifactEditBody } from "@/lib/courseWorkspace/artifactPayload";
-import { createPrismaArtifactRevisionStore } from "@/lib/courseWorkspace/prismaArtifactStores";
+import {
+  createPrismaArtifactWorkflowStore,
+  createPrismaMutableArtifactStore
+} from "@/lib/courseWorkspace/prismaArtifactStores";
+import { ArtifactWorkflowError, deleteArtifact } from "@/lib/courseWorkspace/artifactWorkflow";
 
 type RouteContext = {
   params: Promise<{ courseId: string; artifactId: string }>;
@@ -27,6 +31,7 @@ export async function GET(_request: Request, context: RouteContext) {
     where: {
       id: artifactId,
       courseId,
+      deletedAt: null,
       ...(canManage ? {} : { status: "PUBLISHED" })
     },
     select: safeAiArtifactSelect
@@ -51,8 +56,8 @@ const editErrorMessages: Record<string, string> = {
   ARTIFACT_QUESTION_ID_INVALID: "题目标识无效或重复，请刷新草稿后重试",
   ARTIFACT_SOURCE_NOT_FOUND: "AI 产物不存在",
   ARTIFACT_PAYLOAD_REQUIRED: "编辑内容不能为空",
-  ARTIFACT_SOURCE_NOT_EDITABLE: "当前 AI 产物不能创建新版本",
-  ARTIFACT_REVISION_CONFLICT: "版本已被其他操作更新，请重试"
+  ARTIFACT_SOURCE_NOT_EDITABLE: "当前 AI 产物不能编辑",
+  ARTIFACT_REVISION_CONFLICT: "内容已被其他操作更新，请刷新后重试"
 };
 
 export async function PUT(request: NextRequest, context: RouteContext) {
@@ -66,7 +71,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   const source = await db.courseAiArtifact.findFirst({
     where: { id: artifactId, courseId },
-    select: { appType: true, payload: true }
+    select: { appType: true, payload: true, lockVersion: true }
   });
   if (!source) {
     return NextResponse.json({ code: "ARTIFACT_SOURCE_NOT_FOUND", error: "AI 产物不存在" }, { status: 404 });
@@ -80,13 +85,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       throw new ArtifactPayloadError("ARTIFACT_EDIT_BODY_INVALID");
     }
     const edit = parseArtifactEditBody(source.appType, body, { sourcePayload: source.payload });
-    const artifact = await createArtifactRevision(createPrismaArtifactRevisionStore(), {
+    const artifact = await updateArtifactInPlace(createPrismaMutableArtifactStore(), {
       courseId,
-      sourceArtifactId: artifactId,
-      userId: user.id,
-      ...edit
+      artifactId,
+      expectedLockVersion: edit.lockVersion,
+      title: edit.title,
+      payload: edit.payload
     });
-    return NextResponse.json({ artifact: toSafeAiArtifactDto(artifact, { canManage: true, jobsAhead: null }) }, { status: 201 });
+    return NextResponse.json({ artifact: toSafeAiArtifactDto(artifact, { canManage: true, jobsAhead: null }) });
   } catch (error) {
     if (error instanceof ArtifactPayloadError || error instanceof ArtifactRevisionError) {
       const retryable = error instanceof ArtifactRevisionError ? error.retryable : false;
@@ -96,6 +102,48 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         error: editErrorMessages[error.code] ?? "无法保存 AI 产物版本",
         retryable
       }, { status });
+    }
+    throw error;
+  }
+}
+
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  const user = await requireUser();
+  const { courseId, artifactId } = await context.params;
+  try {
+    await requireCourseOwner(user, courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
+  }
+
+  let lockVersion: number;
+  try {
+    const body = await request.json() as { lockVersion?: unknown };
+    if (!Number.isInteger(body.lockVersion) || Number(body.lockVersion) < 0) throw new Error();
+    lockVersion = Number(body.lockVersion);
+  } catch {
+    return NextResponse.json({ code: "INVALID_REQUEST", error: "删除参数无效" }, { status: 400 });
+  }
+
+  try {
+    const result = await deleteArtifact(createPrismaArtifactWorkflowStore(), {
+      courseId,
+      artifactId,
+      expectedLockVersion: lockVersion
+    });
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof ArtifactWorkflowError) {
+      const messages: Record<string, string> = {
+        ARTIFACT_NOT_FOUND: "AI 产物不存在",
+        ARTIFACT_DELETE_REQUIRES_WITHDRAWAL: "已发布内容必须先撤回后再删除",
+        ARTIFACT_DELETE_CONFLICT: "内容已被其他操作更新，请刷新后重试"
+      };
+      return NextResponse.json({
+        code: error.code,
+        error: messages[error.code] ?? "无法删除 AI 产物",
+        retryable: error.retryable
+      }, { status: error.code === "ARTIFACT_NOT_FOUND" ? 404 : 409 });
     }
     throw error;
   }

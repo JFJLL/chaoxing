@@ -109,9 +109,9 @@ export function ImportJobManager({
             <LinkButton href={`/space/courses/${courseId}/ai-workbench/apps/courseware`} variant="secondary">
               编辑 AI 课件
             </LinkButton>
-            <LinkButton href={`/space/courses/${courseId}/ai-workbench/apps/html_courseware`}>
+            <LinkButton href={`/space/courses/${courseId}/ai-workbench/apps/ppt_courseware`}>
               <PlaySquare className="h-4 w-4" />
-              前往 HTML 课件
+              前往 PPT 课件
             </LinkButton>
           </div>
         </div>

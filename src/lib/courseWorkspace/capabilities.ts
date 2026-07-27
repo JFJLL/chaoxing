@@ -66,11 +66,11 @@ export const courseCapabilities: CourseGeneratorCapability[] = [
     prerequisites: ["course_content"]
   },
   {
-    id: "ai-interactive-courseware",
-    appType: "html_courseware",
-    title: "生成互动课件",
-    description: "将已确认的 AI课件转换为可播放的互动课堂版本。",
-    route: (courseId) => `/space/courses/${courseId}/ai-workbench/apps/html_courseware`,
+    id: "ai-ppt-courseware",
+    appType: "ppt_courseware",
+    title: "PPT课件",
+    description: "将已确认的 AI课件套用课程模板并导出为 PPTX。",
+    route: (courseId) => `/space/courses/${courseId}/ai-workbench/apps/ppt_courseware`,
     enabled: true,
     color: "blue",
     prerequisites: ["approved_courseware"]
@@ -95,20 +95,20 @@ export const teacherPrepWorkflows: TeacherPrepWorkflow[] = [
     includes: ["生成教案", "编辑确认"]
   },
   {
+    id: "courseware",
+    title: "AI课件",
+    description: "生成普通课件，制作互动版本，并在同一流程中查看发布结果。",
+    route: (courseId) => `/space/courses/${courseId}/ai-workbench/apps/courseware`,
+    icon: "courseware",
+    includes: ["生成课件", "PPT课件", "已发布课件"]
+  },
+  {
     id: "assessment",
     title: "AI出题与组卷",
     description: "先生成并审核题目，再使用已确认题库完成智能组卷。",
     route: (courseId) => `/space/courses/${courseId}/ai-workbench/apps/question_generation`,
     icon: "assessment",
     includes: ["生成题目", "审核题库", "智能组卷"]
-  },
-  {
-    id: "courseware",
-    title: "AI课件",
-    description: "生成普通课件，制作互动版本，并在同一流程中查看发布结果。",
-    route: (courseId) => `/space/courses/${courseId}/ai-workbench/apps/courseware`,
-    icon: "courseware",
-    includes: ["生成课件", "互动课件", "已发布课件"]
   }
 ];
 

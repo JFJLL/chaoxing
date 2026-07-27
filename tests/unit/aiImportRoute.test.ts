@@ -1,8 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  CourseDriveError: class CourseDriveError extends Error {
+    constructor(
+      message: string,
+      public readonly status: number,
+      public readonly code: string
+    ) {
+      super(message);
+    }
+  },
   requireUser: vi.fn(),
   requireCourseOwner: vi.fn(),
+  ensureCoursePurposeFolder: vi.fn(),
   aggregate: vi.fn(),
   count: vi.fn(),
   create: vi.fn(),
@@ -16,6 +26,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/lib/permissions", () => ({ requireCourseOwner: mocks.requireCourseOwner }));
+vi.mock("@/lib/courseDrive/service", () => ({
+  CourseDriveError: mocks.CourseDriveError,
+  ensureCoursePurposeFolder: mocks.ensureCoursePurposeFolder
+}));
 vi.mock("@/lib/db", () => ({
   db: {
     documentImportJob: {
@@ -55,7 +69,8 @@ describe("POST /api/courses/:courseId/ai-import", () => {
     resetImportRequestGuard();
     resetImportAdmissionState();
     mocks.requireUser.mockResolvedValue({ id: "teacher-1", role: "TEACHER" });
-    mocks.requireCourseOwner.mockResolvedValue({ id: "course-1", institutionId: "institution-1", copilotFolderId: "folder-1" });
+    mocks.requireCourseOwner.mockResolvedValue({ id: "course-1", institutionId: "institution-1", driveRootFolderId: "root-1" });
+    mocks.ensureCoursePurposeFolder.mockResolvedValue({ id: "folder-1", ownerId: "teacher-1" });
     mocks.aggregate.mockResolvedValue({ _sum: { fileSize: 0 } });
     mocks.count.mockResolvedValue(0);
     mocks.create.mockResolvedValue({ id: "job-1" });
@@ -113,13 +128,19 @@ describe("POST /api/courses/:courseId/ai-import", () => {
     }));
   });
 
-  it("rejects the upload when the bound cloud folder has been deleted", async () => {
-    mocks.driveFileFindFirst.mockResolvedValue(null);
+  it("returns an actionable conflict when the course document folder cannot be prepared", async () => {
+    mocks.ensureCoursePurposeFolder.mockRejectedValue(
+      new mocks.CourseDriveError("课程根目录不可用，请先重新绑定", 409, "COURSE_DRIVE_ROOT_UNAVAILABLE")
+    );
 
     const response = await POST(uploadRequest() as never, context);
 
     expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toMatchObject({ code: "COPILOT_FOLDER_UNAVAILABLE", retryable: false });
+    await expect(response.json()).resolves.toMatchObject({
+      code: "COURSE_DRIVE_ROOT_UNAVAILABLE",
+      error: "课程根目录不可用，请先重新绑定",
+      retryable: false
+    });
     expect(mocks.storeDriveUpload).not.toHaveBeenCalled();
   });
 

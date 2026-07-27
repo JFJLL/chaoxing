@@ -7,6 +7,7 @@ import {
   assertUploadSize
 } from "@/lib/storage";
 import { storeDriveUpload } from "@/lib/copilot/files";
+import { CourseDriveError, ensureCoursePurposeFolder } from "@/lib/courseDrive/service";
 import {
   ImportAdmissionError,
   acquireImportRequest,
@@ -109,23 +110,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "文件不符合上传要求" }, { status: 400 });
     }
-    if (!course.copilotFolderId) {
-      return NextResponse.json({
-        code: "COPILOT_FOLDER_REQUIRED",
-        error: "请先在 Copilot 设置中绑定课程云盘文件夹",
-        retryable: false
-      }, { status: 409 });
-    }
-    const copilotFolder = await db.driveFile.findFirst({
-      where: { id: course.copilotFolderId, kind: "folder", deletedAt: null },
-      select: { ownerId: true }
-    });
-    if (!copilotFolder) {
-      return NextResponse.json({
-        code: "COPILOT_FOLDER_UNAVAILABLE",
-        error: "课程云盘文件夹已失效，请重新绑定",
-        retryable: false
-      }, { status: 409 });
+    let courseDocumentsFolder;
+    try {
+      courseDocumentsFolder = await ensureCoursePurposeFolder(user, courseId, "COURSE_DOCUMENTS");
+    } catch (error) {
+      if (error instanceof CourseDriveError) {
+        return NextResponse.json({
+          code: error.code,
+          error: error.message,
+          retryable: false
+        }, { status: error.status });
+      }
+      throw error;
     }
 
     let admission;
@@ -146,8 +142,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     let job: { id: string };
     try {
       const driveFile = await storeDriveUpload({
-        ownerId: copilotFolder.ownerId,
-        parentId: course.copilotFolderId,
+        ownerId: courseDocumentsFolder.ownerId,
+        parentId: courseDocumentsFolder.id,
         file
       });
       job = await db.documentImportJob.create({

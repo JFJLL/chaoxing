@@ -19,7 +19,7 @@ const messages: Record<string, string> = {
   ARTIFACT_PAYLOAD_INVALID: "AI 产物内容格式无效，请编辑后重试"
 };
 
-export async function POST(_request: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId, artifactId } = await context.params;
   try {
@@ -29,10 +29,15 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 
   try {
+    const body = await request.json().catch(() => null) as { lockVersion?: unknown } | null;
+    if (!body || !Number.isInteger(body.lockVersion) || Number(body.lockVersion) < 0) {
+      return NextResponse.json({ code: "INVALID_REQUEST", error: "确认参数无效" }, { status: 400 });
+    }
     const artifact = await confirmArtifact(createPrismaArtifactWorkflowStore(), {
       courseId,
       artifactId,
-      userId: user.id
+      userId: user.id,
+      expectedLockVersion: Number(body.lockVersion)
     });
     return NextResponse.json({ artifact: toSafeAiArtifactDto(artifact, { canManage: true, jobsAhead: null }) });
   } catch (error) {

@@ -1,10 +1,14 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Bot, LoaderCircle, Plus, RotateCcw, Send, Square } from "lucide-react";
+import { Bot, FileText, Folder, LoaderCircle, Plus, RotateCcw, Send, Square, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { readAiStream, type AiCitation, type AiStreamEvent } from "@/lib/ai/streamProtocol";
 import { CopilotMarkdown } from "@/components/course-workspace/CopilotMessage";
+import {
+  CourseDriveReferencePicker,
+  type CourseDriveReferenceDto
+} from "@/components/course-workspace/CourseDriveReferencePicker";
 
 export type TutorMessageDto = {
   id: string;
@@ -20,6 +24,7 @@ export type TutorConversationDto = {
   status: string;
   createdAt: string;
   updatedAt: string;
+  attachments?: CourseDriveReferenceDto[];
   messages: TutorMessageDto[];
 };
 
@@ -38,10 +43,12 @@ async function parseCreatedConversation(response: Response): Promise<TutorConver
 export function AiTutor({
   courseId,
   courseTitle,
+  canManage = false,
   initialConversations
 }: {
   courseId: string;
   courseTitle: string;
+  canManage?: boolean;
   initialConversations: TutorConversationDto[];
 }) {
   const [conversations, setConversations] = useState(initialConversations);
@@ -75,6 +82,49 @@ export function AiTutor({
     setError(null);
     try {
       await createConversation();
+    } catch (cause) {
+      setError(safeError(cause));
+    }
+  }
+
+  async function updateReferences(references: Array<{ driveFileId: string; referenceType: "FILE" | "FOLDER" }>) {
+    setError(null);
+    try {
+      const conversation = selected ?? await createConversation();
+      const response = await fetch(`/api/courses/${courseId}/ai-tutor/conversations/${conversation.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ references })
+      });
+      const body = await response.json().catch(() => null) as { conversation?: TutorConversationDto; error?: string } | null;
+      if (!response.ok || !body?.conversation) throw new Error(body?.error || "课程资料引用更新失败");
+      setConversations((current) => current.map((item) => item.id === conversation.id ? body.conversation! : item));
+      return true;
+    } catch (cause) {
+      setError(safeError(cause));
+      return false;
+    }
+  }
+
+  async function removeReference(referenceId: string | null) {
+    if (!selected || !referenceId) return;
+    await updateReferences((selected.attachments ?? []).flatMap((reference) => (
+      reference.id && reference.id !== referenceId
+        ? [{ driveFileId: reference.id, referenceType: reference.referenceType }]
+        : []
+    )));
+  }
+
+  async function deleteConversation(conversation: TutorConversationDto) {
+    if (streaming || !window.confirm(`删除对话「${conversation.title || "课程问答"}」？此操作不可恢复。`)) return;
+    setError(null);
+    try {
+      const response = await fetch(`/api/courses/${courseId}/ai-tutor/conversations/${conversation.id}`, { method: "DELETE" });
+      const body = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(body?.error || "删除对话失败");
+      const next = conversations.filter((item) => item.id !== conversation.id);
+      setConversations(next);
+      if (selectedId === conversation.id) setSelectedId(next[0]?.id ?? null);
     } catch (cause) {
       setError(safeError(cause));
     }
@@ -181,18 +231,49 @@ export function AiTutor({
           </button>
           <div role="group" aria-label="历史对话" className="cx-hide-scrollbar mt-3 flex gap-2 overflow-x-auto lg:mt-4 lg:block lg:space-y-2 lg:overflow-visible">
             {conversations.map((conversation) => (
-              <button key={conversation.id} type="button" aria-pressed={selectedId === conversation.id} onClick={() => !streaming && setSelectedId(conversation.id)} className={`cx-focus-ring cx-tactile w-44 shrink-0 rounded-xl border px-3 py-3 text-left text-sm lg:w-full ${selectedId === conversation.id ? "border-indigo-100 bg-white font-medium text-[var(--cx-blue)] shadow-sm" : "border-transparent text-slate-600 hover:border-slate-200 hover:bg-white/70"}`}>
-                <span className="line-clamp-1">{conversation.title || "课程问答"}</span>
-                <span className="mt-1 block text-xs font-normal text-slate-400">{conversation.messages.length} 条消息</span>
-              </button>
+              <div key={conversation.id} className={`flex w-48 shrink-0 items-center rounded-xl border lg:w-full ${selectedId === conversation.id ? "border-indigo-100 bg-white shadow-sm" : "border-transparent hover:border-slate-200 hover:bg-white/70"}`}>
+                <button type="button" aria-pressed={selectedId === conversation.id} onClick={() => !streaming && setSelectedId(conversation.id)} className={`cx-focus-ring min-w-0 flex-1 rounded-xl px-3 py-3 text-left text-sm ${selectedId === conversation.id ? "font-medium text-[var(--cx-blue)]" : "text-slate-600"}`}>
+                  <span className="line-clamp-1">{conversation.title || "课程问答"}</span>
+                  <span className="mt-1 block text-xs font-normal text-slate-400">{conversation.messages.length} 条消息</span>
+                </button>
+                <button type="button" aria-label={`删除对话：${conversation.title || "课程问答"}`} disabled={streaming} onClick={() => void deleteConversation(conversation)} className="cx-focus-ring mr-2 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             ))}
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-col">
           <header className="border-b border-slate-100 bg-white/80 px-4 py-4 sm:px-5">
-            <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]" aria-hidden="true" /><Bot className="h-5 w-5 text-[var(--cx-blue)]" aria-hidden="true" /><h2 className="font-semibold text-slate-950">AI 助教</h2></div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]" aria-hidden="true" />
+              <Bot className="h-5 w-5 text-[var(--cx-blue)]" aria-hidden="true" />
+              <h2 className="font-semibold text-slate-950">AI 助教</h2>
+              <span className="ml-auto">
+                <CourseDriveReferencePicker
+                  courseId={courseId}
+                  selected={selected?.attachments ?? []}
+                  disabled={streaming}
+                  canUpload={canManage}
+                  onApply={updateReferences}
+                />
+              </span>
+            </div>
             <p className="mt-1 text-sm text-slate-500">仅依据《{courseTitle}》中你有权限查看的内容回答，并提供课程引用。</p>
+            {selected?.attachments?.length ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selected.attachments.map((reference) => (
+                  <span key={reference.id ?? reference.name} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ${reference.available ? "bg-blue-50 text-blue-700" : "bg-red-50 text-red-700"}`}>
+                    {reference.referenceType === "FOLDER" ? <Folder className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+                    {reference.name}
+                    <button type="button" aria-label={`移除 ${reference.name}`} disabled={streaming} onClick={() => void removeReference(reference.id)}>
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </header>
           <div role="log" aria-live="polite" aria-relevant="additions text" className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
             {!displayedMessages.length && !streamText ? <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4 text-sm text-slate-500"><p className="font-medium text-slate-700">从当前课程开始提问</p><p className="mt-1">输入课程问题开始对话。资料不足时，助教会明确说明。</p></div> : null}

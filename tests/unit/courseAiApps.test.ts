@@ -4,7 +4,7 @@ import { buildKnowledgeMapDraft } from "@/lib/knowledgeMap/generateKnowledgeMap"
 import type { CourseAiAppType } from "@/types/courseWorkspace";
 import { courseCapabilities, enabledGeneratorCapabilities, teacherPrepWorkflows } from "@/lib/courseWorkspace/capabilities";
 
-const appTypes: CourseAiAppType[] = ["question_generation", "lesson_plan", "courseware", "paper_assembly", "html_courseware"];
+const appTypes: CourseAiAppType[] = ["question_generation", "lesson_plan", "courseware", "paper_assembly", "ppt_courseware"];
 
 describe("course AI apps", () => {
   it("maps each enabled app type to one definition", () => {
@@ -25,10 +25,10 @@ describe("course AI apps", () => {
     expect(new Set(routes).size).toBe(routes.length);
     expect(enabledGeneratorCapabilities.map((capability) => capability.appType).sort()).toEqual(appTypes.sort());
     expect(enabled.find((capability) => capability.id === "ai-paper-assembly")?.prerequisites).toEqual(["approved_questions"]);
-    expect(enabled.find((capability) => capability.id === "ai-interactive-courseware")?.title).toBe("生成互动课件");
-    expect(teacherPrepWorkflows.map((workflow) => workflow.id)).toEqual(["course-content", "lesson-plan", "assessment", "courseware"]);
+    expect(enabled.find((capability) => capability.id === "ai-ppt-courseware")?.title).toBe("PPT课件");
+    expect(teacherPrepWorkflows.map((workflow) => workflow.id)).toEqual(["course-content", "lesson-plan", "courseware", "assessment"]);
     expect(teacherPrepWorkflows.find((workflow) => workflow.id === "assessment")?.includes).toEqual(["生成题目", "审核题库", "智能组卷"]);
-    expect(teacherPrepWorkflows.find((workflow) => workflow.id === "courseware")?.includes).toEqual(["生成课件", "互动课件", "已发布课件"]);
+    expect(teacherPrepWorkflows.find((workflow) => workflow.id === "courseware")?.includes).toEqual(["生成课件", "PPT课件", "已发布课件"]);
   });
 
   it("builds relational knowledge maps beyond a plain outline", () => {

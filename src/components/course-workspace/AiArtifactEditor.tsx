@@ -22,6 +22,7 @@ export type ArtifactEditorDraft =
   | { appType: "question_generation"; title: string; payload: AiQuestionPayload }
   | { appType: "lesson_plan"; title: string; payload: AiLessonPlanPayload }
   | { appType: "courseware"; title: string; payload: AiCoursewarePayload }
+  | { appType: "ppt_courseware"; title: string; payload: AiCoursewarePayload }
   | { appType: "paper_assembly"; title: string; payload: AiPaperPayload }
   | { appType: "html_courseware"; title: string; payload: HtmlCoursewarePayload };
 
@@ -33,6 +34,7 @@ export function createArtifactEditorDraft(
   if (appType === "question_generation") return { appType, title, payload: aiQuestionPayloadSchema.parse(payload) };
   if (appType === "lesson_plan") return { appType, title, payload: aiLessonPlanPayloadSchema.parse(payload) };
   if (appType === "courseware") return { appType, title, payload: aiCoursewarePayloadSchema.parse(payload) };
+  if (appType === "ppt_courseware") return { appType, title, payload: aiCoursewarePayloadSchema.parse(payload) };
   if (appType === "paper_assembly") return { appType, title, payload: aiPaperPayloadSchema.parse(payload) };
   return { appType, title, payload: htmlCoursewarePayloadSchema.parse(payload) };
 }
@@ -66,6 +68,7 @@ type Props = {
   onSave: (body: { title: string; payload: unknown }) => void | Promise<void>;
   onDirtyChange: (dirty: boolean) => void;
   busy: boolean;
+  editable?: boolean;
 };
 
 const inputClass = "h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400";
@@ -126,7 +129,16 @@ function TextList({ label, items, onChange }: { label: string; items: string[]; 
   );
 }
 
-export function AiArtifactEditor({ appType, title, payload, approvedQuestions = [], onSave, onDirtyChange, busy }: Props) {
+export function AiArtifactEditor({
+  appType,
+  title,
+  payload,
+  approvedQuestions = [],
+  onSave,
+  onDirtyChange,
+  busy,
+  editable = true
+}: Props) {
   const [draft, setDraft] = useState(() => createArtifactEditorDraft(appType, title, payload));
 
   function update(mutator: (next: ArtifactEditorDraft) => void) {
@@ -156,6 +168,7 @@ export function AiArtifactEditor({ appType, title, payload, approvedQuestions = 
 
   return (
     <form onSubmit={save} className="space-y-5">
+      <fieldset disabled={!editable || busy} className="space-y-5 disabled:opacity-90">
       <label className="block space-y-1 text-sm font-semibold text-slate-900">
         <span>产物标题</span>
         <input value={draft.title} onChange={(event) => update((next) => { next.title = event.target.value; })} className={inputClass} required />
@@ -208,18 +221,18 @@ export function AiArtifactEditor({ appType, title, payload, approvedQuestions = 
         </div>
       ) : null}
 
-      {draft.appType === "courseware" ? (
+      {draft.appType === "courseware" || draft.appType === "ppt_courseware" ? (
         <div className="space-y-4">
           {draft.payload.slides.map((slide, index) => (
             <fieldset key={`${slide.title}-${index}`} className="space-y-3 rounded-xl border border-slate-200 p-4">
               <legend className="px-2 text-sm font-semibold text-slate-900">幻灯片 {index + 1}</legend>
-              <div className="flex justify-end"><ItemActions index={index} length={draft.payload.slides.length} onMove={(direction) => update((next) => { if (next.appType === "courseware") move(next.payload.slides, index, direction); })} onRemove={() => update((next) => { if (next.appType === "courseware") next.payload.slides.splice(index, 1); })} /></div>
-              <label className="block text-sm text-slate-700">标题<input className={inputClass} value={slide.title} onChange={(event) => update((next) => { if (next.appType === "courseware") next.payload.slides[index]!.title = event.target.value; })} /></label>
-              <TextList label="要点" items={slide.bullets} onChange={(items) => update((next) => { if (next.appType === "courseware") next.payload.slides[index]!.bullets = items; })} />
-              <label className="block text-sm text-slate-700">讲稿备注<textarea className={textareaClass} value={slide.speakerNotes} onChange={(event) => update((next) => { if (next.appType === "courseware") next.payload.slides[index]!.speakerNotes = event.target.value; })} /></label>
+              <div className="flex justify-end"><ItemActions index={index} length={draft.payload.slides.length} onMove={(direction) => update((next) => { if (next.appType === "courseware" || next.appType === "ppt_courseware") move(next.payload.slides, index, direction); })} onRemove={() => update((next) => { if (next.appType === "courseware" || next.appType === "ppt_courseware") next.payload.slides.splice(index, 1); })} /></div>
+              <label className="block text-sm text-slate-700">标题<input className={inputClass} value={slide.title} onChange={(event) => update((next) => { if (next.appType === "courseware" || next.appType === "ppt_courseware") next.payload.slides[index]!.title = event.target.value; })} /></label>
+              <TextList label="要点" items={slide.bullets} onChange={(items) => update((next) => { if (next.appType === "courseware" || next.appType === "ppt_courseware") next.payload.slides[index]!.bullets = items; })} />
+              <label className="block text-sm text-slate-700">讲稿备注<textarea className={textareaClass} value={slide.speakerNotes} onChange={(event) => update((next) => { if (next.appType === "courseware" || next.appType === "ppt_courseware") next.payload.slides[index]!.speakerNotes = event.target.value; })} /></label>
             </fieldset>
           ))}
-          <Button type="button" variant="secondary" onClick={() => update((next) => { if (next.appType === "courseware") next.payload.slides.push({ title: "", bullets: [""], speakerNotes: "" }); })}><Plus className="h-4 w-4" aria-hidden="true" />新增幻灯片</Button>
+          <Button type="button" variant="secondary" onClick={() => update((next) => { if (next.appType === "courseware" || next.appType === "ppt_courseware") next.payload.slides.push({ title: "", bullets: [""], speakerNotes: "" }); })}><Plus className="h-4 w-4" aria-hidden="true" />新增幻灯片</Button>
         </div>
       ) : null}
 
@@ -241,11 +254,12 @@ export function AiArtifactEditor({ appType, title, payload, approvedQuestions = 
         </div>
       ) : null}
 
-      <div className="flex justify-end border-t border-slate-100 pt-4">
+      </fieldset>
+      {editable ? <div className="flex justify-end border-t border-slate-100 pt-4">
         <Button type="submit" disabled={busy || !draft.title.trim()}>
-          <Save className="h-4 w-4" aria-hidden="true" />{busy ? "正在保存" : "保存为新版本"}
+          <Save className="h-4 w-4" aria-hidden="true" />{busy ? "正在保存" : "保存"}
         </Button>
-      </div>
+      </div> : null}
     </form>
   );
 }

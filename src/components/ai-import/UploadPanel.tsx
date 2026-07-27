@@ -46,9 +46,9 @@ export function UploadPanel({ courseId }: { courseId: string }) {
           <FileUp className="h-6 w-6" />
         </div>
         <div className="flex-1">
-          <h2 className="font-semibold text-slate-900">上传课程文档</h2>
+          <h2 className="font-semibold text-slate-900">从本地上传</h2>
           <p className="mt-1 text-sm text-slate-500">支持 DOCX、PDF、PPTX、TXT、Markdown</p>
-          <p className="text-sm text-slate-500">提交后进入解析队列，生成结果确认后才写入课程</p>
+          <p className="text-sm text-slate-500">文件会先保存到课程云盘的“课程文档”，再进入解析队列。</p>
           <label
             className={`mt-5 flex min-h-28 flex-col items-center justify-center rounded-md border border-dashed border-[var(--cx-border)] bg-slate-50 p-5 text-center ${
               submitting ? "pointer-events-none cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-slate-100"

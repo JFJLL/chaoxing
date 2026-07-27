@@ -17,7 +17,7 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
   if (!canManage) {
     const initialTutorConversations = (await listTutorConversations(user, course.id)).map(toTutorConversationDto);
     return (
-      <AiTutorWorkspace courseId={course.id} courseTitle={course.title} initialConversations={initialTutorConversations} />
+      <AiTutorWorkspace courseId={course.id} courseTitle={course.title} canManage={false} initialConversations={initialTutorConversations} />
     );
   }
 

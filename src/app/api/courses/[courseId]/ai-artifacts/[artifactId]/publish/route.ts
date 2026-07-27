@@ -13,7 +13,7 @@ const messages: Record<string, string> = {
   ARTIFACT_PUBLISH_CONFLICT: "只有已确认且状态未变化的 AI 产物可以发布"
 };
 
-export async function POST(_request: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId, artifactId } = await context.params;
   try {
@@ -23,7 +23,15 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 
   try {
-    const artifact = await publishArtifact(createPrismaArtifactWorkflowStore(), { courseId, artifactId });
+    const body = await request.json().catch(() => null) as { lockVersion?: unknown } | null;
+    if (!body || !Number.isInteger(body.lockVersion) || Number(body.lockVersion) < 0) {
+      return NextResponse.json({ code: "INVALID_REQUEST", error: "发布参数无效" }, { status: 400 });
+    }
+    const artifact = await publishArtifact(createPrismaArtifactWorkflowStore(), {
+      courseId,
+      artifactId,
+      expectedLockVersion: Number(body.lockVersion)
+    });
     return NextResponse.json({ artifact: toSafeAiArtifactDto(artifact, { canManage: true, jobsAhead: null }) });
   } catch (error) {
     if (error instanceof ArtifactWorkflowError) {

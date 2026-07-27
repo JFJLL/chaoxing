@@ -69,6 +69,7 @@ describe("import progress", () => {
     expect(getNextPollDelay("QUEUED")).toBe(1500);
     expect(getNextPollDelay("MAPPING")).toBe(1500);
     expect(getNextPollDelay("READY_FOR_REVIEW")).toBeNull();
+    expect(getNextPollDelay("READY_FOR_REVIEW", false)).toBe(500);
     expect(getNextPollDelay("FAILED")).toBeNull();
   });
 
@@ -84,14 +85,16 @@ describe("import progress", () => {
           status: "STRUCTURING",
           currentStage: "课程结构生成",
           jobsAhead: 0,
-          errorMessage: null
+          errorMessage: null,
+          reviewReady: false
         }
       })
     ).toEqual({
       status: "STRUCTURING",
       currentStage: "课程结构生成",
       jobsAhead: 0,
-      errorMessage: null
+      errorMessage: null,
+      reviewReady: false
     });
   });
 
@@ -99,11 +102,12 @@ describe("import progress", () => {
     null,
     {},
     { job: null },
-    { job: { status: "UNKNOWN", currentStage: null, jobsAhead: null, errorMessage: null } },
-    { job: { status: "QUEUED", currentStage: 1, jobsAhead: null, errorMessage: null } },
-    { job: { status: "QUEUED", currentStage: null, jobsAhead: -1, errorMessage: null } },
-    { job: { status: "QUEUED", currentStage: null, jobsAhead: 1.5, errorMessage: null } },
-    { job: { status: "QUEUED", currentStage: null, jobsAhead: null, errorMessage: {} } }
+    { job: { status: "UNKNOWN", currentStage: null, jobsAhead: null, errorMessage: null, reviewReady: false } },
+    { job: { status: "QUEUED", currentStage: 1, jobsAhead: null, errorMessage: null, reviewReady: false } },
+    { job: { status: "QUEUED", currentStage: null, jobsAhead: -1, errorMessage: null, reviewReady: false } },
+    { job: { status: "QUEUED", currentStage: null, jobsAhead: 1.5, errorMessage: null, reviewReady: false } },
+    { job: { status: "QUEUED", currentStage: null, jobsAhead: null, errorMessage: {}, reviewReady: false } },
+    { job: { status: "QUEUED", currentStage: null, jobsAhead: null, errorMessage: null } }
   ])("rejects malformed polling response %#", (response) => {
     expect(parseImportJobResponse(response)).toBeNull();
   });

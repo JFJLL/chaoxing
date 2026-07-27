@@ -8,6 +8,10 @@ export type ArtifactWorkflowErrorCode =
   | "ARTIFACT_NOT_CONFIRMABLE"
   | "ARTIFACT_CONFIRM_CONFLICT"
   | "ARTIFACT_PUBLISH_CONFLICT"
+  | "ARTIFACT_UPDATE_NOT_PENDING"
+  | "ARTIFACT_WITHDRAW_CONFLICT"
+  | "ARTIFACT_DELETE_REQUIRES_WITHDRAWAL"
+  | "ARTIFACT_DELETE_CONFLICT"
   | "AI_ARTIFACT_TYPE_NOT_PUBLISHABLE"
   | "DUPLICATE_QUESTION_SOURCE_KEY"
   | "QUESTION_BANK_INSUFFICIENT"
@@ -32,6 +36,9 @@ export type ArtifactWorkflowRecord = {
   appType: string;
   status: string;
   payload: string | null;
+  publishedPayload?: string | null;
+  lockVersion?: number;
+  deletedAt?: Date | null;
 };
 
 export type ApprovedQuestionData = {
@@ -58,11 +65,18 @@ export type ArtifactWorkflowTransaction<Result> = {
   archiveQuestionsExcept(courseId: string, sourceSeriesId: string, sourceKeys: string[]): Promise<void>;
   archivePublishedInSeries(courseId: string, seriesId: string, exceptId: string): Promise<void>;
   publishArtifact(id: string, courseId: string, publishedAt: Date): Promise<number>;
+  approveWorkingArtifact?(id: string, courseId: string, approvedAt: Date, expectedLockVersion?: number): Promise<number>;
+  publishWorkingArtifact?(id: string, courseId: string, publishedAt: Date, payload: string, expectedLockVersion?: number): Promise<number>;
+  confirmPublishedUpdate?(id: string, courseId: string, publishedAt: Date, payload: string, expectedLockVersion: number): Promise<number>;
+  withdrawPublishedArtifact?(id: string, courseId: string, withdrawnAt: Date, expectedLockVersion: number): Promise<number>;
+  softDeleteArtifact?(id: string, courseId: string, deletedAt: Date, expectedLockVersion: number): Promise<number>;
   findSafeArtifact(id: string, courseId: string): Promise<Result | null>;
 };
 
 export type ArtifactWorkflowStore<Result> = {
-  transaction(operation: (transaction: ArtifactWorkflowTransaction<Result>) => Promise<Result>): Promise<Result>;
+  transaction<OperationResult>(
+    operation: (transaction: ArtifactWorkflowTransaction<Result>) => Promise<OperationResult>
+  ): Promise<OperationResult>;
 };
 
 function questionEntries(payload: AiQuestionPayload, artifact: ArtifactWorkflowRecord, userId: string, approvedAt: Date) {
@@ -94,7 +108,7 @@ function paperQuestionIds(payload: AiPaperPayload) {
 
 export async function confirmArtifact<Result>(
   store: ArtifactWorkflowStore<Result>,
-  input: { courseId: string; artifactId: string; userId: string }
+  input: { courseId: string; artifactId: string; userId: string; expectedLockVersion?: number }
 ) {
   return store.transaction(async (transaction) => {
     const artifact = await transaction.findArtifact({ id: input.artifactId, courseId: input.courseId });
@@ -129,11 +143,17 @@ export async function confirmArtifact<Result>(
       } catch {
         throw new ArtifactWorkflowError("INVALID_HTML_COURSEWARE_SOURCE");
       }
-    } else if (artifact.appType !== "lesson_plan" && artifact.appType !== "courseware") {
+    } else if (
+      artifact.appType !== "lesson_plan"
+      && artifact.appType !== "courseware"
+      && artifact.appType !== "ppt_courseware"
+    ) {
       throw new ArtifactWorkflowError("ARTIFACT_NOT_CONFIRMABLE");
     }
 
-    const transitioned = await transaction.approveArtifact(artifact.id, input.courseId, approvedAt);
+    const transitioned = transaction.approveWorkingArtifact
+      ? await transaction.approveWorkingArtifact(artifact.id, input.courseId, approvedAt, input.expectedLockVersion)
+      : await transaction.approveArtifact(artifact.id, input.courseId, approvedAt);
     if (transitioned !== 1) {
       throw new ArtifactWorkflowError("ARTIFACT_CONFIRM_CONFLICT", true);
     }
@@ -147,11 +167,17 @@ export async function confirmArtifact<Result>(
   });
 }
 
-const publishableTypes = new Set(["question_generation", "paper_assembly", "html_courseware"]);
+const publishableTypes = new Set([
+  "lesson_plan",
+  "courseware",
+  "paper_assembly",
+  "ppt_courseware",
+  "html_courseware"
+]);
 
 export async function publishArtifact<Result>(
   store: ArtifactWorkflowStore<Result>,
-  input: { courseId: string; artifactId: string },
+  input: { courseId: string; artifactId: string; expectedLockVersion?: number },
   maxAttempts = 3,
   retryDelayMs = 10
 ) {
@@ -166,8 +192,20 @@ export async function publishArtifact<Result>(
     if (artifact.status !== "APPROVED") {
       throw new ArtifactWorkflowError("ARTIFACT_PUBLISH_CONFLICT", true);
     }
-    await transaction.archivePublishedInSeries(input.courseId, artifact.seriesId, artifact.id);
-    const transitioned = await transaction.publishArtifact(artifact.id, input.courseId, new Date());
+    const publishedAt = new Date();
+    let transitioned: number;
+    if (transaction.publishWorkingArtifact) {
+      transitioned = await transaction.publishWorkingArtifact(
+        artifact.id,
+        input.courseId,
+        publishedAt,
+        artifact.payload ?? "",
+        input.expectedLockVersion
+      );
+    } else {
+      await transaction.archivePublishedInSeries(input.courseId, artifact.seriesId, artifact.id);
+      transitioned = await transaction.publishArtifact(artifact.id, input.courseId, publishedAt);
+    }
     if (transitioned !== 1) {
       throw new ArtifactWorkflowError("ARTIFACT_PUBLISH_CONFLICT", true);
     }
@@ -186,6 +224,123 @@ export async function publishArtifact<Result>(
     }
   }
   throw new ArtifactWorkflowError("ARTIFACT_PUBLISH_CONFLICT", true);
+}
+
+async function validateMutablePayload<Result>(
+  transaction: ArtifactWorkflowTransaction<Result>,
+  artifact: ArtifactWorkflowRecord,
+  userId: string,
+  approvedAt: Date
+) {
+  const payload = parseStoredArtifactPayload(artifact.appType, artifact.payload);
+  let questions: ApprovedQuestionData[] = [];
+  if (artifact.appType === "question_generation") {
+    questions = questionEntries(payload as AiQuestionPayload, artifact, userId, approvedAt);
+  } else if (artifact.appType === "paper_assembly") {
+    const ids = paperQuestionIds(payload as AiPaperPayload);
+    if (new Set(ids).size !== ids.length) {
+      throw new ArtifactWorkflowError("INVALID_PAPER_QUESTIONS");
+    }
+    const approved = await transaction.findApprovedQuestionIds(artifact.courseId, ids);
+    if (approved.length !== ids.length) {
+      throw new ArtifactWorkflowError("QUESTION_BANK_INSUFFICIENT");
+    }
+  }
+  return questions;
+}
+
+export async function confirmArtifactUpdate<Result>(
+  store: ArtifactWorkflowStore<Result>,
+  input: {
+    courseId: string;
+    artifactId: string;
+    userId: string;
+    expectedLockVersion: number;
+  }
+) {
+  return store.transaction(async (transaction) => {
+    const artifact = await transaction.findArtifact({ id: input.artifactId, courseId: input.courseId });
+    if (!artifact || artifact.deletedAt) throw new ArtifactWorkflowError("ARTIFACT_NOT_FOUND");
+    if (
+      artifact.status !== "PUBLISHED"
+      || !artifact.payload
+      || artifact.payload === artifact.publishedPayload
+      || !transaction.confirmPublishedUpdate
+    ) {
+      throw new ArtifactWorkflowError("ARTIFACT_UPDATE_NOT_PENDING");
+    }
+
+    const publishedAt = new Date();
+    const questions = await validateMutablePayload(transaction, artifact, input.userId, publishedAt);
+    const transitioned = await transaction.confirmPublishedUpdate(
+      artifact.id,
+      input.courseId,
+      publishedAt,
+      artifact.payload,
+      input.expectedLockVersion
+    );
+    if (transitioned !== 1) {
+      throw new ArtifactWorkflowError("ARTIFACT_CONFIRM_CONFLICT", true);
+    }
+    for (const question of questions) await transaction.upsertQuestion(question);
+    if (artifact.appType === "question_generation") {
+      await transaction.archiveQuestionsExcept(
+        input.courseId,
+        artifact.seriesId,
+        questions.map((question) => question.sourceKey)
+      );
+    }
+    const result = await transaction.findSafeArtifact(artifact.id, input.courseId);
+    if (!result) throw new ArtifactWorkflowError("ARTIFACT_CONFIRM_CONFLICT", true);
+    return result;
+  });
+}
+
+export async function withdrawArtifact<Result>(
+  store: ArtifactWorkflowStore<Result>,
+  input: { courseId: string; artifactId: string; expectedLockVersion: number }
+) {
+  return store.transaction(async (transaction) => {
+    const artifact = await transaction.findArtifact({ id: input.artifactId, courseId: input.courseId });
+    if (!artifact || artifact.deletedAt) throw new ArtifactWorkflowError("ARTIFACT_NOT_FOUND");
+    if (artifact.status !== "PUBLISHED" || !transaction.withdrawPublishedArtifact) {
+      throw new ArtifactWorkflowError("ARTIFACT_WITHDRAW_CONFLICT");
+    }
+    const transitioned = await transaction.withdrawPublishedArtifact(
+      artifact.id,
+      input.courseId,
+      new Date(),
+      input.expectedLockVersion
+    );
+    if (transitioned !== 1) throw new ArtifactWorkflowError("ARTIFACT_WITHDRAW_CONFLICT", true);
+    const result = await transaction.findSafeArtifact(artifact.id, input.courseId);
+    if (!result) throw new ArtifactWorkflowError("ARTIFACT_WITHDRAW_CONFLICT", true);
+    return result;
+  });
+}
+
+export async function deleteArtifact<Result>(
+  store: ArtifactWorkflowStore<Result>,
+  input: { courseId: string; artifactId: string; expectedLockVersion: number }
+) {
+  return store.transaction(async (transaction) => {
+    const artifact = await transaction.findArtifact({ id: input.artifactId, courseId: input.courseId });
+    if (!artifact || artifact.deletedAt) throw new ArtifactWorkflowError("ARTIFACT_NOT_FOUND");
+    if (artifact.status === "PUBLISHED") {
+      throw new ArtifactWorkflowError("ARTIFACT_DELETE_REQUIRES_WITHDRAWAL");
+    }
+    if (!transaction.softDeleteArtifact) {
+      throw new ArtifactWorkflowError("ARTIFACT_DELETE_CONFLICT");
+    }
+    const transitioned = await transaction.softDeleteArtifact(
+      artifact.id,
+      input.courseId,
+      new Date(),
+      input.expectedLockVersion
+    );
+    if (transitioned !== 1) throw new ArtifactWorkflowError("ARTIFACT_DELETE_CONFLICT", true);
+    return { id: artifact.id, deleted: true };
+  });
 }
 
 function isRetryablePublicationError(error: unknown) {

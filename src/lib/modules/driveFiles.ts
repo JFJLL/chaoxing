@@ -201,7 +201,7 @@ export async function storeDriveFile(input: { ownerId: string; fileName: string;
   if (driveStorageProvider() === "local") {
     const dir = join(getUploadDir(), "drive");
     await mkdir(dir, { recursive: true });
-    const filePath = join(dir, `${Date.now()}-${safeObjectName(input.fileName)}`);
+    const filePath = join(dir, `${Date.now()}-${randomUUID()}-${safeObjectName(input.fileName)}`);
     await writeFile(filePath, input.bytes);
     return filePath;
   }

@@ -165,6 +165,45 @@ describe("AI generation snapshot and safe DTO", () => {
     ]);
   });
 
+  it("shows students only the confirmed publication snapshot and never question answers", () => {
+    const base = {
+      id: "artifact-1",
+      seriesId: "series-1",
+      courseId: "course-1",
+      userId: "teacher-1",
+      appType: "courseware",
+      title: "课件",
+      prompt: null,
+      payload: "{\"working\":\"尚未确认\"}",
+      publishedPayload: "{\"published\":\"已确认\"}",
+      scope: null,
+      status: "PUBLISHED",
+      version: 1,
+      errorCode: null,
+      errorMessage: null,
+      sourceJobId: null,
+      sourceArtifactId: null,
+      startedAt: null,
+      finishedAt: new Date(),
+      approvedAt: new Date(),
+      publishedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    expect(toSafeAiArtifactDto(base, { canManage: false, jobsAhead: null }).payload)
+      .toBe(base.publishedPayload);
+    expect(toSafeAiArtifactDto({
+      ...base,
+      appType: "question_generation",
+      payload: "{\"questions\":[{\"answer\":\"私有答案\"}]}",
+      publishedPayload: "{\"questions\":[{\"answer\":\"私有答案\"}]}"
+    }, { canManage: false, jobsAhead: null }).payload).toBeNull();
+    expect(toSafeAiArtifactDto({
+      ...base,
+      publishedPayload: null
+    }, { canManage: false, jobsAhead: null }).payload).toBeNull();
+  });
+
   it("only permits failed artifacts to retry", () => {
     expect(canRetryAiGeneration("FAILED")).toBe(true);
     for (const status of ["QUEUED", "GENERATING", "DRAFT", "APPROVED", "PUBLISHED", "ARCHIVED"]) {

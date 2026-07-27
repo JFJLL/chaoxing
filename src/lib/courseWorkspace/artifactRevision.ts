@@ -101,3 +101,72 @@ export async function createArtifactRevision<Result>(
 
   throw new ArtifactRevisionError("ARTIFACT_REVISION_CONFLICT", true);
 }
+
+export type MutableArtifactRecord = {
+  id: string;
+  courseId: string;
+  status: string;
+  payload: string | null;
+  lockVersion: number;
+  deletedAt: Date | null;
+};
+
+export type MutableArtifactStore<Result> = {
+  findByCourse(input: { id: string; courseId: string }): Promise<MutableArtifactRecord | null>;
+  updateWorkingCopy(input: {
+    id: string;
+    courseId: string;
+    expectedLockVersion: number;
+    title: string;
+    payload: string;
+    nextStatus: "DRAFT" | "PUBLISHED";
+  }): Promise<Result | null>;
+};
+
+export type UpdateArtifactInPlaceInput = {
+  courseId: string;
+  artifactId: string;
+  expectedLockVersion: number;
+  title: string;
+  payload: string;
+};
+
+const mutableStatuses = new Set(["DRAFT", "APPROVED", "PUBLISHED"]);
+
+/**
+ * Updates the teacher working copy without creating another history row.
+ * Published artifacts deliberately remain published: students continue to
+ * receive publishedPayload until the teacher confirms the update.
+ */
+export async function updateArtifactInPlace<Result>(
+  store: MutableArtifactStore<Result>,
+  input: UpdateArtifactInPlaceInput
+) {
+  if (!input.payload.trim()) {
+    throw new ArtifactRevisionError("ARTIFACT_PAYLOAD_REQUIRED");
+  }
+  if (!Number.isInteger(input.expectedLockVersion) || input.expectedLockVersion < 0) {
+    throw new ArtifactRevisionError("ARTIFACT_REVISION_CONFLICT", true);
+  }
+
+  const source = await store.findByCourse({ id: input.artifactId, courseId: input.courseId });
+  if (!source || source.deletedAt) {
+    throw new ArtifactRevisionError("ARTIFACT_SOURCE_NOT_FOUND");
+  }
+  if (!source.payload || !mutableStatuses.has(source.status)) {
+    throw new ArtifactRevisionError("ARTIFACT_SOURCE_NOT_EDITABLE");
+  }
+
+  const result = await store.updateWorkingCopy({
+    id: input.artifactId,
+    courseId: input.courseId,
+    expectedLockVersion: input.expectedLockVersion,
+    title: input.title,
+    payload: input.payload,
+    nextStatus: source.status === "PUBLISHED" ? "PUBLISHED" : "DRAFT"
+  });
+  if (!result) {
+    throw new ArtifactRevisionError("ARTIFACT_REVISION_CONFLICT", true);
+  }
+  return result;
+}

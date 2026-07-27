@@ -18,73 +18,72 @@ model Institution {
 }
 
 model User {
-  id                    String                 @id @default(cuid())
-  name                  String
-  email                 String                 @unique
-  passwordHash          String?
-  avatar                String?
-  role                  String
-  institutionId         String
-  institution           Institution            @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  ownedCourses          Course[]               @relation("CourseOwner")
-  enrollments           CourseEnrollment[]
-  courseFolders         CourseFolder[]
-  importJobs            DocumentImportJob[]
-  sentMessages          Message[]              @relation("SentMessages")
-  receivedMessages      Message[]              @relation("ReceivedMessages")
-  groupMembers          GroupMember[]
-  groupPosts            GroupPost[]
-  groupComments         GroupComment[]
-  groupFiles            GroupFile[]
-  notes                 Note[]
-  noteTags              NoteTag[]
-  courseAiArtifacts     CourseAiArtifact[]
-  courseQuestions       CourseQuestion[]
-  aiConversations       CourseAiConversation[]
-  copilotSkills         CopilotSkill[]         @relation("CopilotSkillUploader")
-  copilotUsageEvents    CopilotUsageEvent[]
-  topicFolders          TopicFolder[]
-  topics                Topic[]
-  driveFiles            DriveFile[]
-  driveShares           DriveShare[]
-  plagiarismChecks      PlagiarismCheck[]
-  liveSessions          LiveSession[]          @relation("LiveHost")
-  liveParticipants      LiveParticipant[]
-  liveChatMessages      LiveChatMessage[]
-  announcements         Announcement[]
-  announcementReads     AnnouncementRead[]
-  attendanceSessions    AttendanceSession[]    @relation("AttendanceCreator")
-  attendanceRecords     AttendanceRecord[]     @relation("AttendanceStudent")
-  lessonProgress        LessonProgress[]
-  createdAssignments    Assignment[]           @relation("AssignmentCreator")
-  assignmentSubmissions AssignmentSubmission[]
-  assignmentExtensions  AssignmentExtension[]
-  createdExams          Exam[]                 @relation("ExamCreator")
-  examAttempts          ExamAttempt[]
-  helpTickets           HelpTicket[]
-  createdAuditLogs      AuditLog[]
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  id                      String                  @id @default(cuid())
+  name                    String
+  email                   String                  @unique
+  passwordHash            String?
+  avatar                  String?
+  role                    String
+  institutionId           String
+  institution             Institution             @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  ownedCourses            Course[]                @relation("CourseOwner")
+  enrollments             CourseEnrollment[]
+  importJobs              DocumentImportJob[]
+  sentMessages            Message[]               @relation("SentMessages")
+  receivedMessages        Message[]               @relation("ReceivedMessages")
+  groupMembers            GroupMember[]
+  groupPosts              GroupPost[]
+  groupComments           GroupComment[]
+  groupFiles              GroupFile[]
+  notes                   Note[]
+  noteTags                NoteTag[]
+  courseAiArtifacts       CourseAiArtifact[]
+  courseQuestions         CourseQuestion[]
+  aiConversations         CourseAiConversation[]
+  copilotSkills           CopilotSkill[]          @relation("CopilotSkillUploader")
+  copilotUsageEvents      CopilotUsageEvent[]
+  topicFolders            TopicFolder[]
+  topics                  Topic[]
+  driveFiles              DriveFile[]
+  driveShares             DriveShare[]
+  driveShareGrants        DriveShareGrant[]
+  plagiarismChecks        PlagiarismCheck[]
+  liveSessions            LiveSession[]           @relation("LiveHost")
+  liveParticipants        LiveParticipant[]
+  liveChatMessages        LiveChatMessage[]
+  announcements           Announcement[]
+  announcementReads       AnnouncementRead[]
+  attendanceSessions      AttendanceSession[]     @relation("AttendanceCreator")
+  attendanceRecords       AttendanceRecord[]      @relation("AttendanceStudent")
+  lessonProgress          LessonProgress[]
+  createdAssignments      Assignment[]            @relation("AssignmentCreator")
+  assignmentSubmissions   AssignmentSubmission[]
+  assignmentExtensions    AssignmentExtension[]
+  createdExams            Exam[]                  @relation("ExamCreator")
+  examAttempts            ExamAttempt[]
+  helpTickets             HelpTicket[]
+  createdAuditLogs        AuditLog[]
+  updatedDriveAccessRules CourseDriveAccessRule[] @relation("CourseDriveAccessRuleUpdater")
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
 }
 
 model Course {
-  id                 String                 @id @default(cuid())
+  id                 String                  @id @default(cuid())
   title              String
   description        String?
   cover              String?
   term               String?
   startDate          DateTime?
   endDate            DateTime?
-  status             String                 @default("ACTIVE")
+  status             String                  @default("ACTIVE")
   ownerId            String
-  owner              User                   @relation("CourseOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner              User                    @relation("CourseOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   institutionId      String
-  institution        Institution            @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  folderId           String?
-  folder             CourseFolder?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  copilotFolderId    String?
-  copilotFolder      DriveFile?             @relation("CourseCopilotFolder", fields: [copilotFolderId], references: [id], onDelete: SetNull)
-  copilotName        String                 @default("Copilot")
+  institution        Institution             @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  driveRootFolderId  String?                 @unique
+  driveRootFolder    DriveFile?              @relation("CourseDriveRoot", fields: [driveRootFolderId], references: [id], onDelete: SetNull)
+  copilotName        String                  @default("Copilot")
   enrollments        CourseEnrollment[]
   chapters           Chapter[]
   resources          Resource[]
@@ -101,18 +100,10 @@ model Course {
   exams              Exam[]
   helpTickets        HelpTicket[]
   notes              Note[]
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
-}
-
-model CourseFolder {
-  id        String   @id @default(cuid())
-  title     String
-  ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  courses   Course[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  driveBindings      CourseDriveBinding[]
+  driveAccessRules   CourseDriveAccessRule[]
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 }
 
 model CourseEnrollment {
@@ -203,12 +194,12 @@ model DocumentImportJob {
 }
 
 model CourseAiArtifact {
-  id               String             @id @default(cuid())
-  seriesId         String             @default(cuid())
+  id               String                   @id @default(cuid())
+  seriesId         String                   @default(cuid())
   courseId         String
-  course           Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course           Course                   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   userId           String
-  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   appType          String
   title            String
   prompt           String?
@@ -216,22 +207,27 @@ model CourseAiArtifact {
   inputSnapshot    String?
   runToken         String?
   scope            String?
-  status           String             @default("DRAFT")
-  version          Int                @default(1)
+  status           String                   @default("DRAFT")
+  version          Int                      @default(1)
   errorCode        String?
   errorMessage     String?
   sourceJobId      String?
-  sourceJob        DocumentImportJob? @relation(fields: [sourceJobId], references: [id], onDelete: SetNull)
+  sourceJob        DocumentImportJob?       @relation(fields: [sourceJobId], references: [id], onDelete: SetNull)
   sourceArtifactId String?
-  sourceArtifact   CourseAiArtifact?  @relation("ArtifactRevisionSource", fields: [sourceArtifactId], references: [id], onDelete: SetNull)
-  derivedArtifacts CourseAiArtifact[] @relation("ArtifactRevisionSource")
+  sourceArtifact   CourseAiArtifact?        @relation("ArtifactRevisionSource", fields: [sourceArtifactId], references: [id], onDelete: SetNull)
+  derivedArtifacts CourseAiArtifact[]       @relation("ArtifactRevisionSource")
   questions        CourseQuestion[]
   startedAt        DateTime?
   finishedAt       DateTime?
   approvedAt       DateTime?
   publishedAt      DateTime?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  publishedPayload String?
+  withdrawnAt      DateTime?
+  deletedAt        DateTime?
+  lockVersion      Int                      @default(0)
+  exports          CourseAiArtifactExport[]
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
 
   @@unique([seriesId, version])
   @@index([courseId, appType, status])
@@ -335,6 +331,7 @@ model CopilotConversationFile {
   driveFile      DriveFile?           @relation(fields: [driveFileId], references: [id], onDelete: SetNull)
   fileName       String
   mimeType       String?
+  referenceType  String               @default("FILE")
   createdAt      DateTime             @default(now())
 
   @@unique([conversationId, driveFileId])
@@ -602,10 +599,64 @@ model DriveFile {
   topicResources     TopicResource[]
   groupFiles         GroupFile[]
   importJobs         DocumentImportJob[]       @relation("ImportSourceDriveFile")
-  copilotCourses     Course[]                  @relation("CourseCopilotFolder")
+  rootCourse         Course?                   @relation("CourseDriveRoot")
+  courseBindings     CourseDriveBinding[]
+  courseAccessRules  CourseDriveAccessRule[]
+  artifactExports    CourseAiArtifactExport[]
   copilotAttachments CopilotConversationFile[]
   createdAt          DateTime                  @default(now())
   updatedAt          DateTime                  @updatedAt
+}
+
+model CourseDriveBinding {
+  id        String    @id @default(cuid())
+  courseId  String
+  course    Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  purpose   String
+  folderId  String
+  folder    DriveFile @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([courseId, purpose])
+  @@index([folderId])
+}
+
+model CourseDriveAccessRule {
+  id          String    @id @default(cuid())
+  courseId    String
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  driveFileId String
+  driveFile   DriveFile @relation(fields: [driveFileId], references: [id], onDelete: Cascade)
+  access      String
+  updatedById String
+  updatedBy   User      @relation("CourseDriveAccessRuleUpdater", fields: [updatedById], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([courseId, driveFileId])
+  @@index([driveFileId])
+  @@index([updatedById])
+}
+
+model CourseAiArtifactExport {
+  id             String           @id @default(cuid())
+  artifactId     String
+  artifact       CourseAiArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  format         String
+  variant        String
+  driveFileId    String?
+  driveFile      DriveFile?       @relation(fields: [driveFileId], references: [id], onDelete: SetNull)
+  contentHash    String?
+  status         String           @default("READY")
+  errorMessage   String?
+  lastExportedAt DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([artifactId, format, variant])
+  @@index([driveFileId])
+  @@index([status, updatedAt])
 }
 
 model DriveShare {
@@ -617,8 +668,21 @@ model DriveShare {
   code        String    @unique
   expiresAt   DateTime?
   accessCount Int       @default(0)
+  grants      DriveShareGrant[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model DriveShareGrant {
+  id        String     @id @default(cuid())
+  shareId   String
+  share     DriveShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([shareId, userId])
+  @@index([userId])
 }
 
 model PlagiarismCheck {

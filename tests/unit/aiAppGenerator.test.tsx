@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   ArtifactConfirmationNotice,
   AiAppGenerator,
+  buildArtifactExportRequest,
   canConfirmAiArtifact,
   getAiArtifactStatusText,
   mergeArtifactHistory
@@ -70,6 +71,18 @@ function render(
 }
 
 describe("AI artifact status presentation", () => {
+  it("sends only the strict export fields and never leaks the display label", () => {
+    const choice = {
+      label: "学生版 Word",
+      format: "DOCX",
+      variant: "STUDENT"
+    } as const;
+    const request = buildArtifactExportRequest(choice);
+
+    expect(request).toEqual({ format: "DOCX", variant: "STUDENT" });
+    expect(request).not.toHaveProperty("label");
+  });
+
   it.each([
     ["DRAFT", false, false, true],
     ["DRAFT", true, false, false],
@@ -81,7 +94,7 @@ describe("AI artifact status presentation", () => {
 
   it("renders an explicit unsaved-changes confirmation warning", () => {
     const markup = renderToStaticMarkup(<ArtifactConfirmationNotice dirty />);
-    expect(markup).toContain("有未保存修改，请先保存为新版本后再确认");
+    expect(markup).toContain("有未保存修改，请先保存后再确认");
   });
 
   it.each([
@@ -119,7 +132,7 @@ describe("AI artifact status presentation", () => {
     expect(markup).not.toContain("模板");
   });
 
-  it("renders version history and draft workflow actions", () => {
+  it("renders history and a saved draft as read-only until editing is requested", () => {
     const markup = render({
       ...baseArtifact,
       status: "DRAFT",
@@ -133,13 +146,14 @@ describe("AI artifact status presentation", () => {
       }] }),
       version: 2
     });
-    expect(markup).toContain("v2");
-    expect(markup).toContain("保存为新版本");
+    expect(markup).toContain("历史产物");
+    expect(markup).toContain("编辑");
+    expect(markup).not.toContain(">保存<");
     expect(markup).toContain("确认内容");
     expect(markup).not.toContain("发布给学生");
   });
 
-  it("shows approved lesson plans as teacher-internal instead of publishable", () => {
+  it("allows an approved lesson plan to be published", () => {
     const markup = render({
       ...baseArtifact,
       appType: "lesson_plan",
@@ -147,8 +161,7 @@ describe("AI artifact status presentation", () => {
       jobsAhead: null,
       payload: JSON.stringify({ objectives: ["目标"], keyPoints: ["重点"], teachingProcess: [{ phase: "导入", minutes: 10, activity: "讨论" }], assessment: ["测验"] })
     }, { ...app, key: "ai-lesson-plan", appType: "lesson_plan", title: "教案", description: "生成教案" });
-    expect(markup).toContain("已确认（教师内部）");
-    expect(markup).not.toContain("发布给学生");
+    expect(markup).toContain("发布给学生");
   });
 
   it("blocks paper generation until at least three approved questions exist", () => {
@@ -170,7 +183,7 @@ describe("AI artifact status presentation", () => {
     expect(markup).not.toContain("模板");
   });
 
-  it("requires an approved courseware selection for HTML generation", () => {
+  it("keeps legacy HTML courseware read-only and stops new generation", () => {
     const htmlApp = {
       ...app,
       key: "ai-html-courseware",
@@ -179,16 +192,39 @@ describe("AI artifact status presentation", () => {
       description: "生成 HTML"
     };
     const emptyMarkup = render({ ...baseArtifact, appType: "html_courseware" }, htmlApp);
-    expect(emptyMarkup).toContain("还没有可用的来源课件");
-    expect(emptyMarkup).toContain("生成 AI课件");
-    expect(emptyMarkup).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
+    expect(emptyMarkup).toContain("HTML 互动课件已停止生成");
+    expect(emptyMarkup).toContain("请改用 PPT 课件");
+    expect(emptyMarkup).toContain('<form class="hidden">');
 
     const readyMarkup = render({ ...baseArtifact, appType: "html_courseware" }, htmlApp, {
       coursewareSources: [{ id: "courseware-1", title: "第一章课件", version: 2, status: "APPROVED" }]
     });
-    expect(readyMarkup).toContain("来源课件");
-    expect(readyMarkup).toContain("第一章课件 · v2 · 已确认");
-    expect(readyMarkup).not.toContain("请先生成并确认 AI 课件");
+    expect(readyMarkup).toContain("HTML 互动课件已停止生成");
+  });
+
+  it("does not suggest starting a new legacy HTML courseware artifact when history is empty", () => {
+    const htmlApp = {
+      ...app,
+      key: "ai-html-courseware",
+      appType: "html_courseware" as const,
+      title: "HTML 课件",
+      description: "历史 HTML"
+    };
+    const markup = renderToStaticMarkup(
+      <AiAppGenerator
+        courseId="course-1"
+        app={htmlApp}
+        chapters={[]}
+        approvedQuestions={[]}
+        coursewareSources={[]}
+        initialArtifacts={[]}
+      />
+    );
+
+    expect(markup).toContain("暂无历史 HTML 课件");
+    expect(markup).toContain("请使用 PPT 课件");
+    expect(markup).not.toContain("准备开始HTML 课件");
+    expect(markup).not.toContain("填写生成要求 → AI 生成草稿");
   });
 
   it("blocks source-based generation when the course has no usable content and provides next steps", () => {
@@ -199,17 +235,38 @@ describe("AI artifact status presentation", () => {
     expect(markup).toContain("查看课程资料库");
     expect(markup).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
   });
+
+  it("turns an approved AI courseware snapshot into PPT without a second AI generation form", () => {
+    const pptApp = {
+      ...app,
+      key: "ai-ppt-courseware",
+      appType: "ppt_courseware" as const,
+      title: "PPT课件",
+      description: "将已有课件转换为 PPT"
+    };
+    const markup = render({ ...baseArtifact, appType: "ppt_courseware", status: "APPROVED" }, pptApp, {
+      coursewareSources: [{ id: "courseware-1", title: "第一章课件", version: 2, status: "APPROVED" }]
+    });
+
+    expect(markup).toContain("直接将已有课件转换为 PPT");
+    expect(markup).toContain("不会再次调用 AI 生成内容");
+    expect(markup).toContain("生成并下载 PPT");
+    expect(markup).not.toContain("生成要求");
+    expect(markup).not.toContain("开始 AI 生成");
+    expect(markup).not.toContain("内容范围");
+    expect(markup).not.toContain(">难度<");
+  });
 });
 
 describe("AI artifact history merge", () => {
-  it("archives the previous published revision in the same series", () => {
+  it("replaces only the same history row without mutating sibling rows", () => {
     const oldPublished = { ...baseArtifact, id: "old", status: "PUBLISHED" as const };
     const otherPublished = { ...baseArtifact, id: "other", seriesId: "series-2", status: "PUBLISHED" as const };
     const published = { ...baseArtifact, id: "new", status: "PUBLISHED" as const, version: 2 };
 
     expect(mergeArtifactHistory([oldPublished, otherPublished], published)).toEqual([
       published,
-      { ...oldPublished, status: "ARCHIVED" },
+      oldPublished,
       otherPublished
     ]);
   });

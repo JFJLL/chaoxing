@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth";
+import { requireCourseDriveTarget } from "@/lib/courseDrive/service";
 
 function activeShareWhere() {
   return {
@@ -17,19 +18,12 @@ export async function requireDriveFileReadable(user: SessionUser, fileId: string
         { ownerId: user.id },
         {
           shares: {
-            some: activeShareWhere()
-          }
-        },
-        {
-          resources: {
             some: {
-              course: {
-                status: "ACTIVE",
-                enrollments: { some: { userId: user.id } }
-              }
+              ...activeShareWhere(),
+              grants: { some: { userId: user.id } }
             }
           }
-        }
+        },
       ]
     },
     include: { shares: true }
@@ -43,9 +37,9 @@ export async function requireDriveFileReadable(user: SessionUser, fileId: string
   const seen = new Set<string>();
   while (current && !seen.has(current.id)) {
     seen.add(current.id);
-    const course = await db.course.findFirst({
+    const courses = await db.course.findMany({
       where: {
-        copilotFolderId: current.id,
+        driveRootFolderId: current.id,
         status: "ACTIVE",
         OR: [
           { ownerId: user.id },
@@ -55,7 +49,14 @@ export async function requireDriveFileReadable(user: SessionUser, fileId: string
       },
       select: { id: true }
     });
-    if (course) return candidate;
+    for (const course of courses) {
+      try {
+        await requireCourseDriveTarget(user, course.id, candidate.id);
+        return candidate;
+      } catch {
+        // Keep looking: the same file may be in a different authorized course root.
+      }
+    }
     if (!current.parentId) break;
     current = await db.driveFile.findFirst({
       where: { id: current.parentId, deletedAt: null },

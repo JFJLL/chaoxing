@@ -5,9 +5,11 @@ import { db } from "@/lib/db";
 import { requireCourseAccess } from "@/lib/permissions";
 import type { TextCompletionMessage } from "@/lib/ai/modelClient";
 import {
-  assertCourseCopilotFiles,
+  assertCourseCopilotReferences,
   buildCopilotFileContext,
-  COPILOT_MAX_FILES
+  listCourseCopilotFiles,
+  resolveCourseConversationFiles,
+  type ConversationDriveReference
 } from "@/lib/copilot/files";
 
 const COPILOT_STALE_AFTER_MS = 5 * 60 * 1000;
@@ -31,7 +33,10 @@ const copilotTurnSchema = z.union([
 export const copilotConversationUpdateSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   skillId: z.string().min(1).max(160).nullable().optional(),
-  fileIds: z.array(z.string().min(1).max(160)).max(COPILOT_MAX_FILES).optional()
+  references: z.array(z.object({
+    driveFileId: z.string().min(1).max(160),
+    referenceType: z.enum(["FILE", "FOLDER"])
+  }).strict()).optional()
 }).strict().refine((value) => Object.keys(value).length > 0, "没有可更新的内容");
 
 export class CopilotError extends Error {
@@ -63,7 +68,7 @@ export function copilotDailyLimit() {
 function parseContextFiles(raw: string | null) {
   if (!raw) return [];
   try {
-    return z.array(z.object({ id: z.string(), name: z.string() })).max(COPILOT_MAX_FILES).parse(JSON.parse(raw));
+    return z.array(z.object({ id: z.string(), name: z.string() })).parse(JSON.parse(raw));
   } catch {
     return [];
   }
@@ -141,16 +146,29 @@ export async function createCopilotConversation(user: SessionUser, courseId: str
 export async function listCopilotConversations(user: SessionUser, courseId: string) {
   await courseContext(user, courseId);
   await recoverStaleCopilotConversations(courseId, user.id);
-  return db.courseAiConversation.findMany({
-    where: { courseId, userId: user.id, kind: "COPILOT" },
-    orderBy: { updatedAt: "desc" },
-    take: MAX_CONVERSATIONS,
-    include: {
-      activeSkill: { select: { id: true, name: true, description: true, status: true } },
-      attachments: { orderBy: { createdAt: "asc" }, include: { driveFile: { select: { id: true, deletedAt: true, extractionStatus: true } } } },
-      messages: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: MAX_MESSAGES }
-    }
-  });
+  const [conversations, availableTargets] = await Promise.all([
+    db.courseAiConversation.findMany({
+      where: { courseId, userId: user.id, kind: "COPILOT" },
+      orderBy: { updatedAt: "desc" },
+      take: MAX_CONVERSATIONS,
+      include: {
+        activeSkill: { select: { id: true, name: true, description: true, status: true } },
+        attachments: { orderBy: { createdAt: "asc" }, include: { driveFile: { select: { id: true, deletedAt: true, extractionStatus: true } } } },
+        messages: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: MAX_MESSAGES }
+      }
+    }),
+    listCourseCopilotFiles(user, courseId)
+  ]);
+  const availableIds = new Set(availableTargets.map((target) => target.id));
+  return conversations.map((conversation) => ({
+    ...conversation,
+    attachments: conversation.attachments.map((attachment) => ({
+      ...attachment,
+      driveFile: attachment.driveFileId && availableIds.has(attachment.driveFileId)
+        ? attachment.driveFile
+        : null
+    }))
+  }));
 }
 
 export function toCopilotConversationDto(conversation: Awaited<ReturnType<typeof listCopilotConversations>>[number] | Awaited<ReturnType<typeof createCopilotConversation>>) {
@@ -163,7 +181,8 @@ export function toCopilotConversationDto(conversation: Awaited<ReturnType<typeof
       id: attachment.driveFileId,
       name: attachment.fileName,
       mimeType: attachment.mimeType,
-      available: Boolean(attachment.driveFile && !attachment.driveFile.deletedAt && attachment.driveFile.extractionStatus === "READY")
+      referenceType: attachment.referenceType === "FOLDER" ? "FOLDER" as const : "FILE" as const,
+      available: Boolean(attachment.driveFile && !attachment.driveFile.deletedAt)
     })),
     messages: conversation.messages.map((message) => ({
       id: message.id,
@@ -203,10 +222,10 @@ export async function updateCopilotConversation(
     skill = await db.copilotSkill.findFirst({ where: { id: parsed.data.skillId, courseId, ...(canManage ? {} : { status: "ENABLED" }) } });
     if (!skill) throw new CopilotError("COPILOT_SKILL_NOT_FOUND", "Skill 不存在或尚未启用", 404);
   }
-  let files: Awaited<ReturnType<typeof assertCourseCopilotFiles>> | null = null;
-  if (parsed.data.fileIds) {
+  let references: Awaited<ReturnType<typeof assertCourseCopilotReferences>> | null = null;
+  if (parsed.data.references) {
     try {
-      files = await assertCourseCopilotFiles(user, courseId, parsed.data.fileIds);
+      references = await assertCourseCopilotReferences(user, courseId, parsed.data.references);
     } catch (error) {
       throw new CopilotError(
         "COPILOT_FILES_INVALID",
@@ -216,15 +235,16 @@ export async function updateCopilotConversation(
     }
   }
   await db.$transaction(async (tx) => {
-    if (files) {
+    if (references) {
       await tx.copilotConversationFile.deleteMany({ where: { conversationId } });
-      if (files.length) {
+      if (references.length) {
         await tx.copilotConversationFile.createMany({
-          data: files.map((file) => ({
+          data: references.map((file) => ({
             conversationId,
             driveFileId: file.id,
             fileName: file.name,
-            mimeType: file.mimeType
+            mimeType: file.mimeType,
+            referenceType: file.kind === "folder" ? "FOLDER" : "FILE"
           }))
         });
       }
@@ -296,12 +316,22 @@ export async function prepareCopilotTurn(input: {
 
   let skill = conversation.activeSkill;
   if (skill && !canManage && skill.status !== "ENABLED") skill = null;
-  const fileIds = conversation.attachments.map((attachment) => attachment.driveFileId).filter(Boolean) as string[];
-  let validatedFiles: Awaited<ReturnType<typeof assertCourseCopilotFiles>>;
+  const references: ConversationDriveReference[] = conversation.attachments
+    .filter((attachment): attachment is typeof attachment & { driveFileId: string } => Boolean(attachment.driveFileId))
+    .map((attachment) => ({
+      driveFileId: attachment.driveFileId,
+      referenceType: attachment.referenceType === "FOLDER" ? "FOLDER" : "FILE"
+    }));
+  let resolvedFiles: Awaited<ReturnType<typeof resolveCourseConversationFiles>>;
   let context: Awaited<ReturnType<typeof buildCopilotFileContext>>;
   try {
-    validatedFiles = await assertCourseCopilotFiles(input.user, input.courseId, fileIds);
-    context = await buildCopilotFileContext(fileIds);
+    resolvedFiles = await resolveCourseConversationFiles({
+      user: input.user,
+      courseId: input.courseId,
+      references,
+      query: content
+    });
+    context = await buildCopilotFileContext(resolvedFiles.map((file) => file.id));
   } catch (error) {
     throw new CopilotError(
       "COPILOT_FILES_UNAVAILABLE",
@@ -309,7 +339,7 @@ export async function prepareCopilotTurn(input: {
       409
     );
   }
-  const contextFiles = validatedFiles.map((file) => ({ id: file.id, name: file.name }));
+  const contextFiles = resolvedFiles.map((file) => ({ id: file.id, name: file.name }));
   const generationToken = randomUUID();
   const historyRows = existing ? conversation.messages.slice(0, -1) : conversation.messages;
   const usageEventId = randomUUID();
@@ -343,7 +373,7 @@ export async function prepareCopilotTurn(input: {
         courseId: input.courseId,
         userId: input.user.id,
         skillId: skill?.id ?? null,
-        fileCount: fileIds.length,
+        fileCount: resolvedFiles.length,
         imageCount: context.images.length,
         status: canManage ? "TEST_STARTED" : "STARTED"
       }

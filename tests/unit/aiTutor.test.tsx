@@ -16,6 +16,9 @@ describe("AI tutor UI", () => {
     expect(markup).toContain("询问当前课程内容");
     expect(markup).toContain('aria-label="课程问题"');
     expect(markup).toContain('role="log"');
+    const referenceButton = markup.match(/<button[^>]*>(?:(?!<\/button>)[\s\S])*@课程资料<\/button>/)?.[0];
+    expect(referenceButton).toBeTruthy();
+    expect(referenceButton).not.toMatch(/\sdisabled(?:=|>)/);
     expect(markup).not.toContain("本地模板");
     expect(markup).not.toContain("示例回答");
   });

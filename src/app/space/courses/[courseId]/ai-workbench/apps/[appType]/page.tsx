@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -14,7 +13,14 @@ type PageProps = {
 };
 
 function parseAppType(value: string): CourseAiAppType | null {
-  if (value === "question_generation" || value === "lesson_plan" || value === "courseware" || value === "paper_assembly" || value === "html_courseware") {
+  if (
+    value === "question_generation"
+    || value === "lesson_plan"
+    || value === "courseware"
+    || value === "paper_assembly"
+    || value === "ppt_courseware"
+    || value === "html_courseware"
+  ) {
     return value;
   }
   return null;
@@ -50,10 +56,12 @@ function pagePresentation(appType: CourseAiAppType, fallback: { title: string; d
       active: "courseware"
     };
   }
-  if (appType === "html_courseware") {
+  if (appType === "ppt_courseware" || appType === "html_courseware") {
     return {
       title: "AI课件",
-      description: "从普通课件生成到互动发布，集中在同一条制作流程中。",
+      description: appType === "ppt_courseware"
+        ? "将已确认的课件映射到课程模板并导出为 PPTX。"
+        : "历史 HTML 课件仅保留查看，不再生成新内容。",
       workflow: "courseware",
       active: "interactive"
     };
@@ -78,7 +86,7 @@ async function AiAppGeneratorContent({
       select: { id: true, title: true }
     }),
     db.courseAiArtifact.findMany({
-      where: { courseId, appType },
+      where: { courseId, appType, deletedAt: null },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       take: 20,
       select: {
@@ -88,6 +96,7 @@ async function AiAppGeneratorContent({
         title: true,
         prompt: true,
         payload: true,
+        publishedPayload: true,
         scope: true,
         status: true,
         version: true,
@@ -99,6 +108,9 @@ async function AiAppGeneratorContent({
         finishedAt: true,
         approvedAt: true,
         publishedAt: true,
+        withdrawnAt: true,
+        deletedAt: true,
+        lockVersion: true,
         createdAt: true,
         updatedAt: true
       }
@@ -110,7 +122,7 @@ async function AiAppGeneratorContent({
           select: { id: true, stem: true }
         })
       : Promise.resolve([]),
-    appType === "html_courseware"
+    appType === "ppt_courseware"
       ? db.courseAiArtifact.findMany({
           where: {
             courseId,
@@ -156,16 +168,6 @@ async function AiAppGeneratorContent({
   );
 }
 
-function AiAppGeneratorLoading() {
-  return (
-    <div role="status" aria-label="正在载入 AI 任务" className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-      <div className="h-[420px] animate-pulse rounded-2xl bg-white shadow-sm" />
-      <div className="h-[420px] animate-pulse rounded-2xl bg-white shadow-sm" />
-      <span className="sr-only">正在载入 AI 任务</span>
-    </div>
-  );
-}
-
 export default async function AiAppDetailPage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId, appType: rawAppType } = await params;
@@ -181,6 +183,7 @@ export default async function AiAppDetailPage({ params }: PageProps) {
   if (!canManage) redirect(`/space/courses/${course.id}/resources`);
 
   const presentation = pagePresentation(appType, { title: app.title, description: app.description });
+  const generator = await AiAppGeneratorContent({ courseId: course.id, appType, app });
 
   return (
     <div className="space-y-5">
@@ -194,9 +197,7 @@ export default async function AiAppDetailPage({ params }: PageProps) {
         ) : null}
       </div>
 
-      <Suspense fallback={<AiAppGeneratorLoading />}>
-        <AiAppGeneratorContent courseId={course.id} appType={appType} app={app} />
-      </Suspense>
+      {generator}
     </div>
   );
 }

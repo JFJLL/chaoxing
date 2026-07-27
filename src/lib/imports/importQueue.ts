@@ -233,6 +233,42 @@ export async function recoverImportJobsFromDatabase(courseId?: string) {
   return scanned;
 }
 
+export async function recoverImportJobFromDatabase(jobId: string, courseId: string) {
+  assertSupportedQueueProvider();
+  if (runningJobs.has(jobId) || scheduledJobs.has(jobId)) return false;
+
+  const staleCutoff = staleJobCutoff();
+  const job = await db.documentImportJob.findFirst({
+    where: {
+      id: jobId,
+      courseId,
+      OR: [
+        { status: "QUEUED" },
+        {
+          status: { in: RECOVERABLE_ACTIVE_STATUSES },
+          updatedAt: { lt: staleCutoff }
+        }
+      ]
+    },
+    select: { id: true, status: true }
+  });
+  if (!job) return false;
+
+  if (RECOVERABLE_ACTIVE_STATUSES.includes(job.status)) {
+    const reset = await db.documentImportJob.updateMany({
+      where: {
+        id: job.id,
+        status: { in: RECOVERABLE_ACTIVE_STATUSES },
+        updatedAt: { lt: staleCutoff }
+      },
+      data: { status: "QUEUED", currentStage: "等待恢复处理", startedAt: null, finishedAt: null }
+    });
+    if (reset.count !== 1) return false;
+  }
+
+  return enqueueImportJob(job.id);
+}
+
 export function getImportQueueSnapshot() {
   assertSupportedQueueProvider();
   return {

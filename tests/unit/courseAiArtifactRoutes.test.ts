@@ -106,7 +106,7 @@ describe("GET /api/courses/:courseId/ai-artifacts/:artifactId", () => {
     expect(mocks.recover).not.toHaveBeenCalled();
     expect(mocks.requireCourseAccess).toHaveBeenCalledWith(expect.objectContaining({ id: "teacher-1" }), "course-1");
     expect(mocks.findFirst).toHaveBeenCalledWith({
-      where: { id: "artifact-1", courseId: "course-1" },
+      where: { id: "artifact-1", courseId: "course-1", deletedAt: null },
       select: expect.not.objectContaining({ inputSnapshot: true })
     });
     expect(body.artifact).toMatchObject({ id: "artifact-1", errorCode: "MODEL_TIMEOUT", jobsAhead: 3 });
@@ -121,7 +121,7 @@ describe("GET /api/courses/:courseId/ai-artifacts/:artifactId", () => {
     const body = await response.json();
 
     expect(mocks.findFirst).toHaveBeenCalledWith({
-      where: { id: "artifact-1", courseId: "course-1", status: "PUBLISHED" },
+      where: { id: "artifact-1", courseId: "course-1", deletedAt: null, status: "PUBLISHED" },
       select: expect.any(Object)
     });
     expect(body.artifact).not.toHaveProperty("errorCode");

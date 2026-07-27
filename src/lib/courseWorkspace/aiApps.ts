@@ -25,6 +25,18 @@ export const courseAiApps: CourseAiAppDefinition[] = enabledGeneratorCapabilitie
 
 export function getCourseAiAppDefinition(appType: CourseAiAppType) {
   const app = courseAiApps.find((item) => item.appType === appType);
+  if (!app && appType === "html_courseware") {
+    return {
+      key: "legacy-html-courseware",
+      appType,
+      title: "历史 HTML 课件",
+      description: "历史互动课件仅保留查看，不再生成新的 HTML 内容。",
+      category: "备课中心",
+      color: "blue",
+      enabled: true,
+      prerequisites: ["approved_courseware"]
+    } satisfies CourseAiAppDefinition;
+  }
   if (!app) {
     throw new Error(`不支持的 AI 应用类型：${appType}`);
   }

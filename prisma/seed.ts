@@ -1,4 +1,6 @@
 import { PrismaClient } from "@prisma/client";
+import { mkdir, writeFile } from "fs/promises";
+import { dirname } from "path";
 import { hashPassword } from "../src/lib/passwords";
 import type { CourseAiAppType, CourseAiArtifactPayload } from "../src/types/courseWorkspace";
 
@@ -67,7 +69,6 @@ async function reset() {
   await prisma.chapter.deleteMany();
   await prisma.courseEnrollment.deleteMany();
   await prisma.course.deleteMany();
-  await prisma.courseFolder.deleteMany();
   await prisma.user.deleteMany();
   await prisma.institution.deleteMany();
 }
@@ -395,6 +396,22 @@ async function main() {
     }
   });
 
+  const seededDrivePath = ".uploads/seed/digital-reading.md";
+  const seededDriveContent = [
+    "# 数字阅读服务培训",
+    "",
+    "## 服务认知",
+    "理解数字阅读服务入口与读者需求。",
+    "",
+    "## 活动策划",
+    "设计阅读活动并选择合适的宣传渠道。",
+    "",
+    "## 数据分析",
+    "使用参与和反馈数据复盘服务效果。"
+  ].join("\n");
+  await mkdir(dirname(seededDrivePath), { recursive: true });
+  await writeFile(seededDrivePath, seededDriveContent, "utf8");
+
   const rootFolder = await prisma.driveFile.create({
     data: {
       ownerId: teacher.id,
@@ -410,15 +427,26 @@ async function main() {
       name: "数字阅读服务培训.md",
       kind: "file",
       mimeType: "text/markdown",
-      size: 1260,
-      path: ".uploads/seed/digital-reading.md"
+      size: Buffer.byteLength(seededDriveContent),
+      path: seededDrivePath
     }
   });
-
+  await prisma.course.update({
+    where: { id: functionalCourse.id },
+    data: { driveRootFolderId: rootFolder.id }
+  });
+  await prisma.courseDriveAccessRule.create({
+    data: {
+      courseId: functionalCourse.id,
+      driveFileId: driveFile.id,
+      access: "ALLOW",
+      updatedById: teacher.id
+    }
+  });
   await prisma.resource.create({
     data: {
       courseId: functionalCourse.id,
-      title: "平台导览资料",
+      title: "数字阅读服务培训",
       type: "drive",
       driveFileId: driveFile.id
     }
@@ -441,7 +469,7 @@ async function main() {
     }
   });
 
-  type SeededAiAppType = Exclude<CourseAiAppType, "html_courseware">;
+  type SeededAiAppType = Exclude<CourseAiAppType, "html_courseware" | "ppt_courseware">;
   const seededAiApps: Array<{ appType: SeededAiAppType; title: string; prompt: string }> = [
     { appType: "question_generation", title: "AI出题：平台导览基础题", prompt: "围绕平台导览生成课堂练习题" },
     { appType: "lesson_plan", title: "AI教案：课程任务点教学设计", prompt: "设计一次课程任务点讲授与实践活动" },

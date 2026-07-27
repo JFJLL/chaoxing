@@ -25,6 +25,7 @@ export type ImportPollingJob = {
   currentStage: string | null;
   jobsAhead: number | null;
   errorMessage: string | null;
+  reviewReady: boolean;
 };
 
 function isNullableString(value: unknown): value is string | null {
@@ -39,6 +40,7 @@ export function parseImportJobResponse(value: unknown): ImportPollingJob | null 
   const candidate = job as Record<string, unknown>;
   if (typeof candidate.status !== "string" || !IMPORT_JOB_STATUSES.has(candidate.status)) return null;
   if (!isNullableString(candidate.currentStage) || !isNullableString(candidate.errorMessage)) return null;
+  if (typeof candidate.reviewReady !== "boolean") return null;
   if (
     candidate.jobsAhead !== null &&
     (typeof candidate.jobsAhead !== "number" || !Number.isInteger(candidate.jobsAhead) || candidate.jobsAhead < 0)
@@ -50,7 +52,8 @@ export function parseImportJobResponse(value: unknown): ImportPollingJob | null 
     status: candidate.status,
     currentStage: candidate.currentStage,
     jobsAhead: candidate.jobsAhead as number | null,
-    errorMessage: candidate.errorMessage
+    errorMessage: candidate.errorMessage,
+    reviewReady: candidate.reviewReady
   };
 }
 
@@ -79,7 +82,8 @@ export function isImportTerminal(status: string) {
   return status === "READY_FOR_REVIEW" || status === "APPLIED" || status === "FAILED";
 }
 
-export function getNextPollDelay(status: string) {
+export function getNextPollDelay(status: string, reviewReady = true) {
+  if (status === "READY_FOR_REVIEW" && !reviewReady) return 500;
   return isImportTerminal(status) ? null : 1500;
 }
 

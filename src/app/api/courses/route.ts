@@ -54,17 +54,32 @@ export async function POST(request: NextRequest) {
   assertTeacher(user);
 
   const input = createCourseSchema.parse(await request.json());
-  const course = await db.course.create({
-    data: {
-      title: input.title,
-      cover: `cover:${input.coverStyle}`,
-      startDate: input.startsAt ? new Date(input.startsAt) : null,
-      endDate: input.endsAt ? new Date(input.endsAt) : null,
-      term: "自建课程",
-      status: "DRAFT",
-      ownerId: user.id,
-      institutionId: user.institutionId
-    }
+  const course = await db.$transaction(async (tx) => {
+    const created = await tx.course.create({
+      data: {
+        title: input.title.trim(),
+        cover: `cover:${input.coverStyle}`,
+        startDate: input.startsAt ? new Date(input.startsAt) : null,
+        endDate: input.endsAt ? new Date(input.endsAt) : null,
+        term: "自建课程",
+        status: "DRAFT",
+        ownerId: user.id,
+        institutionId: user.institutionId
+      }
+    });
+    const root = await tx.driveFile.create({
+      data: {
+        id: `course-drive-root-${created.id}`,
+        ownerId: user.id,
+        parentId: null,
+        name: created.title,
+        kind: "folder"
+      }
+    });
+    return tx.course.update({
+      where: { id: created.id },
+      data: { driveRootFolderId: root.id }
+    });
   });
 
   return NextResponse.json({ course }, { status: 201 });

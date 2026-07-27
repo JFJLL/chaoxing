@@ -29,7 +29,8 @@ export class ArtifactPayloadError extends Error {
 
 const editBodySchema = z.object({
   title: z.string().trim().min(1).max(300),
-  payload: z.unknown()
+  payload: z.unknown(),
+  lockVersion: z.number().int().min(0)
 }).strict();
 
 const payloadSchemas: Record<CourseAiAppType, z.ZodType<CourseAiArtifactPayload>> = {
@@ -37,6 +38,7 @@ const payloadSchemas: Record<CourseAiAppType, z.ZodType<CourseAiArtifactPayload>
   lesson_plan: aiLessonPlanPayloadSchema,
   courseware: aiCoursewarePayloadSchema,
   paper_assembly: aiPaperPayloadSchema,
+  ppt_courseware: aiCoursewarePayloadSchema,
   html_courseware: htmlCoursewarePayloadSchema
 };
 
@@ -86,5 +88,9 @@ export function parseArtifactEditBody(
       throw new ArtifactPayloadError("ARTIFACT_QUESTION_ID_INVALID");
     }
   }
-  return { title: parsedBody.data.title, payload: JSON.stringify(payload) };
+  return {
+    title: parsedBody.data.title,
+    payload: JSON.stringify(payload),
+    lockVersion: parsedBody.data.lockVersion
+  };
 }

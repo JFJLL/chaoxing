@@ -16,8 +16,7 @@ const workflowSteps = {
   ],
   courseware: [
     { id: "courseware", label: "生成课件", route: (courseId: string) => `/space/courses/${courseId}/ai-workbench/apps/courseware` },
-    { id: "interactive", label: "制作互动版", route: (courseId: string) => `/space/courses/${courseId}/ai-workbench/apps/html_courseware` },
-    { id: "published", label: "已发布课件", route: (courseId: string) => `/space/courses/${courseId}/html-courseware` }
+    { id: "ppt-courseware", label: "PPT 课件", route: (courseId: string) => `/space/courses/${courseId}/ai-workbench/apps/ppt_courseware` }
   ]
 } as const;
 
@@ -38,7 +37,7 @@ export function PrepWorkflowNavigation({
           <Link
             key={step.id}
             href={step.route(courseId)}
-            prefetch
+            prefetch={false}
             aria-current={selected ? "step" : undefined}
             className={clsx(
               "rounded-full px-3.5 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",

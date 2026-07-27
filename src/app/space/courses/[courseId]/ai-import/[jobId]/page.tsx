@@ -50,6 +50,7 @@ export default async function AiImportReviewPage({ params }: PageProps) {
             initialCurrentStage={job.currentStage}
             initialJobsAhead={null}
             initialErrorMessage={job.errorMessage}
+            initialReviewReady={job.status !== "READY_FOR_REVIEW" || Boolean(outline && latestMap)}
             retryHref={`/space/courses/${courseId}/ai-import`}
           />
           {job.warning ? <p className="rounded-md bg-orange-50 p-3 text-sm text-orange-700">{job.warning}</p> : null}

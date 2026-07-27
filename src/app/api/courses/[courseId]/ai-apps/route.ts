@@ -27,7 +27,14 @@ type RouteContext = {
   params: Promise<{ courseId: string }>;
 };
 
-const appTypeSchema = z.enum(["question_generation", "lesson_plan", "courseware", "paper_assembly", "html_courseware"]);
+const appTypeSchema = z.enum([
+  "question_generation",
+  "lesson_plan",
+  "courseware",
+  "paper_assembly",
+  "ppt_courseware",
+  "html_courseware"
+]);
 
 const createArtifactSchema = z.object({
   appType: appTypeSchema,
@@ -56,6 +63,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const artifacts = await db.courseAiArtifact.findMany({
     where: {
       courseId,
+      deletedAt: null,
       ...(canManage ? {} : { status: "PUBLISHED" }),
       ...(parsedAppType?.success ? { appType: parsedAppType.data } : {})
     },
@@ -108,11 +116,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ code: "INVALID_REQUEST", error: "生成参数无效" }, { status: 400 });
   }
 
+  if (parsed.data.appType === "html_courseware") {
+    return NextResponse.json({
+      code: "HTML_COURSEWARE_RETIRED",
+      error: "HTML 互动课件已停止生成，请使用 PPT 课件"
+    }, { status: 410 });
+  }
+
   if (!enabledCourseAiAppTypes.includes(parsed.data.appType)) {
     return NextResponse.json({ code: "INVALID_REQUEST", error: "该 AI 应用暂未复刻" }, { status: 400 });
   }
 
-  if (parsed.data.appType === "html_courseware" ? !parsed.data.sourceArtifactId : Boolean(parsed.data.sourceArtifactId)) {
+  if (parsed.data.appType === "ppt_courseware" ? !parsed.data.sourceArtifactId : Boolean(parsed.data.sourceArtifactId)) {
     return NextResponse.json({ code: "INVALID_REQUEST", error: "生成参数无效" }, { status: 400 });
   }
 
@@ -154,7 +169,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }));
       const aiContext = await buildCourseAiContext({ courseId, scope, prompt: parsed.data.prompt });
       artifactInput = { appType: parsed.data.appType, context: aiContext, approvedQuestions } as const;
-    } else if (parsed.data.appType === "html_courseware") {
+    } else if (parsed.data.appType === "ppt_courseware") {
       const source = await db.courseAiArtifact.findFirst({
         where: { id: parsed.data.sourceArtifactId!, courseId },
         select: { id: true, appType: true, status: true, payload: true }
@@ -168,15 +183,32 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (!source || source.appType !== "courseware" || !["APPROVED", "PUBLISHED"].includes(source.status) || !sourceCourseware) {
         return NextResponse.json({
           code: "AI_PREREQUISITE_REQUIRED",
-          error: "请先生成并确认 AI 课件后再生成 HTML 课件"
+          error: "请先生成并确认 AI 课件后再生成 PPT 课件"
         }, { status: 409 });
       }
       sourceArtifactId = source.id;
-      artifactInput = {
-        appType: parsed.data.appType,
-        sourceCourseware,
-        ...(parsed.data.prompt === undefined ? {} : { prompt: parsed.data.prompt })
-      } as const;
+      const artifact = await db.courseAiArtifact.create({
+        data: {
+          courseId,
+          userId: user.id,
+          appType: "ppt_courseware",
+          title: parsed.data.title ?? `${app.title} ${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+          prompt: parsed.data.prompt,
+          payload: JSON.stringify(sourceCourseware),
+          inputSnapshot: null,
+          runToken: null,
+          scope: null,
+          sourceArtifactId,
+          status: "APPROVED",
+          version: 1,
+          approvedAt: new Date(),
+          finishedAt: new Date()
+        },
+        select: safeAiArtifactSelect
+      });
+      return NextResponse.json({
+        artifact: toSafeAiArtifactDto(artifact, { canManage: true, jobsAhead: null })
+      }, { status: 201 });
     } else {
       const aiContext = await buildCourseAiContext({ courseId, scope, prompt: parsed.data.prompt });
       artifactInput = { appType: parsed.data.appType, context: aiContext } as const;
@@ -203,7 +235,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           payload: null,
           inputSnapshot: serializeAiGenerationInput(artifactInput),
           runToken: null,
-          scope: parsed.data.appType === "html_courseware" ? null : JSON.stringify(scope),
+          scope: JSON.stringify(scope),
           sourceArtifactId,
           status: "QUEUED",
           version: 1

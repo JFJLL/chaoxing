@@ -75,12 +75,14 @@ function workflowStore(options?: {
 
 describe("artifact edit payload", () => {
   it("strictly validates title and app-specific payload and normalizes JSON", () => {
-    expect(parseArtifactEditBody("lesson_plan", { title: "  新教案  ", payload: lessonPayload })).toEqual({
+    expect(parseArtifactEditBody("lesson_plan", { title: "  新教案  ", payload: lessonPayload, lockVersion: 3 })).toEqual({
       title: "新教案",
-      payload: JSON.stringify(lessonPayload)
+      payload: JSON.stringify(lessonPayload),
+      lockVersion: 3
     });
-    expect(() => parseArtifactEditBody("lesson_plan", { title: "教案", payload: { slides: [] } })).toThrow();
-    expect(() => parseArtifactEditBody("lesson_plan", { title: "教案", payload: lessonPayload, seriesId: "forged" })).toThrow();
+    expect(() => parseArtifactEditBody("lesson_plan", { title: "教案", payload: { slides: [] }, lockVersion: 3 })).toThrow();
+    expect(() => parseArtifactEditBody("lesson_plan", { title: "教案", payload: lessonPayload, lockVersion: 3, seriesId: "forged" })).toThrow();
+    expect(() => parseArtifactEditBody("lesson_plan", { title: "教案", payload: lessonPayload })).toThrow();
   });
 
   it("forbids manual HTML editing", () => {
@@ -220,13 +222,13 @@ describe("publishArtifact", () => {
     expect(current.calls.publish).toHaveBeenCalledWith("paper-v2", "course-1", expect.any(Date));
   });
 
-  it("rejects internal-only types and a lost publish race", async () => {
-    const internal = workflowStore({ artifact: {
+  it("publishes lesson plans and rejects a lost publish race", async () => {
+    const lesson = workflowStore({ artifact: {
       id: "lesson-1", courseId: "course-1", seriesId: "lesson-series", sourceArtifactId: null,
       appType: "lesson_plan", status: "APPROVED", payload: "{}"
     } });
-    await expect(publishArtifact(internal.store, { courseId: "course-1", artifactId: "lesson-1" }))
-      .rejects.toMatchObject({ code: "AI_ARTIFACT_TYPE_NOT_PUBLISHABLE" });
+    await expect(publishArtifact(lesson.store, { courseId: "course-1", artifactId: "lesson-1" }))
+      .resolves.toBeDefined();
 
     const raced = workflowStore({ artifact: {
       id: "paper-1", courseId: "course-1", seriesId: "paper-series", sourceArtifactId: null,

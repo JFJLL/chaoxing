@@ -34,9 +34,11 @@ describe("module form controls", () => {
       />
     );
 
-    expect(html).toContain("选择要上传的文件");
-    expect(html).toContain("上传期间会显示进度");
     expect(html).toContain("新建文件夹");
+    expect(html).toContain("上传文件");
+    expect(html).toContain("选择操作后再填写内容");
+    expect(html).not.toContain("选择要上传的文件");
+    expect(html).not.toContain("文件夹名称");
     expect(html).toContain("2 KB");
     expect(html).toContain("移动");
     expect(html).toContain("添加到课程资料");

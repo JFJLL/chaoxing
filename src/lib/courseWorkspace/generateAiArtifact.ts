@@ -50,7 +50,9 @@ const outputInstructions: Record<CourseAiAppType, string> = {
   lesson_plan:
     '输出 {"objectives":["..."],"keyPoints":["..."],"teachingProcess":[{"phase":"...","minutes":10,"activity":"..."}],"assessment":["..."]}。',
   courseware:
-    '输出 {"slides":[{"title":"...","bullets":["..."],"speakerNotes":"..."}]}，页数不超过 50。',
+    '输出 {"slides":[{"title":"...","bullets":["..."],"speakerNotes":"..."}]}，页数不超过 50。每页必须恰好输出 3 个 bullets；每个 bullet 是不超过 28 个汉字的单句短标题，不得换行；解释、案例和补充细节全部放入 speakerNotes。',
+  ppt_courseware:
+    '输出 {"slides":[{"title":"...","bullets":["..."],"speakerNotes":"..."}]}，页数不超过 50。每页必须恰好输出 3 个 bullets；每个 bullet 是不超过 28 个汉字的单句短标题，不得换行；解释、案例和补充细节全部放入 speakerNotes。',
   paper_assembly:
     '输出 {"title":"...","sections":[{"name":"...","score":20,"questionIds":["..."]}]}。questionIds 只能使用课程数据中 approvedQuestions 的 id，不得发明题目。',
   html_courseware:
@@ -328,6 +330,7 @@ function parsePayload(input: GenerateCourseAiArtifactInput, raw: string | null):
       case "lesson_plan":
         return aiLessonPlanPayloadSchema.parse(json);
       case "courseware":
+      case "ppt_courseware":
         return aiCoursewarePayloadSchema.parse(json);
       case "paper_assembly": {
         const parsed = aiPaperPayloadSchema.parse(json);

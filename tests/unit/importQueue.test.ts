@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   runImportJob: vi.fn(),
   findMany: vi.fn(),
+  findFirst: vi.fn(),
   updateMany: vi.fn(),
   aggregate: vi.fn(),
   count: vi.fn()
@@ -13,6 +14,7 @@ vi.mock("@/lib/db", () => ({
   db: {
     documentImportJob: {
       findMany: mocks.findMany,
+      findFirst: mocks.findFirst,
       updateMany: mocks.updateMany,
       aggregate: mocks.aggregate,
       count: mocks.count
@@ -37,10 +39,12 @@ describe("in-process import queue", () => {
   beforeEach(() => {
     mocks.runImportJob.mockReset();
     mocks.findMany.mockReset();
+    mocks.findFirst.mockReset();
     mocks.updateMany.mockReset();
     mocks.aggregate.mockReset();
     mocks.count.mockReset();
     mocks.findMany.mockResolvedValue([]);
+    mocks.findFirst.mockResolvedValue(null);
     mocks.updateMany.mockResolvedValue({ count: 0 });
     mocks.aggregate.mockResolvedValue({ _sum: { fileSize: 0 } });
     mocks.count.mockResolvedValue(0);
@@ -92,6 +96,23 @@ describe("in-process import queue", () => {
       expect.objectContaining({ where: { id: { in: ["job-stale"] } } })
     );
     await vi.waitFor(() => expect(mocks.runImportJob).toHaveBeenCalledWith("job-stale"));
+  });
+
+  it("recovers only the requested queued job during status polling", async () => {
+    const running = deferred();
+    mocks.runImportJob.mockReturnValueOnce(running.promise);
+    mocks.findFirst.mockResolvedValueOnce({ id: "job-target", status: "QUEUED" });
+    const queue = await loadQueue();
+
+    await queue.recoverImportJobFromDatabase("job-target", "course-1");
+
+    expect(mocks.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: "job-target", courseId: "course-1" })
+    }));
+    expect(mocks.findMany).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(mocks.runImportJob).toHaveBeenCalledWith("job-target"));
+    running.resolve();
+    await vi.waitFor(() => expect(queue.getImportQueueSnapshot().activeWorkers).toBe(0));
   });
 
   it("releases the reservation only after the job promise settles", async () => {

@@ -1,7 +1,10 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-vi.mock("next/navigation", () => ({ usePathname: () => "/space" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/space",
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() })
+}));
 vi.mock("next/link", () => ({
   default: ({ children, prefetch: _prefetch, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { prefetch?: boolean }) => (
     <a {...props} href={href} data-next-link="true">{children}</a>
@@ -27,6 +30,7 @@ describe("course workspace navigation", () => {
   it("keeps the legacy pre-class redirect under the after-class parent", () => {
     expect(getCourseWorkspaceNavParent("pre-class")).toBe("after-class");
     expect(getCourseWorkspaceNavParent("question-bank")).toBe("after-class");
+    expect(getCourseWorkspaceNavParent("drive")).toBe("drive");
   });
 
   it("highlights the prep center for a child route and removes fake course links", () => {
@@ -122,6 +126,21 @@ describe("course workspace navigation", () => {
     expect(courseHtml).toContain("cx-hide-scrollbar");
     expect(spaceHtml).not.toContain("zovii.studio");
     expect(spaceHtml).not.toContain("生图");
+  });
+
+  it("places the course drive below Zovii for teachers and hides it from students", () => {
+    const teacherHtml = renderToStaticMarkup(
+      <CourseWorkspaceSidebar course={{ id: "course-1", title: "测试课程" }} activeTab="drive" canManage />
+    );
+    const studentHtml = renderToStaticMarkup(
+      <CourseWorkspaceSidebar course={{ id: "course-1", title: "测试课程" }} activeTab="activities" canManage={false} />
+    );
+
+    expect(teacherHtml).toContain('href="/space/courses/course-1/drive"');
+    expect(teacherHtml).toMatch(/href="\/space\/courses\/course-1\/drive" aria-current="page"/);
+    expect(teacherHtml.indexOf("云盘")).toBeGreaterThan(teacherHtml.indexOf("Zovii 智能画布"));
+    expect(studentHtml).not.toContain('href="/space/courses/course-1/drive"');
+    expect(studentHtml).not.toContain(">云盘<");
   });
 
   it("uses the original blue surface for the global space sidebar", () => {

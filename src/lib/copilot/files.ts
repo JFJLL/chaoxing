@@ -6,8 +6,11 @@ import { db } from "@/lib/db";
 import { extractText } from "@/lib/document/extractText";
 import { requireCourseAccess } from "@/lib/permissions";
 import { readDriveFileBytes, storeDriveFile, withDriveFilePath, type DriveFileStorageRecord } from "@/lib/modules/driveFiles";
+import {
+  ensureCoursePurposeFolder,
+  listCourseDrivePicker
+} from "@/lib/courseDrive/service";
 
-export const COPILOT_MAX_FILES = 5;
 export const COPILOT_MAX_DOCUMENT_CHARACTERS = 100_000;
 export const COPILOT_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const COPILOT_MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -16,6 +19,10 @@ const documentExtensions = new Set([".pdf", ".docx", ".pptx", ".txt", ".md"]);
 const imageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".bmp", ".heic", ".heif"]);
 
 export type CopilotFileKind = "document" | "image" | "unsupported";
+export type ConversationDriveReference = {
+  driveFileId: string;
+  referenceType: "FILE" | "FOLDER";
+};
 
 export function copilotFileKind(name: string, mimeType?: string | null): CopilotFileKind {
   const extension = extname(name).toLowerCase();
@@ -74,16 +81,68 @@ export async function storeDriveUpload(input: {
   return db.driveFile.findUniqueOrThrow({ where: { id: record.id } });
 }
 
+export async function storeCourseConversationUpload(user: SessionUser, courseId: string, file: File) {
+  const folder = await ensureCoursePurposeFolder(user, courseId, "CONVERSATION_UPLOADS");
+  return storeDriveUpload({ ownerId: folder.ownerId, parentId: folder.id, file });
+}
+
 export async function assertDriveMoveAllowed(ownerId: string, fileId: string, parentId: string | null) {
-  if (!parentId) return;
-  let current = await db.driveFile.findFirst({ where: { id: parentId, ownerId, kind: "folder", deletedAt: null } });
-  if (!current) throw new Error("目标文件夹不存在");
+  const [nodes, courses] = await Promise.all([
+    db.driveFile.findMany({
+      where: { ownerId, deletedAt: null },
+      select: { id: true, parentId: true, kind: true }
+    }),
+    db.course.findMany({
+      where: { ownerId, driveRootFolderId: { not: null } },
+      select: { driveRootFolderId: true }
+    })
+  ]);
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const source = byId.get(fileId);
+  if (!source) throw new Error("文件不存在");
+  const target = parentId ? byId.get(parentId) : null;
+  if (parentId && (!target || target.kind !== "folder")) throw new Error("目标文件夹不存在");
+
   const seen = new Set<string>();
+  let current = target;
   while (current) {
     if (current.id === fileId) throw new Error("不能把文件夹移动到自身或子文件夹中");
     if (!current.parentId || seen.has(current.id)) break;
     seen.add(current.id);
-    current = await db.driveFile.findFirst({ where: { id: current.parentId, ownerId, deletedAt: null } });
+    current = byId.get(current.parentId);
+  }
+  if (source.parentId === parentId) return;
+
+  const boundRoots = new Set(
+    courses.map((course) => course.driveRootFolderId).filter((id): id is string => Boolean(id))
+  );
+  const containingRoot = (startId: string | null) => {
+    let id = startId;
+    const visited = new Set<string>();
+    while (id && !visited.has(id)) {
+      if (boundRoots.has(id)) return id;
+      visited.add(id);
+      id = byId.get(id)?.parentId ?? null;
+    }
+    return null;
+  };
+  const containsBoundRoot = [...boundRoots].some((rootId) => {
+    let id: string | null = rootId;
+    const visited = new Set<string>();
+    while (id && !visited.has(id)) {
+      if (id === fileId) return true;
+      visited.add(id);
+      id = byId.get(id)?.parentId ?? null;
+    }
+    return false;
+  });
+  if (containsBoundRoot) {
+    throw new Error("课程云盘根目录不能通过普通移动操作变更，请在课程云盘中重新绑定");
+  }
+  const sourceRoot = containingRoot(fileId);
+  const targetRoot = containingRoot(parentId);
+  if (sourceRoot && sourceRoot !== targetRoot) {
+    throw new Error("课程云盘中的内容不能移出或移动到其他课程云盘");
   }
 }
 
@@ -136,63 +195,13 @@ export async function indexDriveFile(fileId: string) {
   }
 }
 
-type DriveTreeRow = {
-  id: string;
-  parentId: string | null;
-  name: string;
-  kind: string;
-  mimeType: string | null;
-  size: number;
-  extractionStatus: string;
-  extractionError: string | null;
-};
-
-function descendantIds(rows: DriveTreeRow[], rootId: string) {
-  const children = new Map<string, string[]>();
-  for (const row of rows) {
-    if (!row.parentId) continue;
-    children.set(row.parentId, [...(children.get(row.parentId) ?? []), row.id]);
-  }
-  const ids = new Set<string>([rootId]);
-  const queue = [rootId];
-  while (queue.length) {
-    const current = queue.shift()!;
-    for (const child of children.get(current) ?? []) {
-      if (ids.has(child)) continue;
-      ids.add(child);
-      queue.push(child);
-    }
-  }
-  return ids;
-}
-
-function filePath(rowsById: Map<string, DriveTreeRow>, file: DriveTreeRow, rootId: string) {
-  const parts = [file.name];
-  let current = file;
-  const seen = new Set([current.id]);
-  while (current.parentId && current.parentId !== rootId) {
-    const parent = rowsById.get(current.parentId);
-    if (!parent || seen.has(parent.id)) break;
-    seen.add(parent.id);
-    parts.unshift(parent.name);
-    current = parent;
-  }
-  return parts.join(" / ");
-}
-
 export async function listCourseCopilotFiles(user: SessionUser, courseId: string) {
-  const course = await requireCourseAccess(user, courseId);
-  if (!course.copilotFolderId) return [];
-  const root = await db.driveFile.findFirst({
-    where: { id: course.copilotFolderId, kind: "folder", deletedAt: null },
-    select: { ownerId: true }
-  });
-  if (!root) return [];
+  await requireCourseAccess(user, courseId);
+  const pickerItems = await listCourseDrivePicker(user, courseId);
   const rows = await db.driveFile.findMany({
-    where: { ownerId: root.ownerId, deletedAt: null },
+    where: { id: { in: pickerItems.map((item) => item.id) }, deletedAt: null },
     select: {
       id: true,
-      parentId: true,
       name: true,
       kind: true,
       mimeType: true,
@@ -201,64 +210,161 @@ export async function listCourseCopilotFiles(user: SessionUser, courseId: string
       extractionError: true
     }
   });
-  const allowed = descendantIds(rows, course.copilotFolderId);
   const rowsById = new Map(rows.map((row) => [row.id, row]));
-  return rows
-    .filter((row) => row.kind === "file" && allowed.has(row.id))
-    .map((row) => {
+  return pickerItems
+    .map((item) => {
+      const row = rowsById.get(item.id);
+      if (!row) return null;
+      if (row.kind === "folder") {
+        return {
+          ...row,
+          parentId: item.parentId,
+          path: item.path,
+          contextKind: "folder" as const,
+          contextReady: true,
+          contextSelectable: true,
+          extractionError: null,
+          referenceType: "FOLDER" as const
+        };
+      }
       const contextKind = copilotFileKind(row.name, row.mimeType);
       const imageTooLarge = contextKind === "image" && row.size > COPILOT_MAX_IMAGE_BYTES;
       const supported = contextKind !== "unsupported" && !imageTooLarge;
       return {
         ...row,
-        path: filePath(rowsById, row, course.copilotFolderId!),
+        parentId: item.parentId,
+        path: item.path,
         contextKind,
         contextReady: row.extractionStatus === "READY" && supported,
         contextSelectable: supported && copilotExtractionCanBeSelected(row.extractionStatus),
-        extractionError: imageTooLarge ? "图片超过单张 10MB 限制" : row.extractionError
+        extractionError: imageTooLarge ? "图片超过单张 10MB 限制" : row.extractionError,
+        referenceType: "FILE" as const
       };
     })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
     .sort((left, right) => left.path.localeCompare(right.path, "zh-CN"));
 }
 
-export async function assertCourseCopilotFiles(user: SessionUser, courseId: string, fileIds: string[]) {
-  if (fileIds.length > COPILOT_MAX_FILES || new Set(fileIds).size !== fileIds.length) {
-    throw new Error(`每个对话最多添加 ${COPILOT_MAX_FILES} 个文件`);
-  }
-  let allowed = await listCourseCopilotFiles(user, courseId);
-  let byId = new Map(allowed.map((file) => [file.id, file]));
-  let files = fileIds.map((id) => byId.get(id));
-  if (files.some((file) => !file)) throw new Error("文件不存在或不属于当前课程文件夹");
-  if (files.some((file) => !file!.contextSelectable)) {
-    const file = files.find((item) => item && !item.contextSelectable)!;
-    throw new Error(file.extractionError || "文件当前不可用");
-  }
-  const indexingIds = files.filter((file) => copilotExtractionNeedsIndexing(file!.extractionStatus)).map((file) => file!.id);
-  for (let offset = 0; offset < indexingIds.length; offset += 3) {
-    await Promise.allSettled(indexingIds.slice(offset, offset + 3).map((fileId) => indexDriveFile(fileId)));
-  }
-  if (indexingIds.length) {
-    allowed = await listCourseCopilotFiles(user, courseId);
-    byId = new Map(allowed.map((file) => [file.id, file]));
-    files = fileIds.map((id) => byId.get(id));
-  }
-  if (files.some((file) => !file!.contextReady)) {
-    const file = files.find((item) => item && !item.contextReady)!;
-    throw new Error(file.extractionError || "文件尚未完成解析");
-  }
-  const records = await db.driveFile.findMany({
-    where: { id: { in: fileIds }, deletedAt: null },
-    select: { id: true, name: true, size: true, mimeType: true, extractedText: true }
+export async function assertCourseCopilotReferences(
+  user: SessionUser,
+  courseId: string,
+  references: ConversationDriveReference[]
+) {
+  const uniqueIds = new Set(references.map((reference) => reference.driveFileId));
+  if (uniqueIds.size !== references.length) throw new Error("不能重复引用同一个文件或文件夹");
+  const available = await listCourseCopilotFiles(user, courseId);
+  const byId = new Map(available.map((item) => [item.id, item]));
+  return references.map((reference) => {
+    const target = byId.get(reference.driveFileId);
+    if (!target) throw new Error("文件或文件夹不存在、未开放或不属于当前课程云盘");
+    const expectedType = target.kind === "folder" ? "FOLDER" : "FILE";
+    if (reference.referenceType !== expectedType) throw new Error("引用类型与云盘内容不匹配");
+    if (!target.contextSelectable) throw new Error(target.extractionError || "文件当前不可供 AI 使用");
+    return target;
   });
+}
+
+function includesDescendant(
+  item: { id: string; parentId: string | null },
+  folderId: string,
+  byId: Map<string, { id: string; parentId: string | null }>
+) {
+  const seen = new Set<string>();
+  let current: { id: string; parentId: string | null } | undefined = item;
+  while (current?.parentId && !seen.has(current.id)) {
+    if (current.parentId === folderId) return true;
+    seen.add(current.id);
+    current = byId.get(current.parentId);
+  }
+  return false;
+}
+
+export function expandConversationReferenceIds(
+  targets: Array<{ id: string; parentId: string | null; kind: string }>,
+  references: ConversationDriveReference[]
+) {
+  const targetById = new Map(targets.map((target) => [target.id, target]));
+  const allowedReferences = references.filter((reference) => targetById.has(reference.driveFileId));
+  const folderIds = new Set(
+    allowedReferences.filter((reference) => reference.referenceType === "FOLDER").map((reference) => reference.driveFileId)
+  );
+  const directFileIds = new Set(
+    allowedReferences.filter((reference) => reference.referenceType === "FILE").map((reference) => reference.driveFileId)
+  );
+  const ancestryById = new Map(targets.map((target) => [target.id, { id: target.id, parentId: target.parentId }]));
+  return targets
+    .filter((target) => target.kind !== "folder")
+    .filter((target) => directFileIds.has(target.id) || [...folderIds].some((folderId) => includesDescendant(target, folderId, ancestryById)))
+    .map((target) => target.id);
+}
+
+function queryScore(query: string, name: string, text: string | null) {
+  const terms = query.toLocaleLowerCase().match(/[a-z0-9]{2,}|[\u3400-\u9fff]{2,}/g) ?? [];
+  if (!terms.length) return 0;
+  const normalizedName = name.toLocaleLowerCase();
+  const normalizedText = (text ?? "").slice(0, 20_000).toLocaleLowerCase();
+  return terms.reduce((score, term) => score + (normalizedName.includes(term) ? 8 : 0) + (normalizedText.includes(term) ? 1 : 0), 0);
+}
+
+export async function resolveCourseConversationFiles(input: {
+  user: SessionUser;
+  courseId: string;
+  references: ConversationDriveReference[];
+  query: string;
+}) {
+  if (!input.references.length) return [];
+  const targets = await listCourseCopilotFiles(input.user, input.courseId);
+  const directFileIds = new Set(
+    input.references.filter((reference) => reference.referenceType === "FILE").map((reference) => reference.driveFileId)
+  );
+  const candidateIds = expandConversationReferenceIds(targets, input.references);
+
+  const indexingIds = targets
+    .filter((target) => candidateIds.includes(target.id) && copilotExtractionNeedsIndexing(target.extractionStatus))
+    .map((target) => target.id);
+  for (let offset = 0; offset < indexingIds.length; offset += 3) {
+    await Promise.allSettled(indexingIds.slice(offset, offset + 3).map(indexDriveFile));
+  }
+
+  const records = await db.driveFile.findMany({
+    where: { id: { in: candidateIds }, kind: "file", deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      mimeType: true,
+      size: true,
+      path: true,
+      extractionStatus: true,
+      extractionError: true,
+      extractedText: true
+    }
+  });
+  const ranked = records
+    .filter((record) => copilotFileKind(record.name, record.mimeType) !== "unsupported")
+    .map((record) => ({
+      record,
+      direct: directFileIds.has(record.id),
+      score: queryScore(input.query, record.name, record.extractedText)
+    }))
+    .sort((left, right) => Number(right.direct) - Number(left.direct) || right.score - left.score || left.record.name.localeCompare(right.record.name, "zh-CN"));
+
   let documentCharacters = 0;
   let imageBytes = 0;
-  for (const record of records) {
-    if (copilotFileKind(record.name, record.mimeType) === "document") documentCharacters += record.extractedText?.length ?? 0;
-    else imageBytes += record.size;
+  const selected = [];
+  for (const { record } of ranked) {
+    const kind = copilotFileKind(record.name, record.mimeType);
+    if (kind === "document") {
+      if (record.extractionStatus !== "READY" || !record.extractedText) continue;
+      if (documentCharacters + record.extractedText.length > COPILOT_MAX_DOCUMENT_CHARACTERS) continue;
+      documentCharacters += record.extractedText.length;
+    } else {
+      if (record.extractionStatus !== "READY" || record.size > COPILOT_MAX_IMAGE_BYTES) continue;
+      if (imageBytes + record.size > COPILOT_MAX_TOTAL_IMAGE_BYTES) continue;
+      imageBytes += record.size;
+    }
+    selected.push(record);
   }
-  if (documentCharacters > COPILOT_MAX_DOCUMENT_CHARACTERS) throw new Error("文档正文合计不能超过 100,000 字符");
-  if (imageBytes > COPILOT_MAX_TOTAL_IMAGE_BYTES) throw new Error("图片合计不能超过 20MB");
-  return files as NonNullable<(typeof files)[number]>[];
+  return selected;
 }
 
 export async function buildCopilotFileContext(fileIds: string[]) {
@@ -311,7 +417,7 @@ export async function listOwnerDriveFolders(user: SessionUser) {
       id: true,
       parentId: true,
       name: true,
-      copilotCourses: { select: { id: true, title: true }, orderBy: { title: "asc" } }
+      rootCourse: { select: { id: true, title: true } }
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }]
   });
@@ -327,7 +433,7 @@ export async function listOwnerDriveFolders(user: SessionUser) {
       parts.unshift(parent.name);
       current = parent;
     }
-    return { id: row.id, name: row.name, path: parts.join(" / "), boundCourses: row.copilotCourses };
+    return { id: row.id, name: row.name, path: parts.join(" / "), boundCourses: row.rootCourse ? [row.rootCourse] : [] };
   }).sort((left, right) => left.path.localeCompare(right.path, "zh-CN"));
 }
 

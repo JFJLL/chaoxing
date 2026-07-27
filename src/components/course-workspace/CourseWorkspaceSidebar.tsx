@@ -67,7 +67,8 @@ function CourseNavLink({
 }
 
 export function CourseWorkspaceSidebar({ course, activeTab, canManage, zoviiCredential = null }: Props) {
-  const visibleNav = courseWorkspaceNav;
+  const primaryNav = courseWorkspaceNav.filter((item) => item.id !== "drive");
+  const driveNav = courseWorkspaceNav.find((item) => item.id === "drive");
   const activeParent = getCourseWorkspaceNavParent(activeTab);
 
   return (
@@ -84,11 +85,19 @@ export function CourseWorkspaceSidebar({ course, activeTab, canManage, zoviiCred
       </div>
 
       <nav aria-label="课程工作区导航" className="cx-hide-scrollbar flex gap-2 overflow-x-auto px-4 py-3 lg:mt-4 lg:block lg:space-y-1.5 lg:overflow-visible lg:px-0 lg:py-0">
-        {visibleNav.map((item) => {
+        {primaryNav.map((item) => {
           const active = item.id === activeParent;
           return <CourseNavLink key={item.id} item={item} courseId={course.id} active={active} canManage={canManage} />;
         })}
         <ZoviiCanvasLauncher credential={zoviiCredential} />
+        {canManage && driveNav ? (
+          <CourseNavLink
+            item={driveNav}
+            courseId={course.id}
+            active={activeParent === "drive"}
+            canManage={canManage}
+          />
+        ) : null}
       </nav>
     </aside>
   );

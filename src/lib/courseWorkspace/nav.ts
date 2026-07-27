@@ -3,6 +3,7 @@ import {
   Bot,
   CalendarDays,
   ClipboardList,
+  HardDrive,
   Volume2
 } from "lucide-react";
 import type { CourseWorkspaceTab } from "@/types/courseWorkspace";
@@ -17,7 +18,8 @@ export const courseWorkspaceNav: Array<{
   { id: "activities", label: "上课", hrefSegment: "activities", icon: CalendarDays },
   { id: "after-class", label: "课后", hrefSegment: "after-class", icon: ClipboardList },
   { id: "notices", label: "通知", hrefSegment: "notices", icon: Volume2 },
-  { id: "analytics", label: "学情分析", hrefSegment: "analytics", icon: BarChart3 }
+  { id: "analytics", label: "学情分析", hrefSegment: "analytics", icon: BarChart3 },
+  { id: "drive", label: "云盘", hrefSegment: "drive", icon: HardDrive }
 ];
 
 const courseWorkspaceNavParents: Record<CourseWorkspaceTab, CourseWorkspaceTab> = {
@@ -26,6 +28,7 @@ const courseWorkspaceNavParents: Record<CourseWorkspaceTab, CourseWorkspaceTab> 
   activities: "activities",
   "after-class": "after-class",
   analytics: "analytics",
+  drive: "drive",
   structure: "ai-workbench",
   "knowledge-map": "ai-workbench",
   "html-courseware": "ai-workbench",

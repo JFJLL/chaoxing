@@ -1,7 +1,13 @@
 import { z } from "zod";
 import { isValidChoiceAnswer } from "@/lib/teaching/choiceQuestions";
 
-export type CourseAiAppType = "question_generation" | "lesson_plan" | "courseware" | "paper_assembly" | "html_courseware";
+export type CourseAiAppType =
+  | "question_generation"
+  | "lesson_plan"
+  | "courseware"
+  | "paper_assembly"
+  | "ppt_courseware"
+  | "html_courseware";
 
 export type CourseWorkspaceTab =
   | "ai-workbench"
@@ -12,6 +18,7 @@ export type CourseWorkspaceTab =
   | "structure"
   | "knowledge-map"
   | "html-courseware"
+  | "drive"
   | "resources"
   | "notices"
   | "discussions"

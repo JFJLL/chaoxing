@@ -11,6 +11,7 @@ type ImportProgressClientProps = {
   initialCurrentStage: string | null;
   initialJobsAhead: number | null;
   initialErrorMessage: string | null;
+  initialReviewReady: boolean;
   retryHref: string;
 };
 
@@ -20,6 +21,7 @@ export function ImportProgressClient({
   initialCurrentStage,
   initialJobsAhead,
   initialErrorMessage,
+  initialReviewReady,
   retryHref
 }: ImportProgressClientProps) {
   const router = useRouter();
@@ -34,9 +36,10 @@ export function ImportProgressClient({
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     let latestStatus = initialStatus;
+    let latestReviewReady = initialReviewReady;
 
-    const scheduleNextPoll = (nextStatus: string) => {
-      const delay = getNextPollDelay(nextStatus);
+    const scheduleNextPoll = (nextStatus: string, reviewReady: boolean) => {
+      const delay = getNextPollDelay(nextStatus, reviewReady);
       if (cancelled || delay === null) return;
       timeoutId = setTimeout(poll, delay);
     };
@@ -51,11 +54,17 @@ export function ImportProgressClient({
         if (cancelled) return;
 
         latestStatus = job.status;
+        latestReviewReady = job.reviewReady;
         setStatus(job.status);
         setCurrentStage(job.currentStage);
         setJobsAhead(job.jobsAhead);
         setErrorMessage(job.errorMessage);
         setPollError(undefined);
+
+        if (job.status === "READY_FOR_REVIEW" && !job.reviewReady) {
+          scheduleNextPoll(job.status, job.reviewReady);
+          return;
+        }
 
         if (isImportTerminal(job.status)) {
           if (!hasRefreshed.current) {
@@ -65,21 +74,21 @@ export function ImportProgressClient({
           return;
         }
 
-        scheduleNextPoll(job.status);
+        scheduleNextPoll(job.status, job.reviewReady);
       } catch {
         if (cancelled) return;
         setPollError("状态更新失败，正在重试");
-        scheduleNextPoll(latestStatus);
+        scheduleNextPoll(latestStatus, latestReviewReady);
       }
     };
 
-    scheduleNextPoll(latestStatus);
+    scheduleNextPoll(latestStatus, latestReviewReady);
 
     return () => {
       cancelled = true;
       if (timeoutId !== undefined) clearTimeout(timeoutId);
     };
-  }, [initialStatus, jobId, router]);
+  }, [initialReviewReady, initialStatus, jobId, router]);
 
   return (
     <ImportTimeline

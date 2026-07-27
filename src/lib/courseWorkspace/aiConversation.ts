@@ -5,9 +5,16 @@ import { db } from "@/lib/db";
 import { requireCourseAccess } from "@/lib/permissions";
 import { aiCitationSchema, type AiCitation } from "@/lib/ai/streamProtocol";
 import {
+  buildCourseDriveKnowledgeSources,
   buildCourseKnowledgeSources,
   type CourseKnowledgeSource
 } from "@/lib/courseWorkspace/courseKnowledgeSources";
+import {
+  assertCourseCopilotReferences,
+  listCourseCopilotFiles,
+  resolveCourseConversationFiles,
+  type ConversationDriveReference
+} from "@/lib/copilot/files";
 
 const tutorTurnSchema = z.union([
   z.object({
@@ -23,6 +30,12 @@ const tutorTurnSchema = z.union([
 ]);
 type TutorTurnBody = z.infer<typeof tutorTurnSchema>;
 type StoredUserTurn = { id: string; role: string; content: string; createdAt: Date };
+const tutorReferencesSchema = z.object({
+  references: z.array(z.object({
+    driveFileId: z.string().min(1).max(160),
+    referenceType: z.enum(["FILE", "FOLDER"])
+  }).strict())
+}).strict();
 
 export class AiConversationError extends Error {
   constructor(
@@ -50,10 +63,10 @@ type ConversationIdentity = {
   kind: string;
 };
 
-export function assertTutorConversationAccess(
-  conversation: ConversationIdentity | null,
+export function assertTutorConversationAccess<T extends ConversationIdentity>(
+  conversation: T | null,
   input: { courseId: string; userId: string }
-) {
+): T {
   if (
     !conversation
     || conversation.courseId !== input.courseId
@@ -184,23 +197,44 @@ export async function createTutorConversation(user: SessionUser, courseId: strin
 
 export async function listTutorConversations(user: SessionUser, courseId: string) {
   await requireTutorCourseAccess(user, courseId);
-  return db.courseAiConversation.findMany({
-    where: { courseId, userId: user.id, kind: "TUTOR" },
-    orderBy: { updatedAt: "desc" },
-    take: 20,
-    select: {
-      id: true,
-      title: true,
-      status: true,
-      createdAt: true,
-      updatedAt: true,
-      messages: {
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        take: 100,
-        select: { id: true, role: true, content: true, citations: true, createdAt: true }
+  const [conversations, availableTargets] = await Promise.all([
+    db.courseAiConversation.findMany({
+      where: { courseId, userId: user.id, kind: "TUTOR" },
+      orderBy: { updatedAt: "desc" },
+      take: 20,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        attachments: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            driveFileId: true,
+            fileName: true,
+            mimeType: true,
+            referenceType: true,
+            driveFile: { select: { deletedAt: true } }
+          }
+        },
+        messages: {
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          take: 100,
+          select: { id: true, role: true, content: true, citations: true, createdAt: true }
+        }
       }
-    }
-  });
+    }),
+    listCourseCopilotFiles(user, courseId)
+  ]);
+  const availableIds = new Set(availableTargets.map((target) => target.id));
+  return conversations.map((conversation) => ({
+    ...conversation,
+    attachments: conversation.attachments.map((attachment) => ({
+      ...attachment,
+      driveFile: attachment.driveFileId && availableIds.has(attachment.driveFileId) ? attachment.driveFile : null
+    }))
+  }));
 }
 
 function parseStoredCitations(value: string | null) {
@@ -217,12 +251,72 @@ export function toTutorConversationDto(conversation: Awaited<ReturnType<typeof l
     ...conversation,
     createdAt: conversation.createdAt.toISOString(),
     updatedAt: conversation.updatedAt.toISOString(),
+    attachments: conversation.attachments.map((attachment) => ({
+      id: attachment.driveFileId,
+      name: attachment.fileName,
+      mimeType: attachment.mimeType,
+      referenceType: attachment.referenceType === "FOLDER" ? "FOLDER" as const : "FILE" as const,
+      available: Boolean(attachment.driveFile && !attachment.driveFile.deletedAt)
+    })),
     messages: conversation.messages.map((message) => ({
       ...message,
       citations: parseStoredCitations(message.citations),
       createdAt: message.createdAt.toISOString()
     }))
   };
+}
+
+export async function updateTutorConversationReferences(
+  user: SessionUser,
+  courseId: string,
+  conversationId: string,
+  body: unknown
+) {
+  await requireTutorCourseAccess(user, courseId);
+  const parsed = tutorReferencesSchema.safeParse(body);
+  if (!parsed.success) throw new AiConversationError("AI_REFERENCES_INVALID", "课程资料引用无效", 400);
+  const conversation = assertTutorConversationAccess(await db.courseAiConversation.findUnique({
+    where: { id: conversationId },
+    select: { id: true, courseId: true, userId: true, kind: true, status: true }
+  }), { courseId, userId: user.id });
+  if (conversation.status !== "ACTIVE") {
+    throw new AiConversationError("AI_CONVERSATION_BUSY", "回复生成期间不能修改课程资料引用", 409);
+  }
+  let references;
+  try {
+    references = await assertCourseCopilotReferences(user, courseId, parsed.data.references);
+  } catch (error) {
+    throw new AiConversationError(
+      "AI_REFERENCES_INVALID",
+      error instanceof Error ? error.message : "课程资料引用无效",
+      400
+    );
+  }
+  await db.$transaction(async (tx) => {
+    await tx.copilotConversationFile.deleteMany({ where: { conversationId } });
+    if (references.length) {
+      await tx.copilotConversationFile.createMany({
+        data: references.map((reference) => ({
+          conversationId,
+          driveFileId: reference.id,
+          fileName: reference.name,
+          mimeType: reference.mimeType,
+          referenceType: reference.kind === "folder" ? "FOLDER" : "FILE"
+        }))
+      });
+    }
+  });
+  const updated = (await listTutorConversations(user, courseId)).find((item) => item.id === conversationId);
+  if (!updated) throw new AiConversationError("AI_CONVERSATION_NOT_FOUND", "对话不存在", 404);
+  return updated;
+}
+
+export async function deleteTutorConversation(user: SessionUser, courseId: string, conversationId: string) {
+  await requireTutorCourseAccess(user, courseId);
+  const deleted = await db.courseAiConversation.deleteMany({
+    where: { id: conversationId, courseId, userId: user.id, kind: "TUTOR" }
+  });
+  if (!deleted.count) throw new AiConversationError("AI_CONVERSATION_NOT_FOUND", "对话不存在或无权访问", 404);
 }
 
 export async function prepareTutorTurn(input: {
@@ -238,7 +332,13 @@ export async function prepareTutorTurn(input: {
   }
   const conversation = assertTutorConversationAccess(await db.courseAiConversation.findUnique({
     where: { id: input.conversationId },
-    select: { id: true, courseId: true, userId: true, kind: true }
+    select: {
+      id: true,
+      courseId: true,
+      userId: true,
+      kind: true,
+      attachments: { select: { driveFileId: true, referenceType: true } }
+    }
   }), { courseId: input.courseId, userId: input.user.id });
 
   const generationToken = randomUUID();
@@ -269,8 +369,23 @@ export async function prepareTutorTurn(input: {
 
     let { userMessage, isNewMessage } = resolveTutorUserTurn(existingMessages, parsed.data);
 
-    const sources = await buildCourseKnowledgeSources({ courseId: input.courseId, user: input.user });
-    const selectedSources = selectTutorSources(userMessage.content, sources);
+    const references: ConversationDriveReference[] = conversation.attachments
+      .filter((attachment): attachment is typeof attachment & { driveFileId: string } => Boolean(attachment.driveFileId))
+      .map((attachment) => ({
+        driveFileId: attachment.driveFileId,
+        referenceType: attachment.referenceType === "FOLDER" ? "FOLDER" : "FILE"
+      }));
+    const [sources, driveFiles] = await Promise.all([
+      buildCourseKnowledgeSources({ courseId: input.courseId, user: input.user }),
+      resolveCourseConversationFiles({
+        user: input.user,
+        courseId: input.courseId,
+        references,
+        query: userMessage.content
+      })
+    ]);
+    const driveSources = buildCourseDriveKnowledgeSources(driveFiles);
+    const selectedSources = selectTutorSources(userMessage.content, [...driveSources, ...sources]);
     if (isNewMessage) {
       userMessage = await db.courseAiMessage.create({
         data: { id: userMessage.id, conversationId: conversation.id, role: "USER", content: userMessage.content },

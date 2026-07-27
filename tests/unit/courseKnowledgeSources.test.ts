@@ -33,7 +33,14 @@ function dependencies(): CourseKnowledgeSourceDependencies {
           { id: "artifact-draft", appType: "lesson_plan", title: "内部教案", payload: "{\"objectives\":[\"内部目标\"]}", status: "DRAFT" },
           { id: "artifact-published", appType: "courseware", title: "公开课件", payload: "{\"slides\":[{\"title\":\"公开内容\"}]}", status: "PUBLISHED" }
         ]
-      : [{ id: "artifact-published", appType: "courseware", title: "公开课件", payload: "{\"slides\":[{\"title\":\"公开内容\"}]}", status: "PUBLISHED" }]),
+      : [{
+          id: "artifact-published",
+          appType: "courseware",
+          title: "公开课件",
+          payload: "{\"slides\":[{\"title\":\"尚未确认的修改\"}]}",
+          publishedPayload: "{\"slides\":[{\"title\":\"公开内容\"}]}",
+          status: "PUBLISHED"
+        }]),
     loadPrivate: vi.fn().mockResolvedValue({
       imports: [{ id: "import-1", originalName: "内部资料.docx", extractedText: "仅教师可见的导入原文" }],
       questions: [{ id: "question-1", stem: "私有题干", answer: "私有答案", explanation: "私有解析", status: "APPROVED" }]
@@ -68,6 +75,7 @@ describe("permission-filtered course knowledge sources", () => {
     expect(sources.some((source) => source.type === "import" || source.type === "question")).toBe(false);
     expect(sources.some((source) => source.id.includes("artifact-draft"))).toBe(false);
     expect(sources.find((source) => source.id === "ai_artifact:artifact-published:1")?.snippet).toContain("公开内容");
+    expect(sources.find((source) => source.id === "ai_artifact:artifact-published:1")?.snippet).not.toContain("尚未确认的修改");
   });
 
   it("rejects inactive-course student content even if an unsafe caller bypasses the normal access guard", async () => {

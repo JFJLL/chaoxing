@@ -20,10 +20,24 @@ export async function redeemInviteCode(user: SessionUser, codeValue: string) {
       create: { groupId: code.targetId, userId: user.id }
     });
   } else if (code.kind === "DRIVE_SHARE") {
-    await db.driveShare.updateMany({
-      where: { fileId: code.targetId },
-      data: { accessCount: { increment: 1 } }
-    });
+    const share = await db.driveShare.findUnique({ where: { code: code.code } });
+    if (!share || share.fileId !== code.targetId) throw new Error("分享码已失效");
+    await db.$transaction([
+      db.driveShareGrant.upsert({
+        where: { shareId_userId: { shareId: share.id, userId: user.id } },
+        update: {},
+        create: { shareId: share.id, userId: user.id }
+      }),
+      db.driveShare.update({
+        where: { id: share.id },
+        data: { accessCount: { increment: 1 } }
+      }),
+      db.inviteCode.update({
+        where: { id: code.id },
+        data: { usedCount: { increment: 1 } }
+      })
+    ]);
+    return code;
   } else if (code.kind === "LIVE_SESSION") {
     await db.liveParticipant.upsert({
       where: { sessionId_userId: { sessionId: code.targetId, userId: user.id } },

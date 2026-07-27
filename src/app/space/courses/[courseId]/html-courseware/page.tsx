@@ -31,8 +31,8 @@ export default async function HtmlCoursewarePage({ params }: PageProps) {
         <div className="rounded-[28px] bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold text-slate-900">AI课件</h1>
-              <p className="mt-1 text-sm text-slate-500">{payload ? `当前已发布互动课件共 ${payload.slideCount} 页，支持键盘方向键播放。` : "查看已经发布给学生的互动课件。"}</p>
+              <h1 className="text-2xl font-semibold text-slate-900">历史互动课件</h1>
+              <p className="mt-1 text-sm text-slate-500">{payload ? `历史课件共 ${payload.slideCount} 页，仅保留查看。` : "HTML 课件已停止生成，请使用 PPT 课件。"}</p>
             </div>
             {canManage ? <PrepWorkflowNavigation courseId={course.id} workflow="courseware" active="published" /> : null}
           </div>
@@ -45,7 +45,7 @@ export default async function HtmlCoursewarePage({ params }: PageProps) {
             className="h-[calc(100vh-240px)] min-h-[520px] w-full rounded-[28px] border border-slate-100 bg-white shadow-sm"
           />
         ) : (
-          <div className="rounded-[28px] bg-white p-6 shadow-sm"><p className="text-sm text-slate-500">暂无已发布互动课件。</p>{canManage ? <LinkButton className="mt-4" href={`/space/courses/${course.id}/ai-workbench/apps/html_courseware`}>生成互动课件</LinkButton> : null}</div>
+          <div className="rounded-[28px] bg-white p-6 shadow-sm"><p className="text-sm text-slate-500">暂无历史互动课件。</p>{canManage ? <LinkButton className="mt-4" href={`/space/courses/${course.id}/ai-workbench/apps/ppt_courseware`}>前往 PPT 课件</LinkButton> : null}</div>
         )}
       </section>
     </FanyaCourseShell>

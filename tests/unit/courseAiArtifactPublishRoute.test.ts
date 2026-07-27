@@ -38,14 +38,20 @@ beforeEach(() => {
 });
 
 describe("POST artifact publish", () => {
+  const publishRequest = () => new Request("http://localhost", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lockVersion: 6 })
+  });
+
   it("requires ownership, delegates the course-scoped transition, and returns a manager-safe DTO", async () => {
-    const response = await POST(new Request("http://localhost", { method: "POST" }), context);
+    const response = await POST(publishRequest(), context);
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(mocks.requireCourseOwner).toHaveBeenCalledWith(expect.objectContaining({ id: "teacher-1" }), "course-1");
     expect(mocks.publishArtifact).toHaveBeenCalledWith(expect.any(Object), {
-      courseId: "course-1", artifactId: "artifact-1"
+      courseId: "course-1", artifactId: "artifact-1", expectedLockVersion: 6
     });
     expect(body.artifact).toMatchObject({ id: "artifact-1", status: "PUBLISHED" });
     expect(body.artifact).not.toHaveProperty("inputSnapshot");
@@ -57,15 +63,21 @@ describe("POST artifact publish", () => {
     ["ARTIFACT_PUBLISH_CONFLICT", true]
   ] as const)("maps %s to a stable 409 response", async (code, retryable) => {
     mocks.publishArtifact.mockRejectedValue(new ArtifactWorkflowError(code, retryable));
-    const response = await POST(new Request("http://localhost", { method: "POST" }), context);
+    const response = await POST(publishRequest(), context);
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({ code, retryable });
   });
 
   it("does not call the workflow when ownership fails", async () => {
     mocks.requireCourseOwner.mockRejectedValue(new Error("无权管理课程"));
-    const response = await POST(new Request("http://localhost", { method: "POST" }), context);
+    const response = await POST(publishRequest(), context);
     expect(response.status).toBe(403);
+    expect(mocks.publishArtifact).not.toHaveBeenCalled();
+  });
+
+  it("rejects requests that omit the optimistic-lock version", async () => {
+    const response = await POST(new Request("http://localhost", { method: "POST" }), context);
+    expect(response.status).toBe(400);
     expect(mocks.publishArtifact).not.toHaveBeenCalled();
   });
 });

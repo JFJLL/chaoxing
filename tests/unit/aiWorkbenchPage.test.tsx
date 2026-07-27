@@ -57,6 +57,9 @@ describe("AiWorkbenchPage", () => {
     }
     expect(html).toContain("AI出题与组卷");
     expect(html).toContain("AI课件");
+    expect(html.indexOf("课程内容与知识")).toBeLessThan(html.indexOf("AI教案"));
+    expect(html.indexOf("AI教案")).toBeLessThan(html.indexOf("AI课件"));
+    expect(html.indexOf("AI课件")).toBeLessThan(html.indexOf("AI出题与组卷"));
     expect(html).not.toContain("继续处理");
     expect(html).not.toContain("创建教学内容");
     expect(html).not.toContain("管理备课成果");

@@ -10,6 +10,7 @@ export type CourseKnowledgeSourceType =
   | "announcement"
   | "import"
   | "question"
+  | "drive"
   | "ai_artifact";
 
 export type CourseKnowledgeSource = {
@@ -44,6 +45,7 @@ type ArtifactKnowledgeRow = {
   appType: string;
   title: string;
   payload: string | null;
+  publishedPayload?: string | null;
   status: string;
 };
 
@@ -78,7 +80,8 @@ const TYPE_LIMITS: Record<CourseKnowledgeSourceType, number> = {
   announcement: 4,
   ai_artifact: 6,
   import: 6,
-  question: 4
+  question: 4,
+  drive: 20
 };
 
 const defaultDependencies: CourseKnowledgeSourceDependencies = {
@@ -120,7 +123,7 @@ const defaultDependencies: CourseKnowledgeSourceDependencies = {
       where: { courseId, ...(canManage ? {} : { status: "PUBLISHED" }) },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       take: 100,
-      select: { id: true, appType: true, title: true, payload: true, status: true }
+      select: { id: true, appType: true, title: true, payload: true, publishedPayload: true, status: true }
     });
   },
   async loadPrivate(courseId) {
@@ -175,6 +178,22 @@ function appendChunks(
       href: input.href
     });
   }
+}
+
+export function buildCourseDriveKnowledgeSources(
+  files: Array<{ id: string; name: string; extractedText: string | null }>
+) {
+  const sources: CourseKnowledgeSource[] = [];
+  for (const file of files) {
+    appendChunks(sources, {
+      baseId: `drive:${file.id}`,
+      type: "drive",
+      label: file.name,
+      text: file.extractedText,
+      href: `/api/drive/${file.id}?preview=1`
+    });
+  }
+  return sources;
 }
 
 export async function buildCourseKnowledgeSources(input: {
@@ -240,11 +259,13 @@ export async function buildCourseKnowledgeSources(input: {
     });
   }
   for (const artifact of artifacts) {
+    const artifactText = canManage ? artifact.payload : artifact.publishedPayload;
+    if (!canManage && artifact.appType === "question_generation") continue;
     appendChunks(sources, {
       baseId: `ai_artifact:${artifact.id}`,
       type: "ai_artifact",
       label: `${artifact.title}（${statusLabel(artifact.status)}）`,
-      text: artifact.payload,
+      text: artifactText ?? null,
       href: `${root}/ai-workbench/apps/${artifact.appType}`
     });
   }

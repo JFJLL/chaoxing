@@ -86,6 +86,7 @@ export type SafeAiArtifactRecord = {
   title: string;
   prompt: string | null;
   payload: string | null;
+  publishedPayload?: string | null;
   inputSnapshot?: string | null;
   runToken?: string | null;
   scope: string | null;
@@ -99,6 +100,9 @@ export type SafeAiArtifactRecord = {
   finishedAt: Date | null;
   approvedAt: Date | null;
   publishedAt: Date | null;
+  withdrawnAt?: Date | null;
+  deletedAt?: Date | null;
+  lockVersion?: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -112,6 +116,7 @@ export const safeAiArtifactSelect = {
   title: true,
   prompt: true,
   payload: true,
+  publishedPayload: true,
   scope: true,
   status: true,
   version: true,
@@ -123,6 +128,9 @@ export const safeAiArtifactSelect = {
   finishedAt: true,
   approvedAt: true,
   publishedAt: true,
+  withdrawnAt: true,
+  deletedAt: true,
+  lockVersion: true,
   createdAt: true,
   updatedAt: true
 } as const;
@@ -136,7 +144,7 @@ export function toSafeAiArtifactDto(
       id: record.id,
       appType: record.appType,
       title: record.title,
-      payload: record.payload,
+      payload: record.appType === "question_generation" ? null : record.publishedPayload ?? null,
       version: record.version,
       status: record.status,
       publishedAt: record.publishedAt,

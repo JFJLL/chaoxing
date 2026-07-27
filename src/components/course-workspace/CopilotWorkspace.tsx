@@ -1,20 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Bot,
   Check,
   ChevronDown,
   FileText,
-  FolderOpen,
+  Folder,
   Image as ImageIcon,
   Loader2,
   MessageSquarePlus,
-  Paperclip,
   Pencil,
-  Plus,
   Send,
   Settings2,
   Sparkles,
@@ -27,6 +24,10 @@ import { CopilotAssistantReply } from "@/components/course-workspace/CopilotMess
 import { FilePicker } from "@/components/ui/FilePicker";
 import { Input } from "@/components/ui/Input";
 import { readAiStream, type AiStreamEvent } from "@/lib/ai/streamProtocol";
+import {
+  CourseDriveReferencePicker,
+  type CourseDriveReferenceDto
+} from "@/components/course-workspace/CourseDriveReferencePicker";
 
 type SkillDto = {
   id: string;
@@ -40,25 +41,12 @@ type SkillDto = {
   updatedAt: string;
 };
 
-type FileDto = {
-  id: string;
-  name: string;
-  path: string;
-  mimeType: string | null;
-  size: number;
-  contextKind: "document" | "image" | "unsupported";
-  contextReady: boolean;
-  contextSelectable: boolean;
-  extractionStatus: string;
-  extractionError: string | null;
-};
-
 type ConversationDto = {
   id: string;
   title: string | null;
   status: string;
   activeSkill: { id: string; name: string; description: string; status: string } | null;
-  attachments: Array<{ id: string | null; name: string; mimeType: string | null; available: boolean }>;
+  attachments: CourseDriveReferenceDto[];
   messages: Array<{
     id: string;
     role: string;
@@ -69,13 +57,6 @@ type ConversationDto = {
   }>;
   createdAt: string;
   updatedAt: string;
-};
-
-type FolderDto = {
-  id: string;
-  name: string;
-  path: string;
-  boundCourses: Array<{ id: string; title: string }>;
 };
 
 type AnalyticsDto = {
@@ -101,31 +82,25 @@ export function CopilotWorkspace({
   courseId,
   canManage,
   initialCopilotName,
-  initialFolderId,
   initialConversations,
   initialSkills,
-  initialFiles,
-  initialFolders,
   initialAnalytics
 }: {
   courseId: string;
   canManage: boolean;
   initialCopilotName: string;
-  initialFolderId: string | null;
   initialConversations: ConversationDto[];
   initialSkills: SkillDto[];
-  initialFiles: FileDto[];
-  initialFolders: FolderDto[];
   initialAnalytics: AnalyticsDto;
+  initialFolderId?: string | null;
+  initialFiles?: unknown[];
+  initialFolders?: unknown[];
 }) {
   const router = useRouter();
   const [view, setView] = useState<"chat" | "settings">("chat");
   const [conversations, setConversations] = useState(initialConversations);
   const [selectedId, setSelectedId] = useState(initialConversations[0]?.id ?? null);
   const [skills, setSkills] = useState(initialSkills);
-  const [files, setFiles] = useState(initialFiles);
-  const [folders, setFolders] = useState(initialFolders);
-  const [folderId, setFolderId] = useState(initialFolderId ?? "");
   const [copilotName, setCopilotName] = useState(initialCopilotName);
   const [copilotNameDraft, setCopilotNameDraft] = useState(initialCopilotName);
   const [draft, setDraft] = useState("");
@@ -133,8 +108,6 @@ export function CopilotWorkspace({
   const [streaming, setStreaming] = useState(false);
   const [pendingUserMessage, setPendingUserMessage] = useState<PendingUserMessage | null>(null);
   const [retryMessageId, setRetryMessageId] = useState("");
-  const [filePickerOpen, setFilePickerOpen] = useState(false);
-  const [pendingFileIds, setPendingFileIds] = useState<string[]>([]);
   const [status, setStatus] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [busy, setBusy] = useState("");
   const [selectedSkillFileName, setSelectedSkillFileName] = useState("");
@@ -146,7 +119,6 @@ export function CopilotWorkspace({
 
   const selected = useMemo(() => conversations.find((conversation) => conversation.id === selectedId) ?? null, [conversations, selectedId]);
   const selectableSkills = canManage ? skills : skills.filter((skill) => skill.status === "ENABLED");
-  const selectedFolder = folders.find((folder) => folder.id === folderId);
   const selectedMessageCount = selected?.messages.length ?? 0;
 
   useEffect(() => {
@@ -208,7 +180,11 @@ export function CopilotWorkspace({
     }
   }
 
-  async function updateConversation(input: { title?: string; skillId?: string | null; fileIds?: string[] }, toast?: string, conversationId = selected?.id) {
+  async function updateConversation(input: {
+    title?: string;
+    skillId?: string | null;
+    references?: Array<{ driveFileId: string; referenceType: "FILE" | "FOLDER" }>;
+  }, toast?: string, conversationId = selected?.id) {
     if (!conversationId) return null;
     setBusy("context");
     setStatus(null);
@@ -239,20 +215,20 @@ export function CopilotWorkspace({
     if (conversation) await chooseSkill(skillId, conversation.id);
   }
 
-  async function openFilePicker() {
-    if (!selected || busy === "context") return;
-    setPendingFileIds(selected.attachments.map((attachment) => attachment.id).filter(Boolean) as string[]);
-    setFilePickerOpen(true);
-  }
-
-  async function applyFiles() {
-    const updated = await updateConversation({ fileIds: pendingFileIds }, "对话文件已更新");
-    if (updated) setFilePickerOpen(false);
+  async function applyReferences(references: Array<{ driveFileId: string; referenceType: "FILE" | "FOLDER" }>) {
+    const conversation = selected ?? await createConversation();
+    if (!conversation) return false;
+    return Boolean(await updateConversation({ references }, "对话课程资料已更新", conversation.id));
   }
 
   async function removeFile(fileId: string | null) {
     if (!selected || !fileId) return;
-    await updateConversation({ fileIds: selected.attachments.map((item) => item.id).filter((id): id is string => Boolean(id) && id !== fileId) });
+    await updateConversation({
+      references: selected.attachments.flatMap((item) => item.id && item.id !== fileId ? [{
+        driveFileId: item.id,
+        referenceType: item.referenceType
+      }] : [])
+    });
   }
 
   async function renameConversation(conversation: ConversationDto) {
@@ -366,26 +342,6 @@ export function CopilotWorkspace({
     }
   }
 
-  async function saveFolder() {
-    const shared = selectedFolder?.boundCourses.filter((course) => course.id !== courseId) ?? [];
-    if (shared.length && !window.confirm(`该文件夹已用于「${shared.map((course) => course.title).join("、")}」。绑定后，本课程学生也能只读访问全部内容。继续吗？`)) return;
-    setBusy("folder");
-    try {
-      await api(`/api/courses/${courseId}/copilot/settings`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folderId: folderId || null })
-      });
-      setStatus({ tone: "success", text: folderId ? "课程云盘文件夹已绑定" : "课程云盘文件夹已解绑" });
-      const fileBody = await api(`/api/courses/${courseId}/copilot/files`);
-      setFiles(fileBody.files);
-    } catch (error) {
-      setStatus({ tone: "error", text: error instanceof Error ? error.message : "文件夹设置失败" });
-    } finally {
-      setBusy("");
-    }
-  }
-
   async function saveCopilotName() {
     const name = copilotNameDraft.trim();
     if (!name || name === copilotName) return;
@@ -403,23 +359,6 @@ export function CopilotWorkspace({
       router.refresh();
     } catch (error) {
       setStatus({ tone: "error", text: error instanceof Error ? error.message : "Copilot 名称保存失败" });
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function createFolder(formData: FormData) {
-    const name = String(formData.get("name") || "").trim();
-    if (!name) return;
-    setBusy("folder-create");
-    try {
-      const body = await api("/api/drive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
-      const folder: FolderDto = { id: body.file.id, name: body.file.name, path: body.file.name, boundCourses: [] };
-      setFolders((current) => [...current, folder].sort((a, b) => a.path.localeCompare(b.path, "zh-CN")));
-      setFolderId(folder.id);
-      setStatus({ tone: "success", text: "文件夹已创建，请点击“保存绑定”完成授权" });
-    } catch (error) {
-      setStatus({ tone: "error", text: error instanceof Error ? error.message : "创建文件夹失败" });
     } finally {
       setBusy("");
     }
@@ -516,7 +455,13 @@ export function CopilotWorkspace({
                   <Sparkles className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-blue-600" />
                   <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
                 </label>
-                <Button type="button" variant="secondary" onClick={() => void openFilePicker()} disabled={!selected || streaming || busy === "context"}><Paperclip className="h-4 w-4" />@文件</Button>
+                <CourseDriveReferencePicker
+                  courseId={courseId}
+                  selected={selected?.attachments ?? []}
+                  disabled={streaming || busy === "context" || busy === "conversation"}
+                  canUpload={canManage}
+                  onApply={applyReferences}
+                />
                 <div className="text-xs leading-5 text-slate-400 lg:ml-auto lg:text-right">
                   <span className="block">对话仅你可见 · 每天最多 100 次</span>
                   <span className="block">当前 Skill、文件和最近对话会用于后续回复</span>
@@ -526,7 +471,7 @@ export function CopilotWorkspace({
                 <div className="mt-3 flex flex-wrap gap-2">
                   {selected.attachments.map((attachment) => (
                     <span key={attachment.id ?? attachment.name} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ${attachment.available ? "bg-blue-50 text-blue-700" : "bg-red-50 text-red-700"}`}>
-                      {attachment.mimeType?.startsWith("image/") ? <ImageIcon className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}{attachment.name}
+                      {attachment.referenceType === "FOLDER" ? <Folder className="h-3.5 w-3.5" /> : attachment.mimeType?.startsWith("image/") ? <ImageIcon className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}{attachment.name}
                       <button type="button" aria-label={`移除 ${attachment.name}`} disabled={streaming || busy === "context"} onClick={() => void removeFile(attachment.id)}><X className="h-3.5 w-3.5" /></button>
                     </span>
                   ))}
@@ -548,7 +493,7 @@ export function CopilotWorkspace({
                 {selected?.messages.map((message) => message.role === "USER" ? (
                   <div key={message.id} className="mx-auto flex w-full max-w-3xl justify-end">
                     <article className="max-w-[85%] rounded-2xl rounded-br-md bg-blue-600 px-4 py-3 text-white shadow-sm sm:max-w-[78%]">
-                      {message.skillName || message.contextFiles.length ? <p className="mb-2 text-xs text-blue-100">{message.skillName ? `Skill：${message.skillName}` : ""}{message.skillName && message.contextFiles.length ? " · " : ""}{message.contextFiles.length ? `${message.contextFiles.length} 个文件` : ""}</p> : null}
+                      {message.skillName || message.contextFiles.length ? <p className="mb-2 text-xs text-blue-100">{message.skillName ? `Skill：${message.skillName}` : ""}{message.skillName && message.contextFiles.length ? " · " : ""}{message.contextFiles.length ? "已使用课程资料" : ""}</p> : null}
                       <p className="whitespace-pre-wrap break-words text-sm leading-7">{message.content}</p>
                     </article>
                   </div>
@@ -556,7 +501,7 @@ export function CopilotWorkspace({
                 {pendingUserMessage && pendingUserMessage.conversationId === selected?.id ? (
                   <div className="mx-auto flex w-full max-w-3xl justify-end">
                     <article className="max-w-[85%] rounded-2xl rounded-br-md bg-blue-600 px-4 py-3 text-white shadow-sm sm:max-w-[78%]">
-                      {pendingUserMessage.skillName || pendingUserMessage.contextFiles.length ? <p className="mb-2 text-xs text-blue-100">{pendingUserMessage.skillName ? `Skill：${pendingUserMessage.skillName}` : ""}{pendingUserMessage.skillName && pendingUserMessage.contextFiles.length ? " · " : ""}{pendingUserMessage.contextFiles.length ? `${pendingUserMessage.contextFiles.length} 个文件` : ""}</p> : null}
+                      {pendingUserMessage.skillName || pendingUserMessage.contextFiles.length ? <p className="mb-2 text-xs text-blue-100">{pendingUserMessage.skillName ? `Skill：${pendingUserMessage.skillName}` : ""}{pendingUserMessage.skillName && pendingUserMessage.contextFiles.length ? " · " : ""}{pendingUserMessage.contextFiles.length ? "已使用课程资料" : ""}</p> : null}
                       <p className="whitespace-pre-wrap break-words text-sm leading-7">{pendingUserMessage.content}</p>
                     </article>
                   </div>
@@ -601,16 +546,6 @@ export function CopilotWorkspace({
           </section>
 
           <section className="rounded-2xl border border-slate-100 bg-white p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="font-semibold text-slate-900">课程云盘文件夹</h2><p className="mt-1 text-sm text-slate-500">文件夹及全部子目录会实时对课程学生开放只读访问。</p></div><Link href="/space/drive" className="inline-flex items-center gap-2 text-sm font-medium text-blue-600"><FolderOpen className="h-4 w-4" />前往云盘管理</Link></div>
-            <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-              <select value={folderId} onChange={(event) => setFolderId(event.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm"><option value="">尚未绑定</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.path}{folder.boundCourses.length ? `（${folder.boundCourses.length} 门课程）` : ""}</option>)}</select>
-              <Button onClick={() => void saveFolder()} disabled={busy === "folder"}>{busy === "folder" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}保存绑定</Button>
-            </div>
-            <form action={createFolder} className="mt-3 flex gap-2"><Input name="name" placeholder="新建课程文件夹" /><Button type="submit" variant="secondary" disabled={busy === "folder-create"}><Plus className="h-4 w-4" />创建</Button></form>
-            {selectedFolder?.boundCourses.length ? <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">已绑定课程：{selectedFolder.boundCourses.map((course) => course.title).join("、")}</p> : null}
-          </section>
-
-          <section className="rounded-2xl border border-slate-100 bg-white p-5">
             <h2 className="font-semibold text-slate-900">课程 Skill</h2><p className="mt-1 text-sm text-slate-500">支持 Markdown 和 ZIP，最大 10MB；上传后先测试，再启用给学生。</p>
             <form action={uploadSkill} className="mt-4 grid gap-3 rounded-2xl border border-[var(--cx-border)] bg-slate-50/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <FilePicker
@@ -639,7 +574,6 @@ export function CopilotWorkspace({
         </div>
       )}
 
-      {filePickerOpen ? <div role="dialog" aria-modal="true" aria-label="选择课程文件" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"><div className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl"><div className="flex items-center justify-between border-b border-slate-100 p-4"><div><h2 className="font-semibold text-slate-900">@课程文件</h2><p className="mt-1 text-xs text-slate-500">最多 5 个文件；文档合计 100,000 字符，图片合计 20MB。</p></div><button type="button" onClick={() => setFilePickerOpen(false)}><X className="h-5 w-5" /></button></div><div className="max-h-[55vh] space-y-2 overflow-y-auto p-4">{files.map((file) => { const checked = pendingFileIds.includes(file.id); return <label key={file.id} className={`flex items-center gap-3 rounded-xl border p-3 ${file.contextSelectable ? "cursor-pointer border-slate-100 hover:border-blue-200" : "cursor-not-allowed border-slate-100 bg-slate-50 opacity-60"}`}><input type="checkbox" checked={checked} disabled={!file.contextSelectable} onChange={(event) => { if (event.target.checked) { if (pendingFileIds.length >= 5) { setStatus({ tone: "error", text: "每个对话最多添加 5 个文件" }); return; } setPendingFileIds((current) => [...current, file.id]); } else setPendingFileIds((current) => current.filter((id) => id !== file.id)); }} /><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">{file.contextKind === "image" ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800">{file.path}</span><span className="text-xs text-slate-400">{file.contextReady ? `${Math.ceil(file.size / 1024)} KB` : file.contextSelectable ? "选择后自动解析" : file.extractionError || "当前格式暂不支持 AI 读取"}</span></span><a href={`/api/drive/${file.id}?preview=1`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="text-xs font-medium text-blue-600">查看</a></label>; })}{!files.length ? <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">课程尚未绑定文件夹，或文件夹中没有资料。</p> : null}</div><div className="flex justify-end gap-2 border-t border-slate-100 p-4"><Button variant="secondary" onClick={() => setFilePickerOpen(false)}>取消</Button><Button onClick={() => void applyFiles()} disabled={busy === "context"}>{busy === "context" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}添加 {pendingFileIds.length} 个文件</Button></div></div></div> : null}
     </div>
   );
 }

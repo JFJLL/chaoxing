@@ -19,6 +19,7 @@ export type ManagerAiArtifactDto = {
   title: string;
   prompt: string | null;
   payload: string | null;
+  publishedPayload?: string | null;
   scope: string | null;
   status: AiArtifactStatus;
   version: number;
@@ -31,6 +32,9 @@ export type ManagerAiArtifactDto = {
   finishedAt: string | null;
   approvedAt: string | null;
   publishedAt: string | null;
+  withdrawnAt?: string | null;
+  deletedAt?: string | null;
+  lockVersion?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -55,6 +59,7 @@ const appTypes = new Set<CourseAiAppType>([
   "lesson_plan",
   "courseware",
   "paper_assembly",
+  "ppt_courseware",
   "html_courseware"
 ]);
 const statuses = new Set<string>(AI_ARTIFACT_STATUSES);
@@ -97,6 +102,10 @@ export function parseManagerAiArtifactDto(value: unknown): ManagerAiArtifactDto 
   if (!isRecord(value)) return invalidDto();
   const status = value.status;
   const appType = value.appType;
+  const publishedPayload = value.publishedPayload === undefined ? null : value.publishedPayload;
+  const withdrawnAt = value.withdrawnAt === undefined ? null : value.withdrawnAt;
+  const deletedAt = value.deletedAt === undefined ? null : value.deletedAt;
+  const lockVersion = value.lockVersion === undefined ? 0 : value.lockVersion;
   if (
     typeof value.id !== "string" || !value.id
     || typeof value.seriesId !== "string" || !value.seriesId
@@ -104,6 +113,7 @@ export function parseManagerAiArtifactDto(value: unknown): ManagerAiArtifactDto 
     || typeof value.title !== "string" || !value.title.trim()
     || !isNullableString(value.prompt)
     || !isNullableString(value.payload)
+    || !isNullableString(publishedPayload)
     || !isNullableString(value.scope)
     || typeof status !== "string" || !statuses.has(status)
     || !Number.isInteger(value.version) || (value.version as number) < 1
@@ -116,6 +126,9 @@ export function parseManagerAiArtifactDto(value: unknown): ManagerAiArtifactDto 
     || !isNullableDateString(value.finishedAt)
     || !isNullableDateString(value.approvedAt)
     || !isNullableDateString(value.publishedAt)
+    || !isNullableDateString(withdrawnAt)
+    || !isNullableDateString(deletedAt)
+    || !Number.isInteger(lockVersion) || (lockVersion as number) < 0
     || !isDateString(value.createdAt)
     || !isDateString(value.updatedAt)
   ) return invalidDto();
@@ -127,6 +140,7 @@ export function parseManagerAiArtifactDto(value: unknown): ManagerAiArtifactDto 
     title: value.title,
     prompt: value.prompt,
     payload: value.payload,
+    ...("publishedPayload" in value ? { publishedPayload } : {}),
     scope: value.scope,
     status: status as AiArtifactStatus,
     version: value.version as number,
@@ -139,6 +153,9 @@ export function parseManagerAiArtifactDto(value: unknown): ManagerAiArtifactDto 
     finishedAt: value.finishedAt,
     approvedAt: value.approvedAt,
     publishedAt: value.publishedAt,
+    ...("withdrawnAt" in value ? { withdrawnAt } : {}),
+    ...("deletedAt" in value ? { deletedAt } : {}),
+    ...("lockVersion" in value ? { lockVersion: lockVersion as number } : {}),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt
   };
@@ -170,7 +187,7 @@ async function requestArtifact(url: string, init: RequestInit | undefined, reque
   return parseManagerAiArtifactDto(body.artifact);
 }
 
-function jsonInit(method: "POST" | "PUT", body?: unknown): RequestInit {
+function jsonInit(method: "POST" | "PUT" | "DELETE", body?: unknown): RequestInit {
   return body === undefined
     ? { method }
     : {
@@ -203,18 +220,90 @@ export function retryCourseAiArtifact(courseId: string, artifactId: string, requ
 export function saveCourseAiArtifactRevision(
   courseId: string,
   artifactId: string,
-  body: { title: string; payload: unknown },
+  body: { title: string; payload: unknown; lockVersion?: number },
   request: RequestLike = fetch
 ) {
   return requestArtifact(`/api/courses/${courseId}/ai-artifacts/${artifactId}`, jsonInit("PUT", body), request);
 }
 
-export function confirmCourseAiArtifact(courseId: string, artifactId: string, request: RequestLike = fetch) {
-  return requestArtifact(`/api/courses/${courseId}/ai-artifacts/${artifactId}/confirm`, jsonInit("POST"), request);
+export function confirmCourseAiArtifact(
+  courseId: string,
+  artifactId: string,
+  expectedLockVersionOrRequest?: number | RequestLike,
+  request: RequestLike = fetch
+) {
+  const expectedLockVersion = typeof expectedLockVersionOrRequest === "number" ? expectedLockVersionOrRequest : undefined;
+  const requester = typeof expectedLockVersionOrRequest === "function" ? expectedLockVersionOrRequest : request;
+  return requestArtifact(
+    `/api/courses/${courseId}/ai-artifacts/${artifactId}/confirm`,
+    jsonInit("POST", expectedLockVersion === undefined ? undefined : { lockVersion: expectedLockVersion }),
+    requester
+  );
 }
 
-export function publishCourseAiArtifact(courseId: string, artifactId: string, request: RequestLike = fetch) {
-  return requestArtifact(`/api/courses/${courseId}/ai-artifacts/${artifactId}/publish`, jsonInit("POST"), request);
+export function publishCourseAiArtifact(
+  courseId: string,
+  artifactId: string,
+  expectedLockVersionOrRequest?: number | RequestLike,
+  request: RequestLike = fetch
+) {
+  const expectedLockVersion = typeof expectedLockVersionOrRequest === "number" ? expectedLockVersionOrRequest : undefined;
+  const requester = typeof expectedLockVersionOrRequest === "function" ? expectedLockVersionOrRequest : request;
+  return requestArtifact(
+    `/api/courses/${courseId}/ai-artifacts/${artifactId}/publish`,
+    jsonInit("POST", expectedLockVersion === undefined ? undefined : { lockVersion: expectedLockVersion }),
+    requester
+  );
+}
+
+export function confirmCourseAiArtifactUpdate(
+  courseId: string,
+  artifactId: string,
+  lockVersion: number,
+  request: RequestLike = fetch
+) {
+  return requestArtifact(
+    `/api/courses/${courseId}/ai-artifacts/${artifactId}/confirm-update`,
+    jsonInit("POST", { lockVersion }),
+    request
+  );
+}
+
+export function withdrawCourseAiArtifact(
+  courseId: string,
+  artifactId: string,
+  lockVersion: number,
+  request: RequestLike = fetch
+) {
+  return requestArtifact(
+    `/api/courses/${courseId}/ai-artifacts/${artifactId}/withdraw`,
+    jsonInit("POST", { lockVersion }),
+    request
+  );
+}
+
+export async function deleteCourseAiArtifact(
+  courseId: string,
+  artifactId: string,
+  lockVersion: number,
+  request: RequestLike = fetch
+) {
+  const response = await request(
+    `/api/courses/${courseId}/ai-artifacts/${artifactId}`,
+    jsonInit("DELETE", { lockVersion })
+  );
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const errorBody = isRecord(body) ? body : null;
+    throw new AiArtifactRequestError(
+      typeof errorBody?.code === "string" ? errorBody.code : "AI_REQUEST_FAILED",
+      typeof errorBody?.error === "string" ? errorBody.error : "删除失败，请重试",
+      response.status,
+      response.status >= 500
+    );
+  }
+  if (!isRecord(body) || body.deleted !== true) return invalidDto();
+  return { deleted: true as const };
 }
 
 export function isActiveAiArtifact(artifact: Pick<ManagerAiArtifactDto, "status">) {

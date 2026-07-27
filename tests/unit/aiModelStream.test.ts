@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildGeminiStreamContentUrl,
+  createJsonCompletion,
   createTextCompletionStream
 } from "../../src/lib/ai/modelClient";
 
@@ -80,6 +81,27 @@ describe("AI text streaming", () => {
     })).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=secret-key");
   });
 
+  it("uses the Gemini 3.6 structured-output contract without deprecated sampling parameters", async () => {
+    clearAiEnv();
+    process.env.GEMINI_API_KEY = "secret-key";
+    process.env.model = "gemini-3.6-flash";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: "{\"ok\":true}" }] } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await expect(createJsonCompletion({
+      system: "只输出 JSON",
+      user: "生成对象"
+    })).resolves.toBe("{\"ok\":true}");
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/models/gemini-3.6-flash:generateContent");
+    const payload = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+    expect(payload.generationConfig).toEqual({ responseMimeType: "application/json" });
+    expect(payload.generationConfig).not.toHaveProperty("temperature");
+    expect(payload.generationConfig).not.toHaveProperty("topP");
+    expect(payload.generationConfig).not.toHaveProperty("topK");
+  });
+
   it("parses Gemini SSE frames split across transport chunks and forwards abort", async () => {
     clearAiEnv();
     process.env.GEMINI_API_KEY = "secret-key";
@@ -122,6 +144,7 @@ describe("AI text streaming", () => {
       { role: "model", parts: [{ text: "回答一" }] },
       { role: "user", parts: [{ text: "问题二" }] }
     ]);
+    expect(payload).not.toHaveProperty("generationConfig");
   });
 
   it("sends static images as Gemini inline multimodal data", async () => {

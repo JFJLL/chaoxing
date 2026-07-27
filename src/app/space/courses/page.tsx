@@ -4,7 +4,6 @@ import { CourseTabs } from "@/components/courses/CourseTabs";
 import { CourseCard } from "@/components/courses/CourseCard";
 import { NewCourseDialog } from "@/components/courses/NewCourseDialog";
 import { AddCourseDialog } from "@/components/courses/AddCourseDialog";
-import { CourseFolderDialog } from "@/components/courses/CourseFolderDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { isTeacher } from "@/lib/permissions";
 
@@ -45,10 +44,7 @@ export default async function CoursesPage({ searchParams }: PageProps) {
         </div>
         <div className="flex flex-wrap gap-2">
           {canTeach && activeTab === "taught" ? (
-            <>
-              <NewCourseDialog />
-              <CourseFolderDialog />
-            </>
+            <NewCourseDialog />
           ) : null}
           {!canTeach && activeTab === "learned" ? <AddCourseDialog /> : null}
         </div>

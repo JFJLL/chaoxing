@@ -37,6 +37,7 @@ export async function POST(_request: Request, context: RouteContext) {
         ...conversation,
         createdAt: conversation.createdAt.toISOString(),
         updatedAt: conversation.updatedAt.toISOString(),
+        attachments: [],
         messages: []
       }
     }, { status: 201 });
