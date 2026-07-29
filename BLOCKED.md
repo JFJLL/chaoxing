@@ -1,5 +1,24 @@
 # 阻塞项
 
+## R4 遗留文案位于允许修改范围外（2026-07-29）
+
+- 证据：`src/app/space/courses/[courseId]/structure/page.tsx:29` 仍显示“AI 文档建课”。
+- 冲突：R4 要求清除该旧文案，但允许修改目录不包含 `structure/**`；直接修改会违反“只允许改”的硬规则。
+- 处理：白名单内入口统一为“导入课程文档”；该单点不越界修改，最终报告明确列出。
+
+## R4 课程外围页面仍有 owner-only 判定（2026-07-29）
+
+- 证据：全课程权限扫描在 `src/app/space/courses/[courseId]/{page.tsx,html-courseware/**,structure/**,resources/**}` 仍发现 `course.ownerId === user.id`。
+- 冲突：上述页面不在允许修改范围；直接扩大改动会违反白名单硬规则。
+- 处理：任务指定的课堂、签到、作业、考试、通知、题库、学情和课后页面/API 已按课程管理者权限处理；外围页面不越界修改，也不声称完整覆盖。
+
+## R4 协作教师课程云盘页面/API 位于允许修改范围外（2026-07-29）
+
+- 证据：`src/app/space/courses/[courseId]/drive/page.tsx` 仍调用 `requireCourseOwner`；`src/app/api/drive/route.ts` 仍按个人 ownerId/文件所有者读写。
+- 冲突：两者均不在本轮“只允许改”的目录中；直接修改会越过硬白名单。
+- 影响：协作教师可通过允许范围内的课程文档导入接口上传/选入资料，但通用课程云盘旧页面仍不能完整管理课程根目录。
+- 处理：不越界修改，最终明确标记“协作教师完整课程云盘管理未完成”。
+
 ## 第 3 轮最终项目回执失败（达到轮次上限，停止修复与重跑）
 
 - 命令：`pwsh -NoProfile -File scripts/verify-change.ps1`
