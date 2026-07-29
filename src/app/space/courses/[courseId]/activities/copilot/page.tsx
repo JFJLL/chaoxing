@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth";
-import { isTeacher } from "@/lib/permissions";
+import { isCourseManagerRecord } from "@/lib/permissions";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { CourseModulePanel } from "@/components/course-workspace/CourseModulePanel";
@@ -18,7 +18,7 @@ export default async function CopilotPage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
-  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const canManage = isCourseManagerRecord(user, course);
   const [conversations, skills, files, analytics] = await Promise.all([
     listCopilotConversations(user, courseId),
     listCopilotSkills(user, courseId),

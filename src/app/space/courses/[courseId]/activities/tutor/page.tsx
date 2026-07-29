@@ -1,5 +1,5 @@
 import { requireUser, type SessionUser } from "@/lib/auth";
-import { isTeacher, requireCourseAccess } from "@/lib/permissions";
+import { isCourseManagerRecord, requireCourseAccess } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { AiTutorHeader } from "@/components/course-workspace/AiTutorWorkspace";
 import { AiTutor } from "@/components/course-workspace/AiTutor";
@@ -25,7 +25,7 @@ async function TutorConversationContent({
 export default async function ClassroomAiTutorPage({ params }: PageProps) {
   const [user, { courseId }] = await Promise.all([requireUser(), params]);
   const course = await requireCourseAccess(user, courseId);
-  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const canManage = isCourseManagerRecord(user, course);
   const conversationContent = await TutorConversationContent({
     user,
     courseId: course.id,

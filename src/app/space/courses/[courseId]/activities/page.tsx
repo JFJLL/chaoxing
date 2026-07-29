@@ -1,7 +1,7 @@
 import { ArrowRight, CheckCircle2, MessagesSquare, Sparkles } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
-import { isTeacher } from "@/lib/permissions";
+import { isCourseManagerRecord } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { CourseModulePanel, courseModuleLinkCardClassName } from "@/components/course-workspace/CourseModulePanel";
 import Link from "next/link";
@@ -19,7 +19,7 @@ export default async function ActivitiesPage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
-  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const canManage = isCourseManagerRecord(user, course);
   const activities = [
     { title: course.copilotName, description: "选择教师开放的 Skill，并结合课程云盘文件完成提问。", icon: Sparkles, hrefSegment: "activities/copilot" },
     { title: "签到", description: "教师展示动态二维码，学生扫码或输入短码完成签到。", icon: CheckCircle2, hrefSegment: "attendance" }

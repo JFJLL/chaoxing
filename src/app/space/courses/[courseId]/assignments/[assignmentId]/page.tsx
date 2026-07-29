@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isTeacher } from "@/lib/permissions";
+import { isCourseManagerRecord } from "@/lib/permissions";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { parseOptions } from "@/lib/teaching/assessmentInput";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
@@ -12,7 +12,7 @@ import { LinkButton } from "@/components/ui/Button";
 
 type PageProps = { params: Promise<{ courseId: string; assignmentId: string }> };
 export default async function AssignmentDetailPage({ params }: PageProps) {
-  const user = await requireUser(); const { courseId, assignmentId } = await params; const course = await loadCourseWorkspace(user, courseId); const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const user = await requireUser(); const { courseId, assignmentId } = await params; const course = await loadCourseWorkspace(user, courseId); const canManage = isCourseManagerRecord(user, course);
   const assignment = await db.assignment.findFirst({ where: { id: assignmentId, courseId, ...(canManage ? {} : { status: "PUBLISHED" }) }, include: { questions: { orderBy: { order: "asc" } }, extensions: true, submissions: { where: canManage ? {} : { userId: user.id }, include: { user: { select: { name: true } }, answers: { include: { question: { select: { points: true } } } } }, orderBy: { updatedAt: "desc" } } } });
   if (!assignment || (!canManage && assignment.publishAt && assignment.publishAt > new Date())) notFound();
   const studentRecord = canManage ? null : assignment.submissions[0] ?? null; const resultVisible = canManage || Boolean(studentRecord && (assignment.immediateFeedback || assignment.resultPublishedAt));

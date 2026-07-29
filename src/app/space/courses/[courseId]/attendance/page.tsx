@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isTeacher } from "@/lib/permissions";
+import { isCourseManagerRecord } from "@/lib/permissions";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { CourseModulePanel } from "@/components/course-workspace/CourseModulePanel";
@@ -13,7 +13,7 @@ export default async function AttendancePage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
-  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const canManage = isCourseManagerRecord(user, course);
   const sessions = await db.attendanceSession.findMany({
     where: { courseId, ...(canManage ? {} : { status: { in: ["ACTIVE", "ENDED"] } }) },
     include: { records: { include: { user: { select: { id: true, name: true } } } } },

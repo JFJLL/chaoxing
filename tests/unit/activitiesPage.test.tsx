@@ -5,12 +5,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
   loadCourseWorkspace: vi.fn(),
-  isTeacher: vi.fn()
+  isCourseManagerRecord: vi.fn()
 }));
 
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/lib/courseWorkspace/data", () => ({ loadCourseWorkspace: mocks.loadCourseWorkspace }));
-vi.mock("@/lib/permissions", () => ({ isTeacher: mocks.isTeacher }));
+vi.mock("@/lib/permissions", () => ({ isCourseManagerRecord: mocks.isCourseManagerRecord }));
 vi.mock("@/components/course-workspace/FanyaCourseShell", () => ({
   FanyaCourseShell: ({ children }: { children: React.ReactNode }) => <>{children}</>
 }));
@@ -24,7 +24,9 @@ const course = { id: "course-1", title: "测试课程", ownerId: "teacher-1", co
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.loadCourseWorkspace.mockResolvedValue(course);
-  mocks.isTeacher.mockImplementation((user: { role: string }) => user.role === "TEACHER" || user.role === "ADMIN");
+  mocks.isCourseManagerRecord.mockImplementation((user: { id: string; role: string }, value: { ownerId: string; collaborators?: Array<{ userId: string }> }) =>
+    user.role === "ADMIN" || (user.role === "TEACHER" && (value.ownerId === user.id || value.collaborators?.some((item) => item.userId === user.id)))
+  );
 });
 
 describe("ActivitiesPage", () => {
@@ -54,5 +56,18 @@ describe("ActivitiesPage", () => {
     expect(html).toContain('href="/space/courses/course-1/activities/copilot"');
     expect(html).not.toContain("AI陪练");
     expect(html).toContain("签到");
+  });
+
+  it("shows course management classroom tools to a collaborator", async () => {
+    mocks.requireUser.mockResolvedValue({ id: "teacher-2", role: "TEACHER" });
+    mocks.loadCourseWorkspace.mockResolvedValue({
+      ...course,
+      collaborators: [{ userId: "teacher-2" }]
+    });
+
+    const html = renderToStaticMarkup(await ActivitiesPage({ params: Promise.resolve({ courseId: "course-1" }) }));
+
+    expect(html).toContain('href="/space/courses/course-1/activities/tutor"');
+    expect(html).toContain("AI助教");
   });
 });

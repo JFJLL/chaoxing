@@ -1,6 +1,6 @@
 import { ClipboardList, LockKeyhole, PenLine } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { isTeacher, requireCourseAccess } from "@/lib/permissions";
+import { isCourseManagerRecord, requireCourseAccess } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { CourseModulePanel } from "@/components/course-workspace/CourseModulePanel";
@@ -15,7 +15,7 @@ export default async function QuestionBankPage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
   const course = await requireCourseAccess(user, courseId);
-  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const canManage = isCourseManagerRecord(user, course);
   const questions = canManage
     ? await db.courseQuestion.findMany({
         where: { courseId, status: "APPROVED" },

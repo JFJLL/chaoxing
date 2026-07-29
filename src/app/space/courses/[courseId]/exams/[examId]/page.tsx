@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isTeacher } from "@/lib/permissions";
+import { isCourseManagerRecord } from "@/lib/permissions";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { parseOptions } from "@/lib/teaching/assessmentInput";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
@@ -12,7 +12,7 @@ import { LinkButton } from "@/components/ui/Button";
 
 type PageProps = { params: Promise<{ courseId: string; examId: string }> };
 export default async function ExamDetailPage({ params }: PageProps) {
-  const user = await requireUser(); const { courseId, examId } = await params; const course = await loadCourseWorkspace(user, courseId); const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const user = await requireUser(); const { courseId, examId } = await params; const course = await loadCourseWorkspace(user, courseId); const canManage = isCourseManagerRecord(user, course);
   const exam = await db.exam.findFirst({ where: { id: examId, courseId, ...(canManage ? {} : { status: "PUBLISHED" }) }, include: { questions: { orderBy: { order: "asc" } }, attempts: { where: canManage ? {} : { userId: user.id }, include: { user: { select: { name: true } }, answers: { include: { question: { select: { points: true } } } } }, orderBy: { updatedAt: "desc" } } } }); if (!exam) notFound();
   const studentRecord = canManage ? null : exam.attempts[0] ?? null; const resultVisible = canManage || Boolean(studentRecord && exam.resultPublishedAt); const deadline = studentRecord ? new Date(Math.min(studentRecord.startedAt.getTime() + exam.durationMinutes * 60_000, exam.endsAt?.getTime() ?? Number.MAX_SAFE_INTEGER)).toISOString() : null;
   const toRecord = (attempt: typeof exam.attempts[number]) => ({ id: attempt.id, userName: attempt.user.name, status: attempt.status, score: attempt.score, feedback: attempt.feedback, submittedAt: attempt.submittedAt?.toISOString() ?? null, answers: attempt.answers.map((answer) => ({ id: answer.id, questionId: answer.questionId, response: answer.response, score: answer.score, feedback: answer.feedback, maxPoints: answer.question.points })) });

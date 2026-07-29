@@ -1,7 +1,7 @@
 import { BarChart3, BookOpenCheck, ClipboardCheck, Radio, UsersRound } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isTeacher } from "@/lib/permissions";
+import { isCourseManagerRecord } from "@/lib/permissions";
 import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { buildLearningIndicators } from "@/lib/teaching/analytics";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
@@ -12,7 +12,7 @@ type PageProps = { params: Promise<{ courseId: string }> };
 const rateLabel = (value: number | null) => value === null ? "暂无数据" : `${value}%`;
 
 export default async function AnalyticsPage({ params }: PageProps) {
-  const user = await requireUser(); const { courseId } = await params; const course = await loadCourseWorkspace(user, courseId); const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const user = await requireUser(); const { courseId } = await params; const course = await loadCourseWorkspace(user, courseId); const canManage = isCourseManagerRecord(user, course);
   const studentIds = canManage ? course.enrollments.map((item) => item.userId) : [user.id];
   const now = new Date();
   const completedAttendanceWhere = { OR: [{ status: "ENDED" as const }, { status: "ACTIVE" as const, endsAt: { lte: now } }] };
