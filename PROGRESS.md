@@ -1,5 +1,27 @@
 # 执行进度
 
+## R5 根目录绑定权限收口计划（2026-07-29，不超过 10 行）
+1. 目标：只修复协作教师可重新绑定课程云盘根目录的权限缺口，不改既有备课生产链。
+2. 从 R5 指定提交 `2c27119bb18c00d5af17f3d0663f834ac7c12350` 创建独立修复分支，起点工作区干净。
+3. 先核对 Prisma 真实引用模型和现有课程云盘边界，再收紧服务层 owner-only 绑定。
+4. 旧根目录存在有效引用时阻止重绑；相同根目录保持幂等。
+5. Copilot 设置按字段拆分 Owner/Collaborator 权限，并保证名称和根目录更新原子。
+6. 前端仅向 Owner 展示绑定控件，Collaborator 仍可编辑名称和管理根目录内部文件。
+7. 补 API、服务层、深层后代引用测试，再做双教师现场验证和完整回执。
+8. 最大风险：重绑引用检查遗漏深层文件，或失败时发生名称部分保存。
+
+## R5 根目录绑定权限收口进度
+
+- 分支从指定 SHA `2c27119bb18c00d5af17f3d0663f834ac7c12350` 创建，起点工作区干净，未触碰 main。
+- 服务层根目录绑定改为直接要求 CourseOwner/Admin；首次创建、候选文件夹列表和 Copilot `folderId` 写入均不再向 Collaborator 放权。
+- 旧根目录按完整父链收集所有有效后代，检查现有 8 类 Prisma 引用；活动导入、AI 导出等存在时返回 `COURSE_DRIVE_REBIND_BLOCKED`，同根重复绑定在引用检查前幂等返回。
+- 根目录和 Copilot 名称在同一事务写入，并以旧根目录 ID 作为乐观条件；重绑失败不部分保存名称。
+- Copilot GET 对 Collaborator 返回当前绑定、名称和 analytics，但 `folders=[]`；课程云盘页和导入页均隐藏未绑定时的创建/绑定控件。
+- 定向结果：Copilot 路由 7/7、根目录真实数据库/API 12/12、课程云盘对抗 5/5、原协作集成 3/3、云盘 UI 8/8，typecheck 通过。
+- 最终扩充真实数据库根绑定用例为 14/14：新增 Admin API、普通未引用活动上传阻塞、软删除语义；两轮独立对抗审查最终无权限或数据丢失阻断。
+- 双教师现场：Collaborator 改名 200、提交 `folderId` 403、GET `folders=[]` 且 analytics 正常、原根内上传 201；Owner 候选目录正常，有引用课程组合重绑 409 且根目录/名称均未变化。
+- Kimi UI 证据：`artifacts/verification/r5-root-binding/collaborator-settings-no-rebind.png`、`owner-settings-rebind-control.png`；数据加载保留在原硬白名单内，Copilot page 最终无差异。
+
 ## R5 收口计划（2026-07-29，不超过 10 行）
 1. 目标：只收口课程云盘 CourseManager、旧重复入口、协作现场链和一次发布回执。
 2. 从 R4 当前提交创建 `codex/prep-production-chain-r5-release`，不再改备课生产链核心。
