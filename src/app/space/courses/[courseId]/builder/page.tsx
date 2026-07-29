@@ -5,9 +5,11 @@ import { requireCourseManager } from "@/lib/permissions";
 import { ChapterTree } from "@/components/courses/ChapterTree";
 import type { CourseDirectoryNode } from "@/types/course";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
+import { CourseOutlineSavedNotice } from "@/components/course-workspace/CourseOutlineSavedNotice";
 
 type PageProps = {
   params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ saved?: string }>;
 };
 
 function splitList(value?: string | null) {
@@ -17,9 +19,9 @@ function splitList(value?: string | null) {
     .filter(Boolean);
 }
 
-export default async function CourseBuilderPage({ params }: PageProps) {
+export default async function CourseBuilderPage({ params, searchParams }: PageProps) {
   const user = await requireUser();
-  const { courseId } = await params;
+  const [{ courseId }, query] = await Promise.all([params, searchParams]);
   await requireCourseManager(user, courseId);
 
   const course = await db.course.findUnique({
@@ -61,6 +63,7 @@ export default async function CourseBuilderPage({ params }: PageProps) {
               <h1 className="mt-1 text-2xl font-semibold text-slate-900">{course.title}</h1>
             </div>
           </header>
+          {query.saved === "1" ? <CourseOutlineSavedNotice courseId={courseId} /> : null}
           <ChapterTree courseId={courseId} initialChapters={chapters} initialOutlineVersion={course.outlineVersion} />
         </div>
       </section>
