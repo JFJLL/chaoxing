@@ -257,6 +257,9 @@ export async function confirmArtifactUpdate<Result>(
   return store.transaction(async (transaction) => {
     const artifact = await transaction.findArtifact({ id: input.artifactId, courseId: input.courseId });
     if (!artifact || artifact.deletedAt) throw new ArtifactWorkflowError("ARTIFACT_NOT_FOUND");
+    if (!publishableTypes.has(artifact.appType)) {
+      throw new ArtifactWorkflowError("AI_ARTIFACT_TYPE_NOT_PUBLISHABLE");
+    }
     if (
       artifact.status !== "PUBLISHED"
       || !artifact.payload
@@ -299,6 +302,9 @@ export async function withdrawArtifact<Result>(
   return store.transaction(async (transaction) => {
     const artifact = await transaction.findArtifact({ id: input.artifactId, courseId: input.courseId });
     if (!artifact || artifact.deletedAt) throw new ArtifactWorkflowError("ARTIFACT_NOT_FOUND");
+    if (!publishableTypes.has(artifact.appType)) {
+      throw new ArtifactWorkflowError("AI_ARTIFACT_TYPE_NOT_PUBLISHABLE");
+    }
     if (artifact.status !== "PUBLISHED" || !transaction.withdrawPublishedArtifact) {
       throw new ArtifactWorkflowError("ARTIFACT_WITHDRAW_CONFLICT");
     }

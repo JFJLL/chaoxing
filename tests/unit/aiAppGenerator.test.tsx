@@ -237,7 +237,8 @@ describe("AI artifact status presentation", () => {
     const markup = render(baseArtifact, app, { hasCourseContent: false });
 
     expect(markup).toContain("当前课程还没有可用于 AI 生成的内容");
-    expect(markup).toContain("AI文档建课");
+    expect(markup).toContain("导入课程文档");
+    expect(markup).not.toContain("AI文档建课");
     expect(markup).toContain("查看课程资料库");
     expect(markup).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
   });
@@ -261,6 +262,56 @@ describe("AI artifact status presentation", () => {
     expect(markup).not.toContain("开始 AI 生成");
     expect(markup).not.toContain("内容范围");
     expect(markup).not.toContain(">难度<");
+  });
+
+  it("keeps the PPT page editor open and exposes the only student publication action", () => {
+    const pptApp = {
+      ...app,
+      key: "ai-ppt-courseware",
+      appType: "ppt_courseware" as const,
+      title: "PPT课件",
+      description: "生成可编辑 PPT"
+    };
+    const markup = render({
+      ...baseArtifact,
+      appType: "ppt_courseware",
+      status: "APPROVED",
+      jobsAhead: null,
+      payload: JSON.stringify({ slides: [{ title: "正文标题", bullets: ["可见要点"], speakerNotes: "讲稿备注" }] })
+    }, pptApp, {
+      coursewareSources: [{ id: "courseware-1", title: "第一章课件", version: 2, status: "APPROVED" }]
+    });
+
+    expect(markup).toContain("正文标题");
+    expect(markup).toContain("可见要点");
+    expect(markup).toContain("讲稿备注");
+    expect(markup).toContain("新增幻灯片");
+    expect(markup).toContain(">保存<");
+    expect(markup).toContain("发布给学生");
+  });
+
+  it("keeps approved AI courseware internal and reserves student publication for PPT", () => {
+    const coursewareApp = {
+      ...app,
+      key: "ai-courseware",
+      appType: "courseware" as const,
+      title: "AI课件",
+      description: "从教案生成课件"
+    };
+    const markup = render({
+      ...baseArtifact,
+      appType: "courseware",
+      status: "APPROVED",
+      jobsAhead: null,
+      payload: JSON.stringify({ slides: [{ title: "正文", bullets: ["要点"], speakerNotes: "备注" }] })
+    }, coursewareApp, {
+      coursewareSources: [{ id: "lesson-1", title: "第一章教案", version: 1, status: "APPROVED" }]
+    });
+
+    expect(markup).toContain("生成PPT");
+    expect(markup).not.toContain("发布给学生");
+    expect(markup).not.toContain("更新发布");
+    expect(markup).not.toContain(">撤回<");
   });
 });
 

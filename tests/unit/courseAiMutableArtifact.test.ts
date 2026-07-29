@@ -75,20 +75,10 @@ function mutableWorkflow() {
     courseId: "course-1",
     seriesId: "series-1",
     sourceArtifactId: null,
-    appType: "lesson_plan",
+    appType: "ppt_courseware",
     status: "PUBLISHED",
-    payload: JSON.stringify({
-      objectives: ["新目标"],
-      keyPoints: ["新重点"],
-      teachingProcess: [{ phase: "导入", minutes: 10, activity: "讨论" }],
-      assessment: ["提问"]
-    }),
-    publishedPayload: JSON.stringify({
-      objectives: ["旧目标"],
-      keyPoints: ["旧重点"],
-      teachingProcess: [{ phase: "导入", minutes: 10, activity: "讲授" }],
-      assessment: ["测验"]
-    }),
+    payload: JSON.stringify({ slides: [{ title: "新标题", bullets: ["新要点"], speakerNotes: "新备注" }] }),
+    publishedPayload: JSON.stringify({ slides: [{ title: "旧标题", bullets: ["旧要点"], speakerNotes: "旧备注" }] }),
     lockVersion: 3,
     deletedAt: null
   };
@@ -162,5 +152,16 @@ describe("published working copy lifecycle", () => {
       expect.any(Date),
       4
     );
+  });
+
+  it("rejects update publication and withdrawal for non-PPT artifacts", async () => {
+    const current = mutableWorkflow();
+    current.artifact.appType = "lesson_plan";
+    await expect(confirmArtifactUpdate(current.store, {
+      courseId: "course-1", artifactId: "artifact-1", userId: "teacher-1", expectedLockVersion: 3
+    })).rejects.toMatchObject({ code: "AI_ARTIFACT_TYPE_NOT_PUBLISHABLE" });
+    await expect(withdrawArtifact(current.store, {
+      courseId: "course-1", artifactId: "artifact-1", expectedLockVersion: 3
+    })).rejects.toMatchObject({ code: "AI_ARTIFACT_TYPE_NOT_PUBLISHABLE" });
   });
 });

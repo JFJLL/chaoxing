@@ -7,6 +7,7 @@ import type { CourseAiAppType } from "@/types/courseWorkspace";
 import { AiAppGenerator } from "@/components/course-workspace/AiAppGenerator";
 import { parseManagerAiArtifactDto } from "@/lib/courseWorkspace/aiArtifactClient";
 import { PrepWorkflowNavigation, type PrepWorkflow } from "@/components/course-workspace/PrepWorkflowNavigation";
+import { parseStoredDocumentSections } from "@/lib/imports/documentSections";
 
 type PageProps = {
   params: Promise<{ courseId: string; appType: string }>;
@@ -61,7 +62,7 @@ function pagePresentation(appType: CourseAiAppType, fallback: { title: string; d
     return {
       title: appType === "ppt_courseware" ? "PPT课件" : "历史 HTML 课件",
       description: appType === "ppt_courseware"
-        ? "将已确认的课件映射到课程模板并导出为 PPTX。"
+        ? "将已确认的 AI课件生成可逐页编辑、保存版本并发布的 PPT。"
         : "历史 HTML 课件仅保留查看，不再生成新内容。",
       workflow: "courseware",
       active: "interactive"
@@ -131,7 +132,8 @@ async function AiAppGeneratorContent({
             courseId,
             appType: appType === "courseware" ? "lesson_plan" : "courseware",
             status: { in: ["APPROVED", "PUBLISHED"] },
-            payload: { not: null }
+            payload: { not: null },
+            deletedAt: null
           },
           orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
           select: { id: true, title: true, version: true, status: true }
@@ -143,12 +145,11 @@ async function AiAppGeneratorContent({
             courseId,
             deletedAt: null,
             status: { in: ["READY_FOR_REVIEW", "APPLIED"] },
-            generatedOutline: { not: null },
             extractedText: { not: null }
           },
           orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
           take: 20,
-          select: { id: true, originalName: true, generatedOutline: true }
+          select: { id: true, originalName: true, parsedSections: true }
         })
       : Promise.resolve([]),
     needsCourseContent
@@ -171,19 +172,14 @@ async function AiAppGeneratorContent({
     updatedAt: artifact.updatedAt.toISOString()
   }));
   const hasCourseContent = !needsCourseContent || chapters.length > 0 || Boolean(resourcePresence) || Boolean(importPresence);
-  const documentSources = documentRows.map((document) => {
-    let sections: Array<{ id: string; title: string }> = [];
-    try {
-      const outline = JSON.parse(document.generatedOutline!) as { chapters?: Array<{ order?: number; title?: string }> };
-      sections = (outline.chapters ?? []).map((chapter, index) => ({
-        id: `chapter-${chapter.order ?? index + 1}`,
-        title: chapter.title ?? `章节 ${index + 1}`
-      }));
-    } catch {
-      sections = [];
-    }
-    return { id: document.id, title: document.originalName, sections };
-  });
+  const documentSources = documentRows.map((document) => ({
+    id: document.id,
+    title: document.originalName,
+    sections: parseStoredDocumentSections(document.parsedSections).map((section) => ({
+      id: section.id,
+      title: section.title
+    }))
+  }));
 
   return (
     <AiAppGenerator

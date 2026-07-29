@@ -28,7 +28,13 @@ const lessonPlanSourceSnapshotSchema = z.object({
   outlineVersion: z.number().int().min(0),
   documents: z.array(z.object({
     documentId: z.string().trim().min(1).max(200),
-    sectionIds: z.array(z.string().trim().min(1).max(200)).max(100)
+    sectionIds: z.array(z.string().trim().min(1).max(200)).max(100),
+    documentUpdatedAt: z.string().datetime().optional(),
+    contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    sectionContentHashes: z.array(z.object({
+      sectionId: z.string().trim().min(1).max(200),
+      contentHash: z.string().regex(/^[a-f0-9]{64}$/)
+    }).strict()).max(100).optional()
   }).strict()).min(1).max(20)
 }).strict();
 const derivedSourceSnapshotSchema = z.object({

@@ -84,7 +84,7 @@ export const teacherPrepWorkflows: TeacherPrepWorkflow[] = [
     description: "导入课程文档，维护 AI 使用的课程资料，并检查知识结构。",
     route: (courseId) => `/space/courses/${courseId}/ai-workbench/content`,
     icon: "content",
-    includes: ["文档建课", "课程资料", "知识图谱"]
+    includes: ["导入课程文档", "课程资料", "知识图谱"]
   },
   {
     id: "lesson-plan",

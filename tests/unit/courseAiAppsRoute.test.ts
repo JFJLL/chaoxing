@@ -125,7 +125,18 @@ beforeEach(() => {
   mocks.findApprovedQuestions.mockResolvedValue([]);
   mocks.findImportDocuments.mockResolvedValue([{
     id: "document-1",
-    generatedOutline: JSON.stringify({ chapters: [{ order: 1 }, { order: 2 }, { order: 3 }] })
+    parsedSections: JSON.stringify([{
+      id: "section-real-1",
+      title: "真实章节",
+      order: 1,
+      text: "真实资料原文",
+      startOffset: 0,
+      endOffset: 6,
+      confidence: 0.9
+    }]),
+    extractedText: "真实资料原文",
+    contentHash: "a".repeat(64),
+    updatedAt: new Date("2026-07-29T08:00:00.000Z")
   }]);
 });
 
@@ -195,11 +206,11 @@ describe("GET /api/courses/:courseId/ai-apps", () => {
       updatedAt: new Date()
     }]);
 
-    const response = await GET({ nextUrl: new URL("http://localhost/api/courses/course-1/ai-apps") } as never, context);
+    const response = await GET({ nextUrl: new URL("http://localhost/api/courses/course-1/ai-apps?appType=lesson_plan") } as never, context);
     const body = await response.json();
 
     expect(mocks.findArtifacts).toHaveBeenCalledWith(expect.objectContaining({
-      where: { courseId: "course-1", deletedAt: null, status: "PUBLISHED" }
+      where: { courseId: "course-1", deletedAt: null, status: "PUBLISHED", appType: "ppt_courseware" }
     }));
     expect(Object.keys(body.artifacts[0]).sort()).toEqual([
       "appType",
@@ -409,6 +420,7 @@ describe("POST /api/courses/:courseId/ai-apps", () => {
       id: "source-1",
       appType: "courseware",
       status: "APPROVED",
+      version: 3,
       payload: JSON.stringify(sourceCourseware)
     });
 
@@ -419,15 +431,19 @@ describe("POST /api/courses/:courseId/ai-apps", () => {
 
     expect(response.status).toBe(201);
     expect(mocks.findSourceArtifact).toHaveBeenCalledWith({
-      where: { id: "source-1", courseId: "course-1" },
-      select: { id: true, appType: true, status: true, payload: true }
+      where: { id: "source-1", courseId: "course-1", deletedAt: null },
+      select: { id: true, appType: true, status: true, version: true, payload: true }
     });
     const createData = mocks.createArtifact.mock.calls[0][0].data;
     expect(createData.sourceArtifactId).toBe("source-1");
     expect(createData.appType).toBe("ppt_courseware");
     expect(createData.status).toBe("APPROVED");
     expect(createData.approvedAt).toBeInstanceOf(Date);
-    expect(createData.inputSnapshot).toBeNull();
+    expect(JSON.parse(createData.inputSnapshot)).toEqual({
+      sourceArtifactId: "source-1",
+      sourceArtifactVersion: 3,
+      sourcePayloadHash: expect.stringMatching(/^[a-f0-9]{64}$/)
+    });
     expect(JSON.parse(createData.payload)).toEqual(sourceCourseware);
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
@@ -530,17 +546,46 @@ describe("POST /api/courses/:courseId/ai-apps", () => {
     const aiContext = { course: { id: "course-1", title: "课程" }, scope: { kind: "chapter", id: "chapter-1", label: "章节：第一章" } };
     mocks.buildContext.mockResolvedValue(aiContext);
 
-    const response = await POST(request("lesson_plan", { scope: { kind: "chapter", chapterId: "chapter-1" }, prompt: "补充要求" }) as never, context);
+    const sourceSelections = [{ documentId: "document-1", sectionIds: ["section-real-1"] }];
+    const response = await POST(request("lesson_plan", {
+      scope: { kind: "chapter", chapterId: "chapter-1" },
+      prompt: "补充要求",
+      sourceSelections
+    }) as never, context);
 
     expect(response.status).toBe(202);
-    const sourceSelections = [{ documentId: "document-1", sectionIds: [] }];
     expect(mocks.buildContext).toHaveBeenCalledWith({ courseId: "course-1", scope: { kind: "chapter", chapterId: "chapter-1" }, prompt: "补充要求", sourceSelections });
     expect(JSON.parse(mocks.createArtifact.mock.calls[0][0].data.inputSnapshot)).toEqual({
       appType: "lesson_plan",
       context: aiContext,
-      sourceSnapshot: { outlineVersion: 0, documents: sourceSelections }
+      sourceSnapshot: {
+        outlineVersion: 0,
+        documents: [{
+          ...sourceSelections[0],
+          documentUpdatedAt: "2026-07-29T08:00:00.000Z",
+          contentHash: "a".repeat(64),
+          sectionContentHashes: [{
+            sectionId: "section-real-1",
+            contentHash: expect.stringMatching(/^[a-f0-9]{64}$/)
+          }]
+        }]
+      }
     });
     expect(mocks.generate).not.toHaveBeenCalled();
+  });
+
+  it("rejects an AI-outline chapter ID that is not a stable parsed document section", async () => {
+    const response = await POST(request("lesson_plan", {
+      sourceSelections: [{ documentId: "document-1", sectionIds: ["chapter-1"] }]
+    }) as never, context);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "INVALID_AI_SCOPE",
+      error: "所选资料章节已失效，请重新选择"
+    });
+    expect(mocks.buildContext).not.toHaveBeenCalled();
+    expect(mocks.createArtifact).not.toHaveBeenCalled();
   });
 
   it("returns INVALID_AI_SCOPE when the server cannot find the chapter inside this course", async () => {

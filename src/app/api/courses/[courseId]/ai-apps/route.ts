@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -23,6 +24,7 @@ import {
 } from "@/lib/courseWorkspace/aiGenerationQueue";
 import { parseAiGenerationInputSnapshot } from "@/lib/courseWorkspace/aiGenerationQueue";
 import { aiCoursewarePayloadSchema, aiLessonPlanPayloadSchema } from "@/types/courseWorkspace";
+import { parseStoredDocumentSections } from "@/lib/imports/documentSections";
 
 type RouteContext = {
   params: Promise<{ courseId: string }>;
@@ -69,8 +71,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     where: {
       courseId,
       deletedAt: null,
-      ...(canManage ? {} : { status: "PUBLISHED" }),
-      ...(parsedAppType?.success ? { appType: parsedAppType.data } : {})
+      ...(canManage
+        ? (parsedAppType?.success ? { appType: parsedAppType.data } : {})
+        : { status: "PUBLISHED", appType: "ppt_courseware" })
     },
     orderBy: { createdAt: "desc" },
     select: safeAiArtifactSelect
@@ -167,24 +170,46 @@ export async function POST(request: NextRequest, context: RouteContext) {
           id: { in: selections.map((selection) => selection.documentId) },
           deletedAt: null,
           status: { in: ["READY_FOR_REVIEW", "APPLIED"] },
-          generatedOutline: { not: null },
           extractedText: { not: null }
         },
-        select: { id: true, generatedOutline: true }
+        select: {
+          id: true,
+          parsedSections: true,
+          extractedText: true,
+          contentHash: true,
+          updatedAt: true
+        }
       });
       if (!course || documents.length !== new Set(selections.map((selection) => selection.documentId)).size) {
         return NextResponse.json({ code: "INVALID_AI_SCOPE", error: "所选资料已失效，请重新选择" }, { status: 400 });
       }
       for (const selection of selections) {
-        if (!selection.sectionIds.length) continue;
         const document = documents.find((item) => item.id === selection.documentId)!;
-        const outline = JSON.parse(document.generatedOutline!) as { chapters?: Array<{ order?: number }> };
-        const validIds = new Set((outline.chapters ?? []).map((chapter, index) => `chapter-${chapter.order ?? index + 1}`));
+        if (!selection.sectionIds.length) continue;
+        const validIds = new Set(parseStoredDocumentSections(document.parsedSections).map((section) => section.id));
         if (selection.sectionIds.some((id) => !validIds.has(id))) {
           return NextResponse.json({ code: "INVALID_AI_SCOPE", error: "所选资料章节已失效，请重新选择" }, { status: 400 });
         }
       }
-      const sourceSnapshot = { outlineVersion: course.outlineVersion, documents: selections };
+      const sourceSnapshot = {
+        outlineVersion: course.outlineVersion,
+        documents: selections.map((selection) => {
+          const document = documents.find((item) => item.id === selection.documentId)!;
+          const sections = parseStoredDocumentSections(document.parsedSections);
+          const selectedSections = selection.sectionIds.length
+            ? sections.filter((section) => selection.sectionIds.includes(section.id))
+            : [];
+          return {
+            ...selection,
+            documentUpdatedAt: document.updatedAt.toISOString(),
+            contentHash: document.contentHash ?? createHash("sha256").update(document.extractedText!).digest("hex"),
+            sectionContentHashes: selectedSections.map((section) => ({
+              sectionId: section.id,
+              contentHash: createHash("sha256").update(section.text).digest("hex")
+            }))
+          };
+        })
+      };
       const aiContext = await buildCourseAiContext({
         courseId,
         scope,
@@ -242,8 +267,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       artifactInput = { appType: parsed.data.appType, context: aiContext, approvedQuestions } as const;
     } else if (parsed.data.appType === "ppt_courseware") {
       const source = await db.courseAiArtifact.findFirst({
-        where: { id: parsed.data.sourceArtifactId!, courseId },
-        select: { id: true, appType: true, status: true, payload: true }
+        where: { id: parsed.data.sourceArtifactId!, courseId, deletedAt: null },
+        select: { id: true, appType: true, status: true, version: true, payload: true }
       });
       let sourceCourseware;
       try {
@@ -266,7 +291,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
           title: parsed.data.title ?? `${app.title} ${new Date().toLocaleString("zh-CN", { hour12: false })}`,
           prompt: parsed.data.prompt,
           payload: JSON.stringify(sourceCourseware),
-          inputSnapshot: null,
+          inputSnapshot: JSON.stringify({
+            sourceArtifactId: source.id,
+            sourceArtifactVersion: source.version,
+            sourcePayloadHash: createHash("sha256").update(source.payload!).digest("hex")
+          }),
           runToken: null,
           scope: null,
           sourceArtifactId,

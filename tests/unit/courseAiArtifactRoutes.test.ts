@@ -121,7 +121,7 @@ describe("GET /api/courses/:courseId/ai-artifacts/:artifactId", () => {
     const body = await response.json();
 
     expect(mocks.findFirst).toHaveBeenCalledWith({
-      where: { id: "artifact-1", courseId: "course-1", deletedAt: null, status: "PUBLISHED" },
+      where: { id: "artifact-1", courseId: "course-1", deletedAt: null, status: "PUBLISHED", appType: "ppt_courseware" },
       select: expect.any(Object)
     });
     expect(body.artifact).not.toHaveProperty("errorCode");

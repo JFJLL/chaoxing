@@ -4,7 +4,8 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { ArtifactWorkflowError, publishArtifact } from "@/lib/courseWorkspace/artifactWorkflow";
-import { createPrismaArtifactWorkflowStore } from "@/lib/courseWorkspace/prismaArtifactStores";
+import { updateArtifactInPlace } from "@/lib/courseWorkspace/artifactRevision";
+import { createPrismaArtifactWorkflowStore, createPrismaMutableArtifactStore } from "@/lib/courseWorkspace/prismaArtifactStores";
 
 const clients: PrismaClient[] = [];
 const directories: string[] = [];
@@ -15,6 +16,61 @@ afterEach(async () => {
 });
 
 describe("AI artifact publication SQLite invariant", () => {
+  it("persists PPT page edits and a fresh database connection reads back the saved version", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "chaoxing-ppt-persist-"));
+    directories.push(directory);
+    const database = join(directory, "test.db");
+    await copyFile(resolve("prisma/dev.db"), database);
+    const url = `file:${database.replace(/\\/g, "/")}`;
+    const writer = new PrismaClient({ datasources: { db: { url } } });
+    clients.push(writer);
+
+    const suffix = Date.now().toString(36);
+    const institution = await writer.institution.create({ data: { name: `PPT持久化-${suffix}` } });
+    const user = await writer.user.create({
+      data: { name: "PPT教师", email: `ppt-persist-${suffix}@example.test`, role: "TEACHER", institutionId: institution.id }
+    });
+    const course = await writer.course.create({
+      data: { title: "PPT持久化课程", ownerId: user.id, institutionId: institution.id }
+    });
+    const artifact = await writer.courseAiArtifact.create({
+      data: {
+        seriesId: `ppt-persist-series-${suffix}`,
+        courseId: course.id,
+        userId: user.id,
+        appType: "ppt_courseware",
+        title: "初始PPT",
+        payload: JSON.stringify({ slides: [{ title: "初始标题", bullets: ["初始要点"], speakerNotes: "初始备注" }] }),
+        status: "DRAFT",
+        version: 1
+      }
+    });
+    const editedPayload = JSON.stringify({ slides: [
+      { title: "第二页先讲", bullets: ["要点乙"], speakerNotes: "备注乙" },
+      { title: "新增页", bullets: ["要点丙"], speakerNotes: "备注丙" }
+    ] });
+
+    const saved = await updateArtifactInPlace(createPrismaMutableArtifactStore(writer), {
+      courseId: course.id,
+      artifactId: artifact.id,
+      expectedLockVersion: artifact.lockVersion,
+      title: "已编辑PPT",
+      payload: editedPayload
+    });
+    expect(saved).toMatchObject({ title: "已编辑PPT", payload: editedPayload, lockVersion: artifact.lockVersion + 1 });
+
+    await writer.$disconnect();
+    clients.splice(clients.indexOf(writer), 1);
+    const freshReader = new PrismaClient({ datasources: { db: { url } } });
+    clients.push(freshReader);
+    const reloaded = await freshReader.courseAiArtifact.findUnique({ where: { id: artifact.id } });
+    expect(reloaded).toMatchObject({ title: "已编辑PPT", payload: editedPayload, lockVersion: artifact.lockVersion + 1 });
+    expect(JSON.parse(reloaded!.payload!)).toEqual({ slides: [
+      { title: "第二页先讲", bullets: ["要点乙"], speakerNotes: "备注乙" },
+      { title: "新增页", bullets: ["要点丙"], speakerNotes: "备注丙" }
+    ] });
+  }, 20_000);
+
   it("never leaves two published revisions when separate connections publish concurrently", async () => {
     const directory = await mkdtemp(join(tmpdir(), "chaoxing-ai-publish-"));
     directories.push(directory);

@@ -3,23 +3,24 @@ import { dirname, resolve } from "path";
 import JSZip from "jszip";
 import { generateArtifactPptx } from "../src/lib/courseWorkspace/exports/generateArtifactPptx";
 
-const outputPath = resolve(process.argv[2] ?? "artifacts/verification/ppt-sample/course-production-chain-sample.pptx");
-const templateBytes = await readFile(resolve("templates/courseware-template.pptx"));
 const slides = [
   { title: "多资料形成课程目录", bullets: ["统一等待解析完成", "综合生成一份课程目录", "每份资料保留独立图谱"], speakerNotes: "演示多资料导入与一次保存。" },
   { title: "教案到AI课件", bullets: ["选择资料与具体章节", "确认教案后自动带入", "课件固定记录教案版本"], speakerNotes: "演示上游来源追溯。" },
   { title: "PPT编辑与发布", bullets: ["逐页编辑标题和要点", "保存形成可追溯版本", "只有最终PPT可以发布"], speakerNotes: "演示最终发布边界。" }
 ];
-const buffer = await generateArtifactPptx({
+async function main() {
+  const outputPath = resolve(process.argv[2] ?? "artifacts/verification/ppt-sample/course-production-chain-sample.pptx");
+  const templateBytes = await readFile(resolve("templates/courseware-template.pptx"));
+  const buffer = await generateArtifactPptx({
   templateBytes,
   title: "备课中心生产链验收样例",
   courseTitle: "课程生产链",
   payload: { slides }
-});
-await mkdir(dirname(outputPath), { recursive: true });
-await writeFile(outputPath, buffer);
+  });
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, buffer);
 
-const zip = await JSZip.loadAsync(buffer);
+  const zip = await JSZip.loadAsync(buffer);
 const presentation = await zip.file("ppt/presentation.xml")?.async("string");
 const rels = await zip.file("ppt/_rels/presentation.xml.rels")?.async("string");
 if (!presentation || !rels) throw new Error("样例 PPT 缺少 presentation 结构");
@@ -40,7 +41,13 @@ for (let index = 0; index < slides.length; index += 1) {
   }
 }
 
-console.log(`PPT_SAMPLE=${outputPath}`);
-console.log(`PAGES=${orderedIds.length}`);
-console.log(`BODY_SLIDES=${slides.length}`);
-console.log("BODY_NON_EMPTY=3/3");
+  console.log(`PPT_SAMPLE=${outputPath}`);
+  console.log(`PAGES=${orderedIds.length}`);
+  console.log(`BODY_SLIDES=${slides.length}`);
+  console.log("BODY_NON_EMPTY=3/3");
+}
+
+void main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});

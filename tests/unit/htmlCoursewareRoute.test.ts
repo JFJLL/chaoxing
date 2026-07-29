@@ -53,7 +53,7 @@ describe("legacy HTML courseware route", () => {
     expect(mocks.createArtifact).not.toHaveBeenCalled();
   });
 
-  it("loads only published HTML and safely hides a malformed payload", async () => {
+  it("never exposes legacy published HTML to students", async () => {
     mocks.findArtifact.mockResolvedValue({
       id: "html-1",
       appType: "html_courseware",
@@ -61,55 +61,8 @@ describe("legacy HTML courseware route", () => {
       payload: "not-json"
     });
 
-    let response = await GET(new Request("http://localhost"), context);
-    expect(mocks.findArtifact).toHaveBeenCalledWith(expect.objectContaining({
-      where: { courseId: "course-1", appType: "html_courseware", status: "PUBLISHED" }
-    }));
+    const response = await GET(new Request("http://localhost"), context);
     await expect(response.json()).resolves.toEqual({ artifact: null });
-
-    const payload = {
-      html: "<!doctype html><html><head></head><body>内容</body></html>",
-      slideCount: 1,
-      generatedAt: "2026-07-13T00:00:00.000Z"
-    };
-    mocks.findArtifact.mockResolvedValue({
-      id: "html-2",
-      appType: "html_courseware",
-      title: "已发布课件",
-      status: "PUBLISHED",
-      version: 2,
-      payload: JSON.stringify(payload),
-      publishedAt: new Date("2026-07-13T01:00:00.000Z"),
-      createdAt: new Date("2026-07-13T00:00:00.000Z"),
-      prompt: "private teacher prompt",
-      inputSnapshot: "private source courseware",
-      userId: "teacher-1",
-      sourceArtifactId: "source-1"
-    });
-    response = await GET(new Request("http://localhost"), context);
-    const body = await response.json();
-    expect(Object.keys(body.artifact).sort()).toEqual([
-      "appType",
-      "createdAt",
-      "id",
-      "payload",
-      "publishedAt",
-      "status",
-      "title",
-      "version"
-    ]);
-    expect(body.artifact).toMatchObject({ id: "html-2", payload });
-    expect(mocks.findArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
-      select: {
-        id: true,
-        appType: true,
-        title: true,
-        status: true,
-        version: true,
-        payload: true,
-        publishedAt: true,
-        createdAt: true
-      }
-    }));
+    expect(mocks.findArtifact).not.toHaveBeenCalled();
   });
 });

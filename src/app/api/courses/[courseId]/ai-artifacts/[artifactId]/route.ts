@@ -33,7 +33,7 @@ export async function GET(_request: Request, context: RouteContext) {
       id: artifactId,
       courseId,
       deletedAt: null,
-      ...(canManage ? {} : { status: "PUBLISHED" })
+      ...(canManage ? {} : { status: "PUBLISHED", appType: "ppt_courseware" })
     },
     select: safeAiArtifactSelect
   });

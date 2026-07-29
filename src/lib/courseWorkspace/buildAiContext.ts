@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { parseStoredDocumentSections } from "@/lib/imports/documentSections";
 
 export const MAX_AI_CONTEXT_JSON_CHARS = 30_000;
 export const MAX_AI_CONTEXT_ID_CHARS = 200;
@@ -632,7 +633,7 @@ export async function buildCourseAiContext(input: {
       },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       take: MAX_IMPORTS,
-      select: { id: true, originalName: true, extractedText: true, generatedOutline: true, status: true, updatedAt: true }
+      select: { id: true, originalName: true, extractedText: true, parsedSections: true, status: true, updatedAt: true }
     }),
     db.courseKnowledgeMap.findFirst({
       where: { courseId: input.courseId, status: { in: ["DRAFT", "PUBLISHED"] }, sourceJobId: { not: null } },
@@ -656,14 +657,14 @@ export async function buildCourseAiContext(input: {
     imports: imports.map((source) => {
       const selection = input.sourceSelections?.find((item) => item.documentId === source.id);
       let extractedText = source.extractedText!;
-      if (selection?.sectionIds.length && source.generatedOutline) {
-        try {
-          const outline = JSON.parse(source.generatedOutline) as { chapters?: Array<{ order?: number; title?: string; summary?: string; lessons?: unknown[] }> };
-          const selected = (outline.chapters ?? []).filter((chapter, index) => selection.sectionIds.includes(`chapter-${chapter.order ?? index + 1}`));
-          if (selected.length) extractedText = JSON.stringify(selected);
-        } catch {
-          throw new InvalidAiScopeError("所选资料章节无法读取，请重新选择");
+      if (selection?.sectionIds.length) {
+        const sections = parseStoredDocumentSections(source.parsedSections);
+        const sectionById = new Map(sections.map((section) => [section.id, section]));
+        const selected = selection.sectionIds.map((sectionId) => sectionById.get(sectionId));
+        if (selected.some((section) => !section)) {
+          throw new InvalidAiScopeError("所选资料章节已失效，请重新选择");
         }
+        extractedText = selected.map((section) => section!.text).join("\n\n");
       }
       return {
         id: source.id,
