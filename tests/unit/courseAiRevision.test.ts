@@ -213,35 +213,35 @@ describe("publishArtifact", () => {
   it("archives only published siblings in the same series and conditionally publishes an allowed type", async () => {
     const current = workflowStore({
       artifact: {
-        id: "paper-v2", courseId: "course-1", seriesId: "paper-series", sourceArtifactId: null,
-        appType: "paper_assembly", status: "APPROVED", payload: "{}"
+        id: "ppt-v2", courseId: "course-1", seriesId: "ppt-series", sourceArtifactId: null,
+        appType: "ppt_courseware", status: "APPROVED", payload: "{}"
       }
     });
-    await publishArtifact(current.store, { courseId: "course-1", artifactId: "paper-v2" });
-    expect(current.calls.archivePublished).toHaveBeenCalledWith("course-1", "paper-series", "paper-v2");
-    expect(current.calls.publish).toHaveBeenCalledWith("paper-v2", "course-1", expect.any(Date));
+    await publishArtifact(current.store, { courseId: "course-1", artifactId: "ppt-v2" });
+    expect(current.calls.archivePublished).toHaveBeenCalledWith("course-1", "ppt-series", "ppt-v2");
+    expect(current.calls.publish).toHaveBeenCalledWith("ppt-v2", "course-1", expect.any(Date));
   });
 
-  it("publishes lesson plans and rejects a lost publish race", async () => {
+  it("rejects lesson-plan publication and reports a lost PPT publish race", async () => {
     const lesson = workflowStore({ artifact: {
       id: "lesson-1", courseId: "course-1", seriesId: "lesson-series", sourceArtifactId: null,
       appType: "lesson_plan", status: "APPROVED", payload: "{}"
     } });
     await expect(publishArtifact(lesson.store, { courseId: "course-1", artifactId: "lesson-1" }))
-      .resolves.toBeDefined();
+      .rejects.toMatchObject({ code: "AI_ARTIFACT_TYPE_NOT_PUBLISHABLE" });
 
     const raced = workflowStore({ artifact: {
-      id: "paper-1", courseId: "course-1", seriesId: "paper-series", sourceArtifactId: null,
-      appType: "paper_assembly", status: "APPROVED", payload: "{}"
+      id: "ppt-1", courseId: "course-1", seriesId: "ppt-series", sourceArtifactId: null,
+      appType: "ppt_courseware", status: "APPROVED", payload: "{}"
     }, transitionCount: 0 });
-    await expect(publishArtifact(raced.store, { courseId: "course-1", artifactId: "paper-1" }))
+    await expect(publishArtifact(raced.store, { courseId: "course-1", artifactId: "ppt-1" }))
       .rejects.toMatchObject({ code: "ARTIFACT_PUBLISH_CONFLICT", retryable: true });
   });
 
   it("retries the complete transaction for bounded SQLite/Prisma publication conflicts", async () => {
     const current = workflowStore({ artifact: {
-      id: "paper-1", courseId: "course-1", seriesId: "paper-series", sourceArtifactId: null,
-      appType: "paper_assembly", status: "APPROVED", payload: "{}"
+      id: "ppt-1", courseId: "course-1", seriesId: "ppt-series", sourceArtifactId: null,
+      appType: "ppt_courseware", status: "APPROVED", payload: "{}"
     } });
     const transaction = current.store.transaction;
     current.store.transaction = vi.fn()
@@ -249,11 +249,11 @@ describe("publishArtifact", () => {
       .mockRejectedValueOnce(new Error("database is locked"))
       .mockImplementation(transaction);
 
-    await publishArtifact(current.store, { courseId: "course-1", artifactId: "paper-1" }, 3, 0);
+    await publishArtifact(current.store, { courseId: "course-1", artifactId: "ppt-1" }, 3, 0);
     expect(current.store.transaction).toHaveBeenCalledTimes(3);
 
     current.store.transaction = vi.fn().mockRejectedValue({ code: "P2002" });
-    await expect(publishArtifact(current.store, { courseId: "course-1", artifactId: "paper-1" }, 2, 0))
+    await expect(publishArtifact(current.store, { courseId: "course-1", artifactId: "ppt-1" }, 2, 0))
       .rejects.toMatchObject({ code: "ARTIFACT_PUBLISH_CONFLICT", retryable: true });
   });
 });

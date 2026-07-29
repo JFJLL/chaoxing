@@ -6,12 +6,12 @@ const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
   requireCourseAccess: vi.fn(),
   listTutorConversations: vi.fn(),
-  isTeacher: vi.fn()
+  isCourseManagerRecord: vi.fn()
 }));
 
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/lib/permissions", () => ({
-  isTeacher: mocks.isTeacher,
+  isCourseManagerRecord: mocks.isCourseManagerRecord,
   requireCourseAccess: mocks.requireCourseAccess
 }));
 vi.mock("@/lib/courseWorkspace/aiConversation", () => ({
@@ -38,7 +38,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.listTutorConversations.mockResolvedValue([]);
   mocks.requireCourseAccess.mockResolvedValue(baseCourse);
-  mocks.isTeacher.mockImplementation((user: { role: string }) => user.role === "TEACHER" || user.role === "ADMIN");
+  mocks.isCourseManagerRecord.mockImplementation((user: { id: string; role: string }, course: { ownerId: string }) => user.role === "ADMIN" || course.ownerId === user.id);
 });
 
 describe("AiWorkbenchPage", () => {

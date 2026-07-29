@@ -4,13 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
-  requireCourseOwner: vi.fn(),
+  requireCourseManager: vi.fn(),
   findImports: vi.fn(),
   recoverImports: vi.fn()
 }));
 
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
-vi.mock("@/lib/permissions", () => ({ requireCourseOwner: mocks.requireCourseOwner }));
+vi.mock("@/lib/permissions", () => ({ requireCourseManager: mocks.requireCourseManager }));
 vi.mock("@/lib/db", () => ({
   db: { documentImportJob: { findMany: mocks.findImports } }
 }));
@@ -20,8 +20,14 @@ vi.mock("@/lib/imports/importQueue", () => ({
 vi.mock("@/components/ai-import/UploadPanel", () => ({
   UploadPanel: () => <div>上传入口</div>
 }));
+vi.mock("@/components/ai-import/CourseDocumentImportSources", () => ({
+  CourseDocumentImportSources: () => <div>多资料上传与云盘选择</div>
+}));
 vi.mock("@/components/ai-import/ImportTimeline", () => ({
   ImportTimeline: ({ status }: { status: string }) => <div>{status}</div>
+}));
+vi.mock("@/components/ai-import/DeleteImportRecordButton", () => ({
+  DeleteImportRecordButton: () => <button type="button">删除记录</button>
 }));
 vi.mock("@/components/course-workspace/PrepWorkflowNavigation", () => ({
   PrepWorkflowNavigation: () => <nav>备课流程</nav>
@@ -35,7 +41,7 @@ import AiWorkbenchContentPage from "@/app/space/courses/[courseId]/ai-workbench/
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireUser.mockResolvedValue({ id: "teacher-1", role: "TEACHER" });
-  mocks.requireCourseOwner.mockResolvedValue({ id: "course-1", title: "测试课程" });
+  mocks.requireCourseManager.mockResolvedValue({ id: "course-1", title: "测试课程" });
   mocks.findImports.mockResolvedValue([{
     id: "job-1",
     originalName: "课程资料.docx",
@@ -52,7 +58,8 @@ describe("AI workbench content page", () => {
 
     expect(html).toContain("最近导入");
     expect(html).toContain("课程资料.docx");
-    expect(html).toContain('href="/space/courses/course-1/ai-import/job-1"');
+    expect(html).toContain('href="/space/courses/course-1/ai-import/job-1#outline-review"');
+    expect(html).toContain("查看并确认");
     expect(mocks.recoverImports).not.toHaveBeenCalled();
   });
 

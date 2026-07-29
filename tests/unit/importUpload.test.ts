@@ -79,7 +79,7 @@ describe("import upload", () => {
     expect(url).toBe("/api/courses/course-7/ai-import");
     expect(init?.method).toBe("POST");
     expect(init?.body).toBeInstanceOf(FormData);
-    expect((init?.body as FormData).get("file")).toBe(file);
+    expect((init?.body as FormData).getAll("files")).toEqual([file]);
   });
 
   it("normalizes network errors", async () => {

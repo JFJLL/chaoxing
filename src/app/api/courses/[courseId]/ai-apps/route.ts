@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isTeacher, requireCourseAccess, requireCourseOwner } from "@/lib/permissions";
+import { isCourseManagerRecord, requireCourseAccess, requireCourseManager } from "@/lib/permissions";
 import { enabledCourseAiAppTypes, getCourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
 import { generationRequestGuard } from "@/lib/ai/generationRequestGuard";
 import { BoundedJsonBodyError, readBoundedJsonBody } from "@/lib/ai/requestGuards";
@@ -21,7 +21,8 @@ import {
   serializeAiGenerationInput,
   toSafeAiArtifactDto
 } from "@/lib/courseWorkspace/aiGenerationQueue";
-import { aiCoursewarePayloadSchema } from "@/types/courseWorkspace";
+import { parseAiGenerationInputSnapshot } from "@/lib/courseWorkspace/aiGenerationQueue";
+import { aiCoursewarePayloadSchema, aiLessonPlanPayloadSchema } from "@/types/courseWorkspace";
 
 type RouteContext = {
   params: Promise<{ courseId: string }>;
@@ -41,7 +42,11 @@ const createArtifactSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   prompt: z.string().trim().max(4_000).optional(),
   scope: aiContextScopeSchema.optional(),
-  sourceArtifactId: z.string().trim().min(1).max(200).optional()
+  sourceArtifactId: z.string().trim().min(1).max(200).optional(),
+  sourceSelections: z.array(z.object({
+    documentId: z.string().trim().min(1).max(200),
+    sectionIds: z.array(z.string().trim().min(1).max(200)).max(100)
+  }).strict()).min(1).max(20).optional()
 }).strict();
 
 const MAX_GENERATION_BODY_BYTES = 16_384;
@@ -50,7 +55,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
   const course = await requireCourseAccess(user, courseId);
-  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const canManage = isCourseManagerRecord(user, course);
 
   const appType = request.nextUrl.searchParams.get("appType");
   const parsedAppType = appType ? appTypeSchema.safeParse(appType) : null;
@@ -84,7 +89,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const { courseId } = await context.params;
 
   try {
-    await requireCourseOwner(user, courseId);
+    await requireCourseManager(user, courseId);
   } catch (error) {
     return NextResponse.json(
       { code: "FORBIDDEN", error: error instanceof Error ? error.message : "无权管理课程" },
@@ -127,8 +132,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ code: "INVALID_REQUEST", error: "该 AI 应用暂未复刻" }, { status: 400 });
   }
 
-  if (parsed.data.appType === "ppt_courseware" ? !parsed.data.sourceArtifactId : Boolean(parsed.data.sourceArtifactId)) {
+  const needsArtifactSource = parsed.data.appType === "courseware" || parsed.data.appType === "ppt_courseware";
+  if (needsArtifactSource !== Boolean(parsed.data.sourceArtifactId)) {
     return NextResponse.json({ code: "INVALID_REQUEST", error: "生成参数无效" }, { status: 400 });
+  }
+  if ((parsed.data.appType === "lesson_plan") !== Boolean(parsed.data.sourceSelections?.length)) {
+    return NextResponse.json({ code: "AI_PREREQUISITE_REQUIRED", error: "AI教案必须选择至少一份资料或资料章节" }, { status: 409 });
   }
 
   const requestLease = generationRequestGuard.acquire(`${user.id}:${courseId}`);
@@ -149,7 +158,69 @@ export async function POST(request: NextRequest, context: RouteContext) {
     let artifactInput;
     let sourceArtifactId: string | null = null;
 
-    if (parsed.data.appType === "paper_assembly") {
+    if (parsed.data.appType === "lesson_plan") {
+      const course = await db.course.findUnique({ where: { id: courseId }, select: { outlineVersion: true } });
+      const selections = parsed.data.sourceSelections!;
+      const documents = await db.documentImportJob.findMany({
+        where: {
+          courseId,
+          id: { in: selections.map((selection) => selection.documentId) },
+          deletedAt: null,
+          status: { in: ["READY_FOR_REVIEW", "APPLIED"] },
+          generatedOutline: { not: null },
+          extractedText: { not: null }
+        },
+        select: { id: true, generatedOutline: true }
+      });
+      if (!course || documents.length !== new Set(selections.map((selection) => selection.documentId)).size) {
+        return NextResponse.json({ code: "INVALID_AI_SCOPE", error: "所选资料已失效，请重新选择" }, { status: 400 });
+      }
+      for (const selection of selections) {
+        if (!selection.sectionIds.length) continue;
+        const document = documents.find((item) => item.id === selection.documentId)!;
+        const outline = JSON.parse(document.generatedOutline!) as { chapters?: Array<{ order?: number }> };
+        const validIds = new Set((outline.chapters ?? []).map((chapter, index) => `chapter-${chapter.order ?? index + 1}`));
+        if (selection.sectionIds.some((id) => !validIds.has(id))) {
+          return NextResponse.json({ code: "INVALID_AI_SCOPE", error: "所选资料章节已失效，请重新选择" }, { status: 400 });
+        }
+      }
+      const sourceSnapshot = { outlineVersion: course.outlineVersion, documents: selections };
+      const aiContext = await buildCourseAiContext({
+        courseId,
+        scope,
+        prompt: parsed.data.prompt,
+        sourceSelections: selections
+      });
+      artifactInput = { appType: "lesson_plan", context: aiContext, sourceSnapshot } as const;
+    } else if (parsed.data.appType === "courseware") {
+      const source = await db.courseAiArtifact.findFirst({
+        where: { id: parsed.data.sourceArtifactId!, courseId, appType: "lesson_plan", status: "APPROVED", deletedAt: null },
+        select: { id: true, version: true, payload: true, inputSnapshot: true }
+      });
+      let sourceLessonPlan;
+      let sourceInput;
+      try {
+        sourceLessonPlan = source?.payload ? aiLessonPlanPayloadSchema.parse(JSON.parse(source.payload)) : null;
+        sourceInput = source ? parseAiGenerationInputSnapshot(source.inputSnapshot, "lesson_plan") : null;
+      } catch {
+        sourceLessonPlan = null;
+        sourceInput = null;
+      }
+      if (!source || !sourceLessonPlan || !sourceInput?.context) {
+        return NextResponse.json({ code: "AI_PREREQUISITE_REQUIRED", error: "AI课件只能从已确认教案生成" }, { status: 409 });
+      }
+      sourceArtifactId = source.id;
+      artifactInput = {
+        appType: "courseware",
+        context: sourceInput.context,
+        sourceLessonPlan,
+        sourceSnapshot: {
+          sourceArtifactId: source.id,
+          sourceArtifactVersion: source.version,
+          sourceInputSnapshot: source.inputSnapshot
+        }
+      } as const;
+    } else if (parsed.data.appType === "paper_assembly") {
       const approvedRows = await db.courseQuestion.findMany({
         where: { courseId, status: "APPROVED" },
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }],

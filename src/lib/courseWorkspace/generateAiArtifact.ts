@@ -9,6 +9,7 @@ import {
   aiQuestionPayloadSchema,
   htmlCoursewarePayloadSchema,
   type AiCoursewarePayload,
+  type AiLessonPlanPayload,
   type CourseAiAppType,
   type CourseAiArtifactPayload,
   type HtmlCoursewarePayload
@@ -33,6 +34,8 @@ export type GenerateCourseAiArtifactInput = {
   prompt?: string;
   approvedQuestions?: ApprovedQuestionInput[];
   sourceCourseware?: AiCoursewarePayload;
+  sourceLessonPlan?: AiLessonPlanPayload;
+  sourceSnapshot?: unknown;
 };
 
 const htmlEnvelopeSchema = z.object({
@@ -366,7 +369,7 @@ export function buildCourseAiArtifactPrompt(input: GenerateCourseAiArtifactInput
       ? { prompt: input.prompt, sourceCourseware: htmlSource }
       : {
           ...(input.context
-            ? { context: input.context }
+            ? { context: input.context, sourceLessonPlan: input.sourceLessonPlan, sourceSnapshot: input.sourceSnapshot }
             : { courseTitle: input.courseTitle, chapters: input.chapters, prompt: input.prompt }),
           approvedQuestions: input.appType === "paper_assembly" ? input.approvedQuestions ?? [] : undefined
         })

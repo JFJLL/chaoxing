@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { runAiGenerationJob } from "@/lib/courseWorkspace/runAiGenerationJob";
 import {
   aiCoursewarePayloadSchema,
+  aiLessonPlanPayloadSchema,
   type CourseAiAppType
 } from "@/types/courseWorkspace";
 import type {
@@ -23,11 +24,32 @@ const approvedQuestionSchema = z.object({
   type: z.enum(["single_choice", "multiple_choice", "short_answer"]),
   stem: z.string().trim().min(1).max(10_000)
 }).strict();
+const lessonPlanSourceSnapshotSchema = z.object({
+  outlineVersion: z.number().int().min(0),
+  documents: z.array(z.object({
+    documentId: z.string().trim().min(1).max(200),
+    sectionIds: z.array(z.string().trim().min(1).max(200)).max(100)
+  }).strict()).min(1).max(20)
+}).strict();
+const derivedSourceSnapshotSchema = z.object({
+  sourceArtifactId: z.string().trim().min(1).max(200),
+  sourceArtifactVersion: z.number().int().min(1),
+  sourceInputSnapshot: z.string().nullable()
+}).strict();
 
 const generationSnapshotSchema = z.discriminatedUnion("appType", [
   z.object({ appType: z.literal("question_generation"), context: courseAiContextSchema }).strict(),
-  z.object({ appType: z.literal("lesson_plan"), context: courseAiContextSchema }).strict(),
-  z.object({ appType: z.literal("courseware"), context: courseAiContextSchema }).strict(),
+  z.object({
+    appType: z.literal("lesson_plan"),
+    context: courseAiContextSchema,
+    sourceSnapshot: lessonPlanSourceSnapshotSchema.optional()
+  }).strict(),
+  z.object({
+    appType: z.literal("courseware"),
+    context: courseAiContextSchema,
+    sourceLessonPlan: aiLessonPlanPayloadSchema,
+    sourceSnapshot: derivedSourceSnapshotSchema
+  }).strict(),
   z.object({
     appType: z.literal("paper_assembly"),
     context: courseAiContextSchema,
@@ -67,9 +89,18 @@ export function parseAiGenerationInputSnapshot(
     if (parsed.appType === "html_courseware") {
       return parsed;
     }
+    if (parsed.appType === "courseware") {
+      return {
+        appType: parsed.appType,
+        context: parsed.context as GenerateCourseAiArtifactInput["context"],
+        sourceLessonPlan: parsed.sourceLessonPlan,
+        sourceSnapshot: parsed.sourceSnapshot
+      };
+    }
     return {
       appType: parsed.appType,
-      context: parsed.context as GenerateCourseAiArtifactInput["context"]
+      context: parsed.context as GenerateCourseAiArtifactInput["context"],
+      ...(parsed.appType === "lesson_plan" ? { sourceSnapshot: parsed.sourceSnapshot } : {})
     };
   } catch (error) {
     if (error instanceof AiGenerationInputError) throw error;

@@ -25,6 +25,37 @@ function replaceTextRuns(xml: string, replacements: Array<string | undefined>) {
   });
 }
 
+function textRuns(xml: string) {
+  return [...xml.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((match) => match[1] ?? "");
+}
+
+function replaceMarkedRuns(xml: string, marker: (value: string) => boolean, replacements: string[]) {
+  let index = 0;
+  return xml.replace(/<a:t>([\s\S]*?)<\/a:t>/g, (match, value: string) => {
+    if (!marker(value)) return match;
+    const replacement = replacements[index++] ?? "";
+    return `<a:t>${escapeXml(replacement)}</a:t>`;
+  });
+}
+
+function slideNumber(path: string) {
+  return Number(path.match(/slide(\d+)\.xml$/)?.[1] ?? 0);
+}
+
+async function findSlideByMarkers(
+  zip: JSZip,
+  predicate: (runs: string[]) => boolean
+) {
+  const paths = Object.keys(zip.files)
+    .filter((path) => /^ppt\/slides\/slide\d+\.xml$/.test(path))
+    .sort((left, right) => slideNumber(left) - slideNumber(right));
+  for (const path of paths) {
+    const xml = await zip.file(path)?.async("string");
+    if (xml && predicate(textRuns(xml))) return { path, number: slideNumber(path), xml };
+  }
+  return null;
+}
+
 const LOW_INFORMATION_BULLET_PREFIXES = [
   "欢迎来到",
   "欢迎进入",
@@ -132,23 +163,24 @@ export async function generateArtifactPptx(input: GenerateArtifactPptxInput) {
   let presentationXml = await zip.file(presentationPath)?.async("string");
   let presentationRels = await zip.file(presentationRelsPath)?.async("string");
   let contentTypes = await zip.file(contentTypesPath)?.async("string");
-  const cover = await zip.file("ppt/slides/slide1.xml")?.async("string");
-  const contents = await zip.file("ppt/slides/slide2.xml")?.async("string");
-  const bodyTemplate = await zip.file("ppt/slides/slide4.xml")?.async("string");
-  const bodyRels = await zip
-    .file("ppt/slides/_rels/slide4.xml.rels")
-    ?.async("string");
-  const thanks = await zip.file("ppt/slides/slide9.xml")?.async("string");
+  const [coverSlide, contentsSlide, bodySlide, thanksSlide] = await Promise.all([
+    findSlideByMarkers(zip, (runs) => runs.includes("项目展示标题")),
+    findSlideByMarkers(zip, (runs) => runs.includes("目录") && runs.some((value) => value.includes("NTENTS"))),
+    findSlideByMarkers(zip, (runs) => runs.filter((value) => value === "输入标题").length >= 3 && runs.some((value) => value.startsWith("板式样式"))),
+    findSlideByMarkers(zip, (runs) => runs.includes("THANKS"))
+  ]);
+  const bodyRelsPath = bodySlide ? `ppt/slides/_rels/slide${bodySlide.number}.xml.rels` : "";
+  const bodyRels = bodyRelsPath ? await zip.file(bodyRelsPath)?.async("string") : null;
 
   if (
     !presentationXml ||
     !presentationRels ||
     !contentTypes ||
-    !cover ||
-    !contents ||
-    !bodyTemplate ||
+    !coverSlide ||
+    !contentsSlide ||
+    !bodySlide ||
     !bodyRels ||
-    !thanks
+    !thanksSlide
   ) {
     throw new Error("PPT 模板结构不完整");
   }
@@ -156,14 +188,14 @@ export async function generateArtifactPptx(input: GenerateArtifactPptxInput) {
   let resolvedContentTypes: string = contentTypes;
 
   zip.file(
-    "ppt/slides/slide1.xml",
-    replaceTextRuns(cover, ["", " ", input.title])
+    coverSlide.path,
+    replaceTextRuns(coverSlide.xml, ["", " ", input.title])
   );
 
   const contentsLabels = input.payload.slides.slice(0, 3).map((slide) => slide.title);
   zip.file(
-    "ppt/slides/slide2.xml",
-    replaceTextRuns(contents, [
+    contentsSlide.path,
+    replaceTextRuns(contentsSlide.xml, [
       "C",
       "O",
       "NTENTS",
@@ -181,12 +213,12 @@ export async function generateArtifactPptx(input: GenerateArtifactPptxInput) {
       "03"
     ])
   );
-  zip.file("ppt/slides/slide9.xml", replaceTextRuns(thanks, ["THANKS", "谢谢"]));
+  zip.file(thanksSlide.path, replaceTextRuns(thanksSlide.xml, ["THANKS", "谢谢"]));
 
-  const coverRelationshipId = relationshipIdForSlide(resolvedPresentationRels, 1);
-  const contentsRelationshipId = relationshipIdForSlide(resolvedPresentationRels, 2);
-  const thanksRelationshipId = relationshipIdForSlide(resolvedPresentationRels, 9);
-  const firstBodyRelationshipId = relationshipIdForSlide(resolvedPresentationRels, 4);
+  const coverRelationshipId = relationshipIdForSlide(resolvedPresentationRels, coverSlide.number);
+  const contentsRelationshipId = relationshipIdForSlide(resolvedPresentationRels, contentsSlide.number);
+  const thanksRelationshipId = relationshipIdForSlide(resolvedPresentationRels, thanksSlide.number);
+  const firstBodyRelationshipId = relationshipIdForSlide(resolvedPresentationRels, bodySlide.number);
   if (
     !coverRelationshipId ||
     !contentsRelationshipId ||
@@ -202,12 +234,25 @@ export async function generateArtifactPptx(input: GenerateArtifactPptxInput) {
   slideEntries.push({ id: slideId++, relationshipId: contentsRelationshipId });
 
   let relationshipNumber = nextRelationshipNumber(resolvedPresentationRels);
-  let nextPhysicalSlide = 10;
+  let nextPhysicalSlide = Math.max(...Object.keys(zip.files).map(slideNumber)) + 1;
   input.payload.slides.forEach((slide, index) => {
+    const headlines = selectSlideHeadlines(slide.bullets);
+    let bodyXml = replaceMarkedRuns(
+      bodySlide.xml,
+      (value) => value === "输入标题",
+      [headlines[0] ?? "课程要点", headlines[1] ?? "核心概念", headlines[2] ?? "课堂提示"]
+    );
+    bodyXml = replaceMarkedRuns(bodyXml, (value) => value.startsWith("输入内文"), ["", "", ""]);
+    bodyXml = replaceMarkedRuns(bodyXml, (value) => value.startsWith("板式样式"), [slide.title]);
+    bodyXml = replaceMarkedRuns(bodyXml, (value) => value === "BANSHIYANGSHIYI", [""]);
+    if (!textRuns(bodyXml).some((value) => value.trim() === slide.title.trim())
+      || !textRuns(bodyXml).some((value) => headlines.includes(value) && Boolean(value.trim()))) {
+      throw new Error(`PPT 正文页“${slide.title}”缺少可见标题或要点`);
+    }
     if (index === 0) {
       zip.file(
-        "ppt/slides/slide4.xml",
-        replaceTextRuns(bodyTemplate, buildBodySlideReplacements(slide))
+        bodySlide.path,
+        bodyXml
       );
       slideEntries.push({
         id: slideId++,
@@ -220,7 +265,7 @@ export async function generateArtifactPptx(input: GenerateArtifactPptxInput) {
     const relationshipId = `rId${relationshipNumber++}`;
     zip.file(
       `ppt/slides/slide${physicalSlide}.xml`,
-      replaceTextRuns(bodyTemplate, buildBodySlideReplacements(slide))
+      bodyXml
     );
     zip.file(`ppt/slides/_rels/slide${physicalSlide}.xml.rels`, bodyRels);
     resolvedPresentationRels = resolvedPresentationRels.replace(

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { getImportQueueSnapshot, recoverImportJobFromDatabase } from "@/lib/imports/importQueue";
 import { getJobsAhead } from "@/lib/imports/importProgress";
 
@@ -22,7 +22,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "导入任务不存在" }, { status: 404 });
   }
   try {
-    await requireCourseOwner(user, ownerLookup.courseId);
+    await requireCourseManager(user, ownerLookup.courseId);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }
@@ -64,15 +64,14 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "导入任务不存在" }, { status: 404 });
   }
   try {
-    await requireCourseOwner(user, job.courseId);
+    await requireCourseManager(user, job.courseId);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }
 
-  await db.$transaction(async (tx) => {
-    await tx.courseKnowledgeMap.deleteMany({ where: { sourceJobId: job.id } });
-    await tx.courseAiArtifact.deleteMany({ where: { sourceJobId: job.id, status: { not: "PUBLISHED" } } });
-    await tx.documentImportJob.delete({ where: { id: job.id } });
+  await db.documentImportJob.update({
+    where: { id: job.id },
+    data: { status: "DELETED", deletedAt: new Date() }
   });
 
   revalidatePath(`/space/courses/${job.courseId}`, "layout");

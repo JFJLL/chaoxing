@@ -11,13 +11,29 @@ function joinList(values: string[]) {
   return values.filter(Boolean).join("\n");
 }
 
+export class CourseOutlineConflictError extends Error {
+  readonly code = "COURSE_OUTLINE_VERSION_CONFLICT";
+
+  constructor() {
+    super("课程目录已被其他教师更新，请刷新后重试");
+    this.name = "CourseOutlineConflictError";
+  }
+}
+
 export async function applyOutlineToCourse(input: {
   courseId: string;
   outline: GeneratedCourseOutline;
   actorId?: string;
+  expectedOutlineVersion: number;
   tx?: Prisma.TransactionClient | TransactionClient;
 }) {
   const client = input.tx ?? db;
+
+  const claimed = await client.course.updateMany({
+    where: { id: input.courseId, outlineVersion: input.expectedOutlineVersion },
+    data: { outlineVersion: { increment: 1 } }
+  });
+  if (claimed.count !== 1) throw new CourseOutlineConflictError();
 
   await client.chapter.deleteMany({ where: { courseId: input.courseId } });
 

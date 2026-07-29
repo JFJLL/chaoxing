@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
-  requireCourseOwner: vi.fn(),
+  requireCourseManager: vi.fn(),
   findFirst: vi.fn(),
   updateInPlace: vi.fn(),
   confirmArtifact: vi.fn(),
@@ -12,9 +12,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/lib/permissions", () => ({
-  isTeacher: () => true,
+  isCourseManagerRecord: () => true,
   requireCourseAccess: vi.fn(),
-  requireCourseOwner: mocks.requireCourseOwner
+  requireCourseManager: mocks.requireCourseManager
 }));
 vi.mock("@/lib/db", () => ({ db: { courseAiArtifact: { findFirst: mocks.findFirst } } }));
 vi.mock("@/lib/courseWorkspace/artifactRevision", async (importOriginal) => {
@@ -50,8 +50,8 @@ const validLesson = {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireUser.mockResolvedValue({ id: "teacher-1", role: "TEACHER" });
-  mocks.requireCourseOwner.mockResolvedValue({ id: "course-1" });
-  mocks.findFirst.mockResolvedValue({ appType: "lesson_plan", payload: JSON.stringify(validLesson), lockVersion: 4 });
+  mocks.requireCourseManager.mockResolvedValue({ id: "course-1" });
+  mocks.findFirst.mockResolvedValue({ appType: "lesson_plan", payload: JSON.stringify(validLesson), lockVersion: 4, status: "DRAFT" });
   mocks.createRevisionStore.mockReturnValue({ transaction: vi.fn() });
   mocks.createWorkflowStore.mockReturnValue({ transaction: vi.fn() });
   mocks.updateInPlace.mockResolvedValue(safeArtifact);
@@ -80,7 +80,7 @@ describe("PUT artifact working copy", () => {
     response = await PUT(new Request("http://localhost", { method: "PUT", body: JSON.stringify({ title: "跨课程", payload: validLesson }) }) as never, context);
     expect(response.status).toBe(404);
 
-    mocks.findFirst.mockResolvedValueOnce({ appType: "html_courseware", payload: "{}", lockVersion: 0 });
+    mocks.findFirst.mockResolvedValueOnce({ appType: "html_courseware", payload: "{}", lockVersion: 0, status: "DRAFT" });
     response = await PUT(new Request("http://localhost", { method: "PUT", body: JSON.stringify({ title: "HTML", payload: {} }) }) as never, context);
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({ code: "ARTIFACT_HTML_EDIT_FORBIDDEN" });
@@ -88,7 +88,7 @@ describe("PUT artifact working copy", () => {
 });
 
 describe("POST artifact confirm", () => {
-  it("requires owner and delegates an atomic confirmation", async () => {
+  it("requires a course manager and delegates an atomic confirmation", async () => {
     const response = await CONFIRM(new Request("http://localhost", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

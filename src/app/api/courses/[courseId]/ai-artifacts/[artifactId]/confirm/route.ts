@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { confirmArtifact, ArtifactWorkflowError } from "@/lib/courseWorkspace/artifactWorkflow";
 import { ArtifactPayloadError } from "@/lib/courseWorkspace/artifactPayload";
 import { createPrismaArtifactWorkflowStore } from "@/lib/courseWorkspace/prismaArtifactStores";
@@ -23,7 +23,7 @@ export async function POST(request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId, artifactId } = await context.params;
   try {
-    await requireCourseOwner(user, courseId);
+    await requireCourseManager(user, courseId);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }

@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isTeacher, requireCourseAccess, requireCourseOwner } from "@/lib/permissions";
+import { isCourseManagerRecord, requireCourseAccess, requireCourseManager } from "@/lib/permissions";
 import {
   getAiGenerationJobsAhead,
   recoverAiGenerationJobFromDatabase,
   safeAiArtifactSelect,
   toSafeAiArtifactDto
 } from "@/lib/courseWorkspace/aiGenerationQueue";
-import { ArtifactRevisionError, updateArtifactInPlace } from "@/lib/courseWorkspace/artifactRevision";
+import { ArtifactRevisionError, createArtifactRevision, updateArtifactInPlace } from "@/lib/courseWorkspace/artifactRevision";
 import { ArtifactPayloadError, parseArtifactEditBody } from "@/lib/courseWorkspace/artifactPayload";
 import {
+  createPrismaArtifactRevisionStore,
   createPrismaArtifactWorkflowStore,
   createPrismaMutableArtifactStore
 } from "@/lib/courseWorkspace/prismaArtifactStores";
@@ -24,7 +25,7 @@ export async function GET(_request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId, artifactId } = await context.params;
   const course = await requireCourseAccess(user, courseId);
-  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const canManage = isCourseManagerRecord(user, course);
 
   if (canManage) await recoverAiGenerationJobFromDatabase(courseId, artifactId);
   const artifact = await db.courseAiArtifact.findFirst({
@@ -64,14 +65,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId, artifactId } = await context.params;
   try {
-    await requireCourseOwner(user, courseId);
+    await requireCourseManager(user, courseId);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }
 
   const source = await db.courseAiArtifact.findFirst({
     where: { id: artifactId, courseId },
-    select: { appType: true, payload: true, lockVersion: true }
+    select: { appType: true, payload: true, lockVersion: true, status: true }
   });
   if (!source) {
     return NextResponse.json({ code: "ARTIFACT_SOURCE_NOT_FOUND", error: "AI 产物不存在" }, { status: 404 });
@@ -85,13 +86,22 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       throw new ArtifactPayloadError("ARTIFACT_EDIT_BODY_INVALID");
     }
     const edit = parseArtifactEditBody(source.appType, body, { sourcePayload: source.payload });
-    const artifact = await updateArtifactInPlace(createPrismaMutableArtifactStore(), {
-      courseId,
-      artifactId,
-      expectedLockVersion: edit.lockVersion,
-      title: edit.title,
-      payload: edit.payload
-    });
+    if (edit.lockVersion !== source.lockVersion) throw new ArtifactRevisionError("ARTIFACT_REVISION_CONFLICT", true);
+    const artifact = source.status === "DRAFT"
+      ? await updateArtifactInPlace(createPrismaMutableArtifactStore(), {
+          courseId,
+          artifactId,
+          expectedLockVersion: edit.lockVersion,
+          title: edit.title,
+          payload: edit.payload
+        })
+      : await createArtifactRevision(createPrismaArtifactRevisionStore(), {
+          courseId,
+          sourceArtifactId: artifactId,
+          userId: user.id,
+          title: edit.title,
+          payload: edit.payload
+        });
     return NextResponse.json({ artifact: toSafeAiArtifactDto(artifact, { canManage: true, jobsAhead: null }) });
   } catch (error) {
     if (error instanceof ArtifactPayloadError || error instanceof ArtifactRevisionError) {
@@ -111,7 +121,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId, artifactId } = await context.params;
   try {
-    await requireCourseOwner(user, courseId);
+    await requireCourseManager(user, courseId);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }

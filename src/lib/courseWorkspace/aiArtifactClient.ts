@@ -50,6 +50,7 @@ export type CreateAiArtifactInput = {
   title: string;
   scope: AiArtifactScope;
   sourceArtifactId?: string;
+  sourceSelections?: Array<{ documentId: string; sectionIds: string[] }>;
 };
 
 export type RequestLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -203,7 +204,8 @@ export function createCourseAiArtifact(input: CreateAiArtifactInput, request: Re
     prompt: input.prompt,
     title: input.title,
     scope: input.scope,
-    sourceArtifactId: input.sourceArtifactId
+    sourceArtifactId: input.sourceArtifactId,
+    sourceSelections: input.sourceSelections
   }), request);
 }
 

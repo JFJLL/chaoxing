@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import {
   AiGenerationInputError,
   canRetryAiGeneration,
@@ -20,7 +20,7 @@ export async function POST(_request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId, artifactId } = await context.params;
   try {
-    await requireCourseOwner(user, courseId);
+    await requireCourseManager(user, courseId);
   } catch (error) {
     return NextResponse.json(
       { code: "FORBIDDEN", error: error instanceof Error ? error.message : "无权管理课程" },

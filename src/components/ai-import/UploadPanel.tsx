@@ -5,29 +5,29 @@ import { useRouter } from "next/navigation";
 import { FileUp, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { getUploadButtonLabel } from "@/lib/imports/importProgress";
-import { createSubmissionLock, uploadCourseDocument } from "@/lib/imports/importUpload";
+import { createSubmissionLock, uploadCourseDocuments } from "@/lib/imports/importUpload";
 
 export function UploadPanel({ courseId }: { courseId: string }) {
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const submissionLock = useRef(createSubmissionLock());
 
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {
-    setFile(event.target.files?.[0] ?? null);
+    setFiles(Array.from(event.target.files ?? []));
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!file || !submissionLock.current.acquire()) return;
+    if (!files.length || !submissionLock.current.acquire()) return;
     setSubmitting(true);
     setError("");
     let uploaded = false;
 
     try {
-      const jobId = await uploadCourseDocument({ courseId, file });
-      router.push(`/space/courses/${courseId}/ai-import/${jobId}`);
+      const result = await uploadCourseDocuments({ courseId, files });
+      router.push(`/space/courses/${courseId}/ai-import/${result.jobIds[0]}#outline-review`);
       uploaded = true;
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "上传失败，请重试");
@@ -54,12 +54,12 @@ export function UploadPanel({ courseId }: { courseId: string }) {
               submitting ? "pointer-events-none cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-slate-100"
             }`}
           >
-            <input className="sr-only" type="file" accept=".docx,.pdf,.pptx,.txt,.md" onChange={onFileChange} disabled={submitting} />
-            <span className="text-sm font-medium text-slate-700">{file ? file.name : "选择文档"}</span>
-            {file ? <span className="mt-1 text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB</span> : null}
+            <input className="sr-only" type="file" multiple accept=".docx,.pdf,.pptx,.txt,.md" onChange={onFileChange} disabled={submitting} />
+            <span className="text-sm font-medium text-slate-700">{files.length ? `已选择 ${files.length} 份文档` : "选择一份或多份文档"}</span>
+            {files.length ? <span className="mt-1 text-xs text-slate-500">{files.map((file) => file.name).join("、")}</span> : null}
           </label>
           {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-          <Button type="submit" className="mt-5" disabled={!file || submitting}>
+          <Button type="submit" className="mt-5" disabled={!files.length || submitting}>
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {getUploadButtonLabel(submitting)}
           </Button>

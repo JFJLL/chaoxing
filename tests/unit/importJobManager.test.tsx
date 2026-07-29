@@ -11,7 +11,7 @@ import { ImportJobManager } from "../../src/components/ai-import/ImportJobManage
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
 describe("ImportJobManager AI handoff", () => {
-  it("links to editable and PPT courseware without exposing HTML generation", () => {
+  it("keeps import review focused on map publication without bypassing the lesson-plan source chain", () => {
     const markup = renderToStaticMarkup(<ImportJobManager
       courseId="course-1"
       jobId="job-1"
@@ -24,11 +24,11 @@ describe("ImportJobManager AI handoff", () => {
         nodes: [],
         edges: []
       }}
-      htmlArtifact={null}
     />);
 
-    expect(markup).toContain('href="/space/courses/course-1/ai-workbench/apps/courseware"');
-    expect(markup).toContain('href="/space/courses/course-1/ai-workbench/apps/ppt_courseware"');
+    expect(markup).toContain("发布导图");
+    expect(markup).not.toContain('href="/space/courses/course-1/ai-workbench/apps/courseware"');
+    expect(markup).not.toContain('href="/space/courses/course-1/ai-workbench/apps/ppt_courseware"');
     expect(markup).not.toContain('href="/space/courses/course-1/ai-workbench/apps/html_courseware"');
     expect(markup).not.toContain("生成HTML课件");
     expect(markup).not.toContain("generate-html");

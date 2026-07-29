@@ -11,11 +11,12 @@ const mocks = vi.hoisted(() => ({
     }
   },
   requireUser: vi.fn(),
-  requireCourseOwner: vi.fn(),
+  requireCourseManager: vi.fn(),
   ensureCoursePurposeFolder: vi.fn(),
   aggregate: vi.fn(),
   count: vi.fn(),
   create: vi.fn(),
+  createBatch: vi.fn(),
   update: vi.fn(),
   findMany: vi.fn(),
   updateMany: vi.fn(),
@@ -25,7 +26,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
-vi.mock("@/lib/permissions", () => ({ requireCourseOwner: mocks.requireCourseOwner }));
+vi.mock("@/lib/permissions", () => ({ requireCourseManager: mocks.requireCourseManager }));
 vi.mock("@/lib/courseDrive/service", () => ({
   CourseDriveError: mocks.CourseDriveError,
   ensureCoursePurposeFolder: mocks.ensureCoursePurposeFolder
@@ -40,6 +41,7 @@ vi.mock("@/lib/db", () => ({
       findMany: mocks.findMany,
       updateMany: mocks.updateMany
     },
+    documentImportBatch: { create: mocks.createBatch },
     driveFile: { findFirst: mocks.driveFileFindFirst }
   }
 }));
@@ -57,6 +59,13 @@ function uploadRequest() {
   return new Request("http://localhost/api/courses/course-1/ai-import", { method: "POST", body: formData });
 }
 
+function multiUploadRequest() {
+  const formData = new FormData();
+  formData.append("files", new File(["first"], "first.pdf", { type: "application/pdf" }));
+  formData.append("files", new File(["second"], "second.md", { type: "text/markdown" }));
+  return new Request("http://localhost/api/courses/course-1/ai-import", { method: "POST", body: formData });
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => { resolve = done; });
@@ -69,11 +78,12 @@ describe("POST /api/courses/:courseId/ai-import", () => {
     resetImportRequestGuard();
     resetImportAdmissionState();
     mocks.requireUser.mockResolvedValue({ id: "teacher-1", role: "TEACHER" });
-    mocks.requireCourseOwner.mockResolvedValue({ id: "course-1", institutionId: "institution-1", driveRootFolderId: "root-1" });
+    mocks.requireCourseManager.mockResolvedValue({ id: "course-1", institutionId: "institution-1", driveRootFolderId: "root-1" });
     mocks.ensureCoursePurposeFolder.mockResolvedValue({ id: "folder-1", ownerId: "teacher-1" });
     mocks.aggregate.mockResolvedValue({ _sum: { fileSize: 0 } });
     mocks.count.mockResolvedValue(0);
     mocks.create.mockResolvedValue({ id: "job-1" });
+    mocks.createBatch.mockResolvedValue({ id: "batch-1" });
     mocks.update.mockResolvedValue({ id: "job-1" });
     mocks.findMany.mockResolvedValue([]);
     mocks.updateMany.mockResolvedValue({ count: 0 });
@@ -153,5 +163,24 @@ describe("POST /api/courses/:courseId/ai-import", () => {
     await expect(response.json()).resolves.toMatchObject({ code: "AI_IMPORT_GLOBAL_BACKLOG_FULL", retryable: true });
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.storeDriveUpload).not.toHaveBeenCalled();
+  });
+
+  it("creates one analysis batch and queues every selected document before review", async () => {
+    mocks.storeDriveUpload
+      .mockResolvedValueOnce({ id: "file-1", path: ".uploads/drive/first.pdf", contentHash: "hash-1" })
+      .mockResolvedValueOnce({ id: "file-2", path: ".uploads/drive/second.md", contentHash: "hash-2" });
+    mocks.create.mockResolvedValueOnce({ id: "job-1" }).mockResolvedValueOnce({ id: "job-2" });
+
+    const response = await POST(multiUploadRequest() as never, context);
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ batchId: "batch-1", jobIds: ["job-1", "job-2"] });
+    expect(mocks.createBatch).toHaveBeenCalledWith({
+      data: { courseId: "course-1", userId: "teacher-1", status: "PROCESSING" },
+      select: { id: true }
+    });
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+    expect(mocks.create.mock.calls[0][0].data).toMatchObject({ batchId: "batch-1", contentHash: "hash-1" });
+    expect(mocks.create.mock.calls[1][0].data).toMatchObject({ batchId: "batch-1", contentHash: "hash-2" });
   });
 });

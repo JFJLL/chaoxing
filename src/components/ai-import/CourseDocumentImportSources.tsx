@@ -121,12 +121,7 @@ export function CourseDocumentImportSources({ courseId }: { courseId: string }) 
           : [];
       if (!jobIds.length) throw new Error("未创建导入任务");
       setSelectedIds([]);
-      if (jobIds.length === 1) {
-        router.push(`/space/courses/${courseId}/ai-import/${jobIds[0]}`);
-        return;
-      }
-      setMessage({ tone: "success", text: `已创建 ${jobIds.length} 个导入任务，可在下方“最近导入”中查看进度。` });
-      router.refresh();
+      router.push(`/space/courses/${courseId}/ai-import/${jobIds[0]}#outline-review`);
     } catch (error) {
       setMessage({ tone: "error", text: error instanceof Error ? error.message : "云盘文档导入失败" });
     } finally {

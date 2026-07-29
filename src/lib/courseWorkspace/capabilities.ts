@@ -59,7 +59,7 @@ export const courseCapabilities: CourseGeneratorCapability[] = [
     id: "ai-courseware",
     appType: "courseware",
     title: "生成 AI课件",
-    description: "基于课程资料生成可逐页编辑和确认的课堂课件。",
+    description: "基于已确认教案生成可逐页编辑和确认的课堂课件。",
     route: (courseId) => `/space/courses/${courseId}/ai-workbench/apps/courseware`,
     enabled: true,
     color: "purple",
@@ -97,10 +97,10 @@ export const teacherPrepWorkflows: TeacherPrepWorkflow[] = [
   {
     id: "courseware",
     title: "AI课件",
-    description: "生成普通课件，制作互动版本，并在同一流程中查看发布结果。",
+    description: "从已确认教案生成 AI课件，再制作并发布最终 PPT。",
     route: (courseId) => `/space/courses/${courseId}/ai-workbench/apps/courseware`,
     icon: "courseware",
-    includes: ["生成课件", "PPT课件", "已发布课件"]
+    includes: ["生成课件", "PPT课件", "发布PPT"]
   },
   {
     id: "assessment",

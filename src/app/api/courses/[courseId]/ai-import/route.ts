@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import {
   assertSupportedUpload,
   assertUploadSize
@@ -33,7 +33,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
   try {
-    await requireCourseOwner(user, courseId);
+    await requireCourseManager(user, courseId);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }
@@ -41,7 +41,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   await recoverImportJobsFromDatabase(courseId);
 
   const jobs = await db.documentImportJob.findMany({
-    where: { courseId },
+    where: { courseId, deletedAt: null },
     orderBy: { createdAt: "desc" },
     take: 20
   });
@@ -66,9 +66,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 export async function POST(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
-  let course: Awaited<ReturnType<typeof requireCourseOwner>>;
+  let course: Awaited<ReturnType<typeof requireCourseManager>>;
   try {
-    course = await requireCourseOwner(user, courseId);
+    course = await requireCourseManager(user, courseId);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }
@@ -99,14 +99,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
       return NextResponse.json({ error: "请使用 multipart/form-data 上传文档" }, { status: 400 });
     }
-    const file = formData.get("file");
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "请上传文档" }, { status: 400 });
-    }
-
+    const files = formData.getAll("files").filter((item): item is File => item instanceof File);
+    const legacyFile = formData.get("file");
+    if (!files.length && legacyFile instanceof File) files.push(legacyFile);
+    if (!files.length) return NextResponse.json({ error: "请上传至少一份文档" }, { status: 400 });
+    if (files.length > 20) return NextResponse.json({ error: "一次最多上传 20 份文档" }, { status: 400 });
     try {
-      assertSupportedUpload(file.name);
-      assertUploadSize(file.size);
+      for (const file of files) {
+        assertSupportedUpload(file.name);
+        assertUploadSize(file.size);
+      }
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "文件不符合上传要求" }, { status: 400 });
     }
@@ -124,47 +126,66 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw error;
     }
 
-    let admission;
-    try {
-      admission = await reserveImportJobAdmission({
-        institutionId: course.institutionId,
-        courseId,
-        userId: user.id,
-        fileSize: file.size
-      });
-    } catch (error) {
-      if (error instanceof ImportAdmissionError) {
-        return NextResponse.json({ code: error.code, error: error.message, retryable: error.retryable }, { status: error.status });
-      }
-      throw error;
-    }
-
-    let job: { id: string };
-    try {
-      const driveFile = await storeDriveUpload({
-        ownerId: courseDocumentsFolder.ownerId,
-        parentId: courseDocumentsFolder.id,
-        file
-      });
-      job = await db.documentImportJob.create({
-        data: {
+    const batch = await db.documentImportBatch.create({
+      data: { courseId, userId: user.id, status: "PROCESSING" },
+      select: { id: true }
+    });
+    const jobs: Array<{ id: string }> = [];
+    for (const file of files) {
+      let admission;
+      try {
+        admission = await reserveImportJobAdmission({
+          institutionId: course.institutionId,
           courseId,
           userId: user.id,
-          status: "QUEUED",
-          originalName: file.name,
-          fileSize: file.size,
-          mimeType: file.type || null,
-          filePath: driveFile.path,
-          driveFileId: driveFile.id
+          fileSize: file.size
+        });
+      } catch (error) {
+        if (error instanceof ImportAdmissionError) {
+          return NextResponse.json({
+            code: error.code,
+            error: error.message,
+            retryable: error.retryable,
+            batchId: batch.id,
+            jobIds: jobs.map((job) => job.id)
+          }, { status: error.status });
         }
-      });
-    } finally {
-      admission.release();
+        throw error;
+      }
+      try {
+        const driveFile = await storeDriveUpload({
+          ownerId: courseDocumentsFolder.ownerId,
+          parentId: courseDocumentsFolder.id,
+          file
+        });
+        const job = await db.documentImportJob.create({
+          data: {
+            courseId,
+            userId: user.id,
+            batchId: batch.id,
+            status: "QUEUED",
+            originalName: file.name,
+            fileSize: file.size,
+            mimeType: file.type || null,
+            filePath: driveFile.path,
+            driveFileId: driveFile.id,
+            contentHash: driveFile.contentHash
+          },
+          select: { id: true }
+        });
+        jobs.push(job);
+        enqueueImportJob(job.id);
+      } finally {
+        admission.release();
+      }
     }
 
-    enqueueImportJob(job.id);
-
-    return NextResponse.json({ jobId: job.id, status: "QUEUED" }, { status: 202 });
+    return NextResponse.json({
+      batchId: batch.id,
+      jobId: jobs[0]?.id,
+      jobIds: jobs.map((job) => job.id),
+      status: "QUEUED"
+    }, { status: 202 });
   } finally {
     requestLease.release();
   }

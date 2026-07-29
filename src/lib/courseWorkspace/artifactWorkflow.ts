@@ -168,11 +168,7 @@ export async function confirmArtifact<Result>(
 }
 
 const publishableTypes = new Set([
-  "lesson_plan",
-  "courseware",
-  "paper_assembly",
-  "ppt_courseware",
-  "html_courseware"
+  "ppt_courseware"
 ]);
 
 export async function publishArtifact<Result>(

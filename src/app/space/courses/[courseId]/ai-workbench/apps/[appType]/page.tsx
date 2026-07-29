@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isTeacher, requireCourseAccess } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { getCourseAiAppDefinition, type CourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
 import type { CourseAiAppType } from "@/types/courseWorkspace";
 import { AiAppGenerator } from "@/components/course-workspace/AiAppGenerator";
@@ -10,6 +10,7 @@ import { PrepWorkflowNavigation, type PrepWorkflow } from "@/components/course-w
 
 type PageProps = {
   params: Promise<{ courseId: string; appType: string }>;
+  searchParams: Promise<{ sourceArtifactId?: string }>;
 };
 
 function parseAppType(value: string): CourseAiAppType | null {
@@ -51,14 +52,14 @@ function pagePresentation(appType: CourseAiAppType, fallback: { title: string; d
   if (appType === "courseware") {
     return {
       title: "AI课件",
-      description: "从普通课件生成到互动发布，集中在同一条制作流程中。",
+      description: "只从已确认教案生成可编辑、可确认的课堂课件。",
       workflow: "courseware",
       active: "courseware"
     };
   }
   if (appType === "ppt_courseware" || appType === "html_courseware") {
     return {
-      title: "AI课件",
+      title: appType === "ppt_courseware" ? "PPT课件" : "历史 HTML 课件",
       description: appType === "ppt_courseware"
         ? "将已确认的课件映射到课程模板并导出为 PPTX。"
         : "历史 HTML 课件仅保留查看，不再生成新内容。",
@@ -72,14 +73,16 @@ function pagePresentation(appType: CourseAiAppType, fallback: { title: string; d
 async function AiAppGeneratorContent({
   courseId,
   appType,
-  app
+  app,
+  preferredSourceId
 }: {
   courseId: string;
   appType: CourseAiAppType;
   app: CourseAiAppDefinition & { appType: CourseAiAppType };
+  preferredSourceId?: string;
 }) {
   const needsCourseContent = app.prerequisites?.includes("course_content") ?? false;
-  const [chapters, artifactRows, approvedQuestions, coursewareSources, resourcePresence, importPresence] = await Promise.all([
+  const [chapters, artifactRows, approvedQuestions, coursewareSources, documentRows, resourcePresence, importPresence] = await Promise.all([
     db.chapter.findMany({
       where: { courseId },
       orderBy: [{ order: "asc" }, { id: "asc" }],
@@ -122,16 +125,30 @@ async function AiAppGeneratorContent({
           select: { id: true, stem: true }
         })
       : Promise.resolve([]),
-    appType === "ppt_courseware"
+    appType === "ppt_courseware" || appType === "courseware"
       ? db.courseAiArtifact.findMany({
           where: {
             courseId,
-            appType: "courseware",
+            appType: appType === "courseware" ? "lesson_plan" : "courseware",
             status: { in: ["APPROVED", "PUBLISHED"] },
             payload: { not: null }
           },
           orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
           select: { id: true, title: true, version: true, status: true }
+        })
+      : Promise.resolve([]),
+    appType === "lesson_plan"
+      ? db.documentImportJob.findMany({
+          where: {
+            courseId,
+            deletedAt: null,
+            status: { in: ["READY_FOR_REVIEW", "APPLIED"] },
+            generatedOutline: { not: null },
+            extractedText: { not: null }
+          },
+          orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+          take: 20,
+          select: { id: true, originalName: true, generatedOutline: true }
         })
       : Promise.resolve([]),
     needsCourseContent
@@ -154,6 +171,19 @@ async function AiAppGeneratorContent({
     updatedAt: artifact.updatedAt.toISOString()
   }));
   const hasCourseContent = !needsCourseContent || chapters.length > 0 || Boolean(resourcePresence) || Boolean(importPresence);
+  const documentSources = documentRows.map((document) => {
+    let sections: Array<{ id: string; title: string }> = [];
+    try {
+      const outline = JSON.parse(document.generatedOutline!) as { chapters?: Array<{ order?: number; title?: string }> };
+      sections = (outline.chapters ?? []).map((chapter, index) => ({
+        id: `chapter-${chapter.order ?? index + 1}`,
+        title: chapter.title ?? `章节 ${index + 1}`
+      }));
+    } catch {
+      sections = [];
+    }
+    return { id: document.id, title: document.originalName, sections };
+  });
 
   return (
     <AiAppGenerator
@@ -162,15 +192,17 @@ async function AiAppGeneratorContent({
       chapters={chapters}
       approvedQuestions={approvedQuestions}
       coursewareSources={coursewareSources}
+      documentSources={documentSources}
+      preferredSourceId={preferredSourceId}
       initialArtifacts={initialArtifacts}
       hasCourseContent={hasCourseContent}
     />
   );
 }
 
-export default async function AiAppDetailPage({ params }: PageProps) {
+export default async function AiAppDetailPage({ params, searchParams }: PageProps) {
   const user = await requireUser();
-  const { courseId, appType: rawAppType } = await params;
+  const [{ courseId, appType: rawAppType }, query] = await Promise.all([params, searchParams]);
   const appType = parseAppType(rawAppType);
   if (!appType) notFound();
 
@@ -178,12 +210,10 @@ export default async function AiAppDetailPage({ params }: PageProps) {
   if (!appDefinition.enabled || !appDefinition.appType) notFound();
   const app = { ...appDefinition, appType: appDefinition.appType };
 
-  const course = await requireCourseAccess(user, courseId);
-  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
-  if (!canManage) redirect(`/space/courses/${course.id}/resources`);
+  const course = await requireCourseManager(user, courseId);
 
   const presentation = pagePresentation(appType, { title: app.title, description: app.description });
-  const generator = await AiAppGeneratorContent({ courseId: course.id, appType, app });
+  const generator = await AiAppGeneratorContent({ courseId: course.id, appType, app, preferredSourceId: query.sourceArtifactId });
 
   return (
     <div className="space-y-5">

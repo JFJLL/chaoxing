@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth";
-import { isTeacher, requireCourseAccess } from "@/lib/permissions";
+import { isCourseManagerRecord, requireCourseAccess } from "@/lib/permissions";
 import { AiTutorWorkspace } from "@/components/course-workspace/AiTutorWorkspace";
 import { TeacherPrepWorkbench } from "@/components/course-workspace/TeacherPrepWorkbench";
 import { listTutorConversations, toTutorConversationDto } from "@/lib/courseWorkspace/aiConversation";
@@ -12,7 +12,7 @@ export default async function AiWorkbenchPage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
   const course = await requireCourseAccess(user, courseId);
-  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const canManage = isCourseManagerRecord(user, course);
 
   if (!canManage) {
     const initialTutorConversations = (await listTutorConversations(user, course.id)).map(toTutorConversationDto);

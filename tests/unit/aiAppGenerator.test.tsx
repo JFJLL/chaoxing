@@ -111,6 +111,11 @@ describe("AI artifact status presentation", () => {
     expect(getAiArtifactStatusText(state)).toBe(label);
   });
 
+  it("does not present legacy published AI courseware as student-published", () => {
+    expect(getAiArtifactStatusText({ status: "PUBLISHED", jobsAhead: null, appType: "courseware" })).toBe("内容已确认");
+    expect(getAiArtifactStatusText({ status: "PUBLISHED", jobsAhead: null, appType: "ppt_courseware" })).toBe("已发布给学生");
+  });
+
   it("renders active progress with an accessible status and hidden spinner", () => {
     const markup = render(baseArtifact);
     expect(markup).toContain("前方还有 2 个任务");
@@ -153,7 +158,7 @@ describe("AI artifact status presentation", () => {
     expect(markup).not.toContain("发布给学生");
   });
 
-  it("allows an approved lesson plan to be published", () => {
+  it("keeps an approved lesson plan internal and offers no student publication", () => {
     const markup = render({
       ...baseArtifact,
       appType: "lesson_plan",
@@ -161,7 +166,8 @@ describe("AI artifact status presentation", () => {
       jobsAhead: null,
       payload: JSON.stringify({ objectives: ["目标"], keyPoints: ["重点"], teachingProcess: [{ phase: "导入", minutes: 10, activity: "讨论" }], assessment: ["测验"] })
     }, { ...app, key: "ai-lesson-plan", appType: "lesson_plan", title: "教案", description: "生成教案" });
-    expect(markup).toContain("发布给学生");
+    expect(markup).toContain("内容已确认");
+    expect(markup).not.toContain("发布给学生");
   });
 
   it("blocks paper generation until at least three approved questions exist", () => {
@@ -248,9 +254,9 @@ describe("AI artifact status presentation", () => {
       coursewareSources: [{ id: "courseware-1", title: "第一章课件", version: 2, status: "APPROVED" }]
     });
 
-    expect(markup).toContain("直接将已有课件转换为 PPT");
-    expect(markup).toContain("不会再次调用 AI 生成内容");
-    expect(markup).toContain("生成并下载 PPT");
+    expect(markup).toContain("将已确认 AI课件生成可编辑 PPT");
+    expect(markup).toContain("上游修改不会静默覆盖当前产物");
+    expect(markup).toContain("生成PPT");
     expect(markup).not.toContain("生成要求");
     expect(markup).not.toContain("开始 AI 生成");
     expect(markup).not.toContain("内容范围");

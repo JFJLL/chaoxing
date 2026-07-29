@@ -7,7 +7,7 @@ export const MAX_AI_SOURCE_TEXT_CHARS = 6_000;
 
 const MAX_FIELD_CHARS = 600;
 const MAX_PROMPT_CHARS = 2_000;
-const MAX_IMPORTS = 3;
+const MAX_IMPORTS = 20;
 const MAX_CHAPTERS = 20;
 const MAX_LESSONS_PER_CHAPTER = 20;
 const MAX_RESOURCES = 80;
@@ -20,6 +20,11 @@ export const aiContextScopeSchema = z.discriminatedUnion("kind", [
 ]);
 
 export type AiContextScope = z.infer<typeof aiContextScopeSchema>;
+
+export type AiDocumentSourceSelection = {
+  documentId: string;
+  sectionIds: string[];
+};
 
 export class InvalidAiScopeError extends Error {
   readonly code = "INVALID_AI_SCOPE";
@@ -589,6 +594,7 @@ export async function buildCourseAiContext(input: {
   courseId: string;
   scope: AiContextScope;
   prompt?: string;
+  sourceSelections?: AiDocumentSourceSelection[];
 }): Promise<CourseAiContext> {
   const [course, imports, knowledgeMap] = await Promise.all([
     db.course.findUnique({
@@ -617,10 +623,16 @@ export async function buildCourseAiContext(input: {
       }
     }),
     db.documentImportJob.findMany({
-      where: { courseId: input.courseId, status: { in: ["READY_FOR_REVIEW", "APPLIED"] }, extractedText: { not: null } },
+      where: {
+        courseId: input.courseId,
+        deletedAt: null,
+        status: { in: ["READY_FOR_REVIEW", "APPLIED"] },
+        extractedText: { not: null },
+        ...(input.sourceSelections?.length ? { id: { in: input.sourceSelections.map((selection) => selection.documentId) } } : {})
+      },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       take: MAX_IMPORTS,
-      select: { id: true, originalName: true, extractedText: true, status: true, updatedAt: true }
+      select: { id: true, originalName: true, extractedText: true, generatedOutline: true, status: true, updatedAt: true }
     }),
     db.courseKnowledgeMap.findFirst({
       where: { courseId: input.courseId, status: { in: ["DRAFT", "PUBLISHED"] }, sourceJobId: { not: null } },
@@ -641,7 +653,26 @@ export async function buildCourseAiContext(input: {
   const data: CourseAiContextData = {
     course: { id: course.id, title: course.title, description: course.description },
     chapters: course.chapters,
-    imports: imports.map((source) => ({ ...source, extractedText: source.extractedText! })),
+    imports: imports.map((source) => {
+      const selection = input.sourceSelections?.find((item) => item.documentId === source.id);
+      let extractedText = source.extractedText!;
+      if (selection?.sectionIds.length && source.generatedOutline) {
+        try {
+          const outline = JSON.parse(source.generatedOutline) as { chapters?: Array<{ order?: number; title?: string; summary?: string; lessons?: unknown[] }> };
+          const selected = (outline.chapters ?? []).filter((chapter, index) => selection.sectionIds.includes(`chapter-${chapter.order ?? index + 1}`));
+          if (selected.length) extractedText = JSON.stringify(selected);
+        } catch {
+          throw new InvalidAiScopeError("所选资料章节无法读取，请重新选择");
+        }
+      }
+      return {
+        id: source.id,
+        originalName: source.originalName,
+        extractedText,
+        status: source.status,
+        updatedAt: source.updatedAt
+      };
+    }),
     knowledgeMap,
     resources: course.resources
   };

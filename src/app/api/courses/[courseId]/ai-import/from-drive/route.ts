@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { requireCourseDriveTarget } from "@/lib/courseDrive/service";
 import { courseDriveErrorResponse } from "@/lib/courseDrive/http";
 import { assertSupportedUpload, assertUploadSize } from "@/lib/storage";
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (!parsed.success) return NextResponse.json({ error: "请选择至少一个课程云盘文档" }, { status: 400 });
   const uniqueIds = [...new Set(parsed.data.driveFileIds)];
   try {
-    const course = await requireCourseOwner(user, courseId);
+    const course = await requireCourseManager(user, courseId);
     const files = [];
     for (const fileId of uniqueIds) {
       const target = await requireCourseDriveTarget(user, courseId, fileId);
@@ -34,6 +34,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (!target.path) return NextResponse.json({ error: `“${target.name}”缺少可读取的存储文件` }, { status: 409 });
       files.push(target);
     }
+    const batch = await db.documentImportBatch.create({
+      data: { courseId, userId: user.id, status: "PROCESSING" },
+      select: { id: true }
+    });
     const jobs: Array<{ id: string }> = [];
     for (const file of files) {
       let admission;
@@ -63,7 +67,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
             fileSize: file.size,
             mimeType: file.mimeType,
             filePath: file.path,
-            driveFileId: file.id
+            driveFileId: file.id,
+            contentHash: file.contentHash,
+            batchId: batch.id
           },
           select: { id: true }
         });
@@ -73,7 +79,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         admission.release();
       }
     }
-    return NextResponse.json({ jobs, jobIds: jobs.map((job) => job.id) }, { status: 201 });
+    return NextResponse.json({ batchId: batch.id, jobs, jobIds: jobs.map((job) => job.id) }, { status: 201 });
   } catch (error) {
     return courseDriveErrorResponse(error, "云盘文档导入失败");
   }

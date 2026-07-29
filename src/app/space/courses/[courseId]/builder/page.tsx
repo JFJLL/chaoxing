@@ -1,10 +1,9 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { ChapterTree } from "@/components/courses/ChapterTree";
 import type { CourseDirectoryNode } from "@/types/course";
-import { LinkButton } from "@/components/ui/Button";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 
 type PageProps = {
@@ -21,7 +20,7 @@ function splitList(value?: string | null) {
 export default async function CourseBuilderPage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
-  await requireCourseOwner(user, courseId);
+  await requireCourseManager(user, courseId);
 
   const course = await db.course.findUnique({
     where: { id: courseId },
@@ -61,11 +60,8 @@ export default async function CourseBuilderPage({ params }: PageProps) {
               <p className="text-sm text-slate-500">课程建设</p>
               <h1 className="mt-1 text-2xl font-semibold text-slate-900">{course.title}</h1>
             </div>
-            <LinkButton href={`/space/courses/${courseId}/ai-import`} variant="secondary">
-              AI 文档建课
-            </LinkButton>
           </header>
-          <ChapterTree courseId={courseId} initialChapters={chapters} />
+          <ChapterTree courseId={courseId} initialChapters={chapters} initialOutlineVersion={course.outlineVersion} />
         </div>
       </section>
     </FanyaCourseShell>

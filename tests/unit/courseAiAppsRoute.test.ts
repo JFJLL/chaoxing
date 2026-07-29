@@ -1,15 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
-  requireCourseOwner: vi.fn(),
+  requireCourseManager: vi.fn(),
   requireCourseAccess: vi.fn(),
-  isTeacher: vi.fn(),
+  isCourseManagerRecord: vi.fn(),
   findCourse: vi.fn(),
   countArtifacts: vi.fn(),
   createArtifact: vi.fn(),
   findArtifacts: vi.fn(),
   findSourceArtifact: vi.fn(),
   findApprovedQuestions: vi.fn(),
+  findImportDocuments: vi.fn(),
   buildContext: vi.fn(),
   generate: vi.fn(),
   generateHtml: vi.fn(),
@@ -19,9 +20,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/lib/permissions", () => ({
-  isTeacher: mocks.isTeacher,
+  isCourseManagerRecord: mocks.isCourseManagerRecord,
   requireCourseAccess: mocks.requireCourseAccess,
-  requireCourseOwner: mocks.requireCourseOwner
+  requireCourseManager: mocks.requireCourseManager
 }));
 vi.mock("@/lib/db", () => ({
   db: {
@@ -32,7 +33,8 @@ vi.mock("@/lib/db", () => ({
       findMany: mocks.findArtifacts,
       findFirst: mocks.findSourceArtifact
     },
-    courseQuestion: { findMany: mocks.findApprovedQuestions }
+    courseQuestion: { findMany: mocks.findApprovedQuestions },
+    documentImportJob: { findMany: mocks.findImportDocuments }
   }
 }));
 vi.mock("@/lib/courseWorkspace/generateAiArtifact", () => ({
@@ -62,20 +64,37 @@ function request(appType: string, body: Record<string, unknown> = {}) {
   return new Request("http://localhost/api/courses/course-1/ai-apps", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ appType, ...body })
+    body: JSON.stringify({
+      appType,
+      ...(appType === "lesson_plan" && !("sourceSelections" in body)
+        ? { sourceSelections: [{ documentId: "document-1", sectionIds: [] }] }
+        : {}),
+      ...body
+    })
   });
 }
 
 const context = { params: Promise.resolve({ courseId: "course-1" }) };
+const validContext = {
+  course: { kind: "course", id: "course-1", label: "课程：课程", title: "课程", description: null, truncated: false },
+  scope: { kind: "course", id: "course-1", label: "全课程", truncated: false },
+  outline: { kind: "outline", id: "course-outline", label: "课程结构", truncated: false, items: [] },
+  imports: { kind: "import_collection", id: "course-imports", label: "课程导入原文", truncated: false, scopeExcluded: false, items: [] },
+  knowledgeMap: null,
+  knowledgeMapScopeExcluded: false,
+  resources: { kind: "resource_collection", id: "course-resources", label: "课程资料", truncated: false, scopeExcluded: false, items: [] },
+  userPrompt: null,
+  truncated: false
+};
 
 beforeEach(() => {
   resetAiGenerationRequestGuard();
   vi.clearAllMocks();
   mocks.requireUser.mockResolvedValue({ id: "teacher-1", role: "TEACHER" });
-  mocks.requireCourseOwner.mockResolvedValue({ id: "course-1" });
+  mocks.requireCourseManager.mockResolvedValue({ id: "course-1" });
   mocks.requireCourseAccess.mockResolvedValue({ id: "course-1", ownerId: "teacher-1" });
-  mocks.isTeacher.mockImplementation((user: { role: string }) => user.role === "TEACHER" || user.role === "ADMIN");
-  mocks.findCourse.mockResolvedValue({ id: "course-1", title: "课程", chapters: [] });
+  mocks.isCourseManagerRecord.mockImplementation((user: { id: string; role: string }, course: { ownerId: string }) => user.role === "ADMIN" || course.ownerId === user.id);
+  mocks.findCourse.mockResolvedValue({ id: "course-1", title: "课程", outlineVersion: 0, chapters: [] });
   mocks.countArtifacts.mockResolvedValue(0);
   mocks.buildContext.mockResolvedValue({ course: { id: "course-1", title: "课程" }, scope: { kind: "course", id: "course-1", label: "全课程" } });
   mocks.createArtifact.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
@@ -104,6 +123,10 @@ beforeEach(() => {
   mocks.findArtifacts.mockResolvedValue([]);
   mocks.findSourceArtifact.mockResolvedValue(null);
   mocks.findApprovedQuestions.mockResolvedValue([]);
+  mocks.findImportDocuments.mockResolvedValue([{
+    id: "document-1",
+    generatedOutline: JSON.stringify({ chapters: [{ order: 1 }, { order: 2 }, { order: 3 }] })
+  }]);
 });
 
 describe("GET /api/courses/:courseId/ai-apps", () => {
@@ -409,6 +432,33 @@ describe("POST /api/courses/:courseId/ai-apps", () => {
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
+  it("queues AI courseware only from a confirmed lesson-plan snapshot and preserves its exact source version", async () => {
+    const lessonPayload = {
+      objectives: ["目标"], keyPoints: ["重点"],
+      teachingProcess: [{ phase: "导入", minutes: 10, activity: "讨论" }], assessment: ["测验"]
+    };
+    const lessonInputSnapshot = JSON.stringify({
+      appType: "lesson_plan",
+      context: validContext,
+      sourceSnapshot: { outlineVersion: 3, documents: [{ documentId: "document-1", sectionIds: ["chapter-1"] }] }
+    });
+    mocks.findSourceArtifact.mockResolvedValue({
+      id: "lesson-1", version: 4, payload: JSON.stringify(lessonPayload), inputSnapshot: lessonInputSnapshot
+    });
+
+    const response = await POST(request("courseware", { sourceArtifactId: "lesson-1" }) as never, context);
+
+    expect(response.status).toBe(202);
+    const snapshot = JSON.parse(mocks.createArtifact.mock.calls[0][0].data.inputSnapshot);
+    expect(snapshot).toEqual({
+      appType: "courseware",
+      context: validContext,
+      sourceLessonPlan: lessonPayload,
+      sourceSnapshot: { sourceArtifactId: "lesson-1", sourceArtifactVersion: 4, sourceInputSnapshot: lessonInputSnapshot }
+    });
+    expect(mocks.createArtifact.mock.calls[0][0].data.sourceArtifactId).toBe("lesson-1");
+  });
+
   it("requires sourceArtifactId only for PPT generation and retires HTML generation", async () => {
     let response = await POST(request("ppt_courseware") as never, context);
     expect(response.status).toBe(400);
@@ -483,8 +533,13 @@ describe("POST /api/courses/:courseId/ai-apps", () => {
     const response = await POST(request("lesson_plan", { scope: { kind: "chapter", chapterId: "chapter-1" }, prompt: "补充要求" }) as never, context);
 
     expect(response.status).toBe(202);
-    expect(mocks.buildContext).toHaveBeenCalledWith({ courseId: "course-1", scope: { kind: "chapter", chapterId: "chapter-1" }, prompt: "补充要求" });
-    expect(JSON.parse(mocks.createArtifact.mock.calls[0][0].data.inputSnapshot)).toEqual({ appType: "lesson_plan", context: aiContext });
+    const sourceSelections = [{ documentId: "document-1", sectionIds: [] }];
+    expect(mocks.buildContext).toHaveBeenCalledWith({ courseId: "course-1", scope: { kind: "chapter", chapterId: "chapter-1" }, prompt: "补充要求", sourceSelections });
+    expect(JSON.parse(mocks.createArtifact.mock.calls[0][0].data.inputSnapshot)).toEqual({
+      appType: "lesson_plan",
+      context: aiContext,
+      sourceSnapshot: { outlineVersion: 0, documents: sourceSelections }
+    });
     expect(mocks.generate).not.toHaveBeenCalled();
   });
 

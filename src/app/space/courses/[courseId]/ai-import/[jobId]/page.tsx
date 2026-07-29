@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { ImportProgressClient } from "@/components/ai-import/ImportProgressClient";
 import { OutlineReviewEditor } from "@/components/ai-import/OutlineReviewEditor";
 import { ImportJobManager } from "@/components/ai-import/ImportJobManager";
@@ -15,34 +15,44 @@ type PageProps = {
 export default async function AiImportReviewPage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId, jobId } = await params;
-  await requireCourseOwner(user, courseId);
+  await requireCourseManager(user, courseId);
   const job = await db.documentImportJob.findFirst({
-    where: { id: jobId, courseId },
+    where: { id: jobId, courseId, deletedAt: null },
     include: {
       course: true,
+      batch: {
+        include: {
+          documents: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: "asc" },
+            select: { id: true, originalName: true, status: true }
+          }
+        }
+      },
       knowledgeMaps: {
         orderBy: { updatedAt: "desc" },
         include: { nodes: true, edges: true }
-      },
-      aiArtifacts: {
-        where: { appType: "html_courseware" },
-        orderBy: { createdAt: "desc" }
       }
     }
   });
 
   if (!job) notFound();
-  const outline = job.generatedOutline ? (JSON.parse(job.generatedOutline) as GeneratedCourseOutline) : null;
+  const storedOutline = job.batch?.generatedOutline ?? job.generatedOutline;
+  const outline = storedOutline ? (JSON.parse(storedOutline) as GeneratedCourseOutline) : null;
   const latestMap = job.knowledgeMaps[0];
-  const latestHtmlArtifact = job.aiArtifacts[0];
 
   return (
     <FanyaCourseShell user={user} course={job.course} activeTab="ai-workbench">
       <section className="rounded-[28px] bg-white p-6 shadow-sm lg:p-8">
         <div className="space-y-6">
           <header className="border-b border-[var(--cx-border)] pb-5">
-            <h1 className="text-2xl font-semibold text-slate-900">AI文档建课</h1>
-            <p className="mt-1 text-sm text-slate-500">{job.originalName}</p>
+            <h1 className="text-2xl font-semibold text-slate-900">审核综合课程目录</h1>
+            <p className="mt-1 text-sm text-slate-500">本批次会把多份资料综合成一份目录，每份资料仍保留独立章节与知识图谱。</p>
+            <ul className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+              {(job.batch?.documents ?? [{ id: job.id, originalName: job.originalName, status: job.status }]).map((document) => (
+                <li key={document.id} className="rounded-full bg-slate-100 px-3 py-1">资料：{document.originalName} · {document.status}</li>
+              ))}
+            </ul>
           </header>
           <ImportProgressClient
             jobId={job.id}
@@ -70,19 +80,18 @@ export default async function AiImportReviewPage({ params }: PageProps) {
                   }
                 : null
             }
-            htmlArtifact={
-              latestHtmlArtifact
-                ? {
-                    id: latestHtmlArtifact.id,
-                    title: latestHtmlArtifact.title,
-                    status: latestHtmlArtifact.status,
-                    createdAt: latestHtmlArtifact.createdAt.toISOString(),
-                    publishedAt: latestHtmlArtifact.publishedAt?.toISOString() ?? null
-                  }
-                : null
-            }
           />
-          {outline ? <OutlineReviewEditor jobId={job.id} courseId={courseId} initialOutline={outline} /> : null}
+          {outline && job.status !== "APPLIED" && job.batch?.status !== "APPLIED" ? (
+            <OutlineReviewEditor
+              jobId={job.id}
+              courseId={courseId}
+              initialOutline={outline}
+              initialOutlineVersion={job.course.outlineVersion}
+            />
+          ) : null}
+          {job.status === "APPLIED" || job.batch?.status === "APPLIED" ? (
+            <p id="outline-review" className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">课程目录已保存。目录现为只读状态，请前往课程目录查看；需要调整时点击右上角“编辑”。</p>
+          ) : null}
         </div>
       </section>
     </FanyaCourseShell>

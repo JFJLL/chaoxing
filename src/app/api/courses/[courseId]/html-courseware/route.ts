@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseAccess, requireCourseOwner } from "@/lib/permissions";
+import { requireCourseAccess, requireCourseManager } from "@/lib/permissions";
 import { htmlCoursewarePayloadSchema } from "@/types/courseWorkspace";
 
 type RouteContext = {
@@ -58,7 +58,7 @@ export async function POST(_request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
   try {
-    await requireCourseOwner(user, courseId);
+    await requireCourseManager(user, courseId);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }

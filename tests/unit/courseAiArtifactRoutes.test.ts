@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
   requireCourseAccess: vi.fn(),
-  requireCourseOwner: vi.fn(),
+  requireCourseManager: vi.fn(),
   findFirst: vi.fn(),
   updateMany: vi.fn(),
   recover: vi.fn(),
@@ -14,9 +14,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/lib/permissions", () => ({
-  isTeacher: (user: { role: string }) => user.role === "TEACHER" || user.role === "ADMIN",
+  isCourseManagerRecord: (user: { id: string; role: string }, course: { ownerId: string; collaborators?: Array<{ userId: string }> }) => user.role === "ADMIN" || course.ownerId === user.id || Boolean(course.collaborators?.some((item) => item.userId === user.id)),
   requireCourseAccess: mocks.requireCourseAccess,
-  requireCourseOwner: mocks.requireCourseOwner
+  requireCourseManager: mocks.requireCourseManager
 }));
 vi.mock("@/lib/db", () => ({
   db: {
@@ -88,7 +88,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireUser.mockResolvedValue({ id: "teacher-1", role: "TEACHER" });
   mocks.requireCourseAccess.mockResolvedValue({ id: "course-1", ownerId: "teacher-1" });
-  mocks.requireCourseOwner.mockResolvedValue({ id: "course-1", ownerId: "teacher-1" });
+  mocks.requireCourseManager.mockResolvedValue({ id: "course-1", ownerId: "teacher-1" });
   mocks.findFirst.mockResolvedValue(artifact);
   mocks.updateMany.mockResolvedValue({ count: 1 });
   mocks.recover.mockResolvedValue(0);
@@ -158,7 +158,7 @@ describe("POST /api/courses/:courseId/ai-artifacts/:artifactId/retry", () => {
     const body = await response.json();
 
     expect(response.status).toBe(202);
-    expect(mocks.requireCourseOwner).toHaveBeenCalledWith(expect.objectContaining({ id: "teacher-1" }), "course-1");
+    expect(mocks.requireCourseManager).toHaveBeenCalledWith(expect.objectContaining({ id: "teacher-1" }), "course-1");
     expect(mocks.updateMany).toHaveBeenCalledWith({
       where: { id: "artifact-1", courseId: "course-1", status: "FAILED" },
       data: {

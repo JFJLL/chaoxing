@@ -86,52 +86,47 @@ type UploadCourseDocumentOptions = {
   request?: typeof fetch;
 };
 
+type UploadCourseDocumentsOptions = {
+  courseId: string;
+  files: File[];
+  request?: typeof fetch;
+};
+
+export async function uploadCourseDocuments({
+  courseId,
+  files,
+  request = fetch
+}: UploadCourseDocumentsOptions) {
+  if (!files.length) throw new Error(UPLOAD_ERROR_MESSAGE);
+  const formData = new FormData();
+  for (const file of files) formData.append("files", file);
+
+  let response: Response;
+  try {
+    response = await request(`/api/courses/${courseId}/ai-import`, { method: "POST", body: formData });
+  } catch {
+    throw new Error(UPLOAD_ERROR_MESSAGE);
+  }
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const backendError = typeof body === "object" && body !== null && "error" in body
+      && typeof body.error === "string" && body.error ? body.error : UPLOAD_ERROR_MESSAGE;
+    throw new Error(backendError);
+  }
+  if (!body || typeof body !== "object") throw new Error(UPLOAD_ERROR_MESSAGE);
+  const jobIds = "jobIds" in body && Array.isArray(body.jobIds)
+    ? body.jobIds.filter((id): id is string => typeof id === "string" && Boolean(id))
+    : "jobId" in body && typeof body.jobId === "string" && body.jobId ? [body.jobId] : [];
+  const batchId = "batchId" in body && typeof body.batchId === "string" ? body.batchId : null;
+  if (!jobIds.length) throw new Error(UPLOAD_ERROR_MESSAGE);
+  return { batchId, jobIds };
+}
+
 export async function uploadCourseDocument({
   courseId,
   file,
   request = fetch
 }: UploadCourseDocumentOptions) {
-  const formData = new FormData();
-  formData.set("file", file);
-
-  let response: Response;
-  try {
-    response = await request(`/api/courses/${courseId}/ai-import`, {
-      method: "POST",
-      body: formData
-    });
-  } catch {
-    throw new Error(UPLOAD_ERROR_MESSAGE);
-  }
-
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    throw new Error(UPLOAD_ERROR_MESSAGE);
-  }
-
-  if (!response.ok) {
-    const backendError =
-      typeof body === "object" &&
-      body !== null &&
-      "error" in body &&
-      typeof body.error === "string" &&
-      body.error
-        ? body.error
-        : UPLOAD_ERROR_MESSAGE;
-    throw new Error(backendError);
-  }
-
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    !("jobId" in body) ||
-    typeof body.jobId !== "string" ||
-    !body.jobId
-  ) {
-    throw new Error(UPLOAD_ERROR_MESSAGE);
-  }
-
-  return body.jobId;
+  const result = await uploadCourseDocuments({ courseId, files: [file], request });
+  return result.jobIds[0]!;
 }

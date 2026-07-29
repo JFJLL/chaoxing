@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { enqueueImportJob } from "@/lib/imports/importQueue";
 
 type RouteContext = {
@@ -16,7 +16,7 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "导入任务不存在" }, { status: 404 });
   }
   try {
-    await requireCourseOwner(user, job.courseId);
+    await requireCourseManager(user, job.courseId);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }

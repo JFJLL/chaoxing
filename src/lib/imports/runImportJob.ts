@@ -4,6 +4,7 @@ import { generateCourseOutline } from "@/lib/ai/generateCourseOutline";
 import { createKnowledgeMapDraft } from "@/lib/knowledgeMap/generateKnowledgeMap";
 import { withImportFilePath } from "@/lib/storage";
 import { withDriveFilePath } from "@/lib/modules/driveFiles";
+import { finalizeImportBatch } from "@/lib/imports/importBatch";
 
 export async function runImportJob(jobId: string) {
   const job = await db.documentImportJob.findUnique({ where: { id: jobId }, include: { driveFile: true } });
@@ -24,6 +25,7 @@ export async function runImportJob(jobId: string) {
       where: { id: jobId },
       data: {
         extractedText: extracted.text,
+        parsedSections: JSON.stringify(extracted.chunks),
         status: "STRUCTURING",
         currentStage: "课程结构生成"
       }
@@ -46,6 +48,7 @@ export async function runImportJob(jobId: string) {
         currentStage: "知识图谱生成"
       }
     });
+    if (job.batchId) await finalizeImportBatch(job.batchId);
     await createKnowledgeMapDraft({
       courseId: job.courseId,
       sourceJobId: job.id,
@@ -71,6 +74,12 @@ export async function runImportJob(jobId: string) {
         errorMessage: error instanceof Error ? error.message : "导入任务失败"
       }
     });
+    if (job.batchId) {
+      await db.documentImportBatch.updateMany({
+        where: { id: job.batchId, status: { notIn: ["APPLIED", "READY_FOR_REVIEW"] } },
+        data: { status: "FAILED" }
+      });
+    }
     throw error;
   }
 }

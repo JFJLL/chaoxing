@@ -224,6 +224,11 @@ export async function createKnowledgeMapDraft({
   tx?: Prisma.TransactionClient | typeof db;
 }) {
   const draft = buildKnowledgeMapDraft(outline);
+  const latest = sourceJobId ? await tx.courseKnowledgeMap.findFirst({
+    where: { courseId, sourceJobId },
+    orderBy: { version: "desc" },
+    select: { version: true }
+  }) : null;
   const map = await tx.courseKnowledgeMap.create({
     data: {
       courseId,
@@ -231,7 +236,7 @@ export async function createKnowledgeMapDraft({
       title: `${outline.title} 知识图谱`,
       summary: outline.description,
       status: "DRAFT",
-      version: 1
+      version: (latest?.version ?? 0) + 1
     }
   });
 

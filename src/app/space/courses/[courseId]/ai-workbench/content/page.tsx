@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/auth";
-import { requireCourseOwner } from "@/lib/permissions";
-import { UploadPanel } from "@/components/ai-import/UploadPanel";
+import { requireCourseManager } from "@/lib/permissions";
+import { CourseDocumentImportSources } from "@/components/ai-import/CourseDocumentImportSources";
 import { RecentImports } from "@/components/ai-import/RecentImports";
 import { PrepWorkflowNavigation } from "@/components/course-workspace/PrepWorkflowNavigation";
 
@@ -10,7 +10,7 @@ type PageProps = {
 
 export default async function AiWorkbenchContentPage({ params }: PageProps) {
   const [user, { courseId }] = await Promise.all([requireUser(), params]);
-  const course = await requireCourseOwner(user, courseId);
+  const course = await requireCourseManager(user, courseId);
   const recentImports = await RecentImports({ courseId });
 
   return (
@@ -27,7 +27,7 @@ export default async function AiWorkbenchContentPage({ params }: PageProps) {
           <h2 className="font-semibold text-blue-950">一次导入，形成完整课程上下文</h2>
           <p className="mt-1 text-sm leading-6 text-blue-800">系统会提炼课程目标、章节课时和知识关系；确认后可直接用于生成教案、题目和课件。</p>
         </section>
-        <UploadPanel courseId={courseId} />
+        <CourseDocumentImportSources courseId={courseId} />
         {recentImports}
       </div>
     </section>

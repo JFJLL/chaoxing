@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
-  requireCourseOwner: vi.fn(),
+  requireCourseManager: vi.fn(),
   publishArtifact: vi.fn(),
   createStore: vi.fn()
 }));
 
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
-vi.mock("@/lib/permissions", () => ({ requireCourseOwner: mocks.requireCourseOwner }));
+vi.mock("@/lib/permissions", () => ({ requireCourseManager: mocks.requireCourseManager }));
 vi.mock("@/lib/courseWorkspace/prismaArtifactStores", () => ({
   createPrismaArtifactWorkflowStore: mocks.createStore
 }));
@@ -32,7 +32,7 @@ const artifact = {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireUser.mockResolvedValue({ id: "teacher-1", role: "TEACHER" });
-  mocks.requireCourseOwner.mockResolvedValue({ id: "course-1" });
+  mocks.requireCourseManager.mockResolvedValue({ id: "course-1" });
   mocks.createStore.mockReturnValue({ transaction: vi.fn() });
   mocks.publishArtifact.mockResolvedValue(artifact);
 });
@@ -49,7 +49,7 @@ describe("POST artifact publish", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mocks.requireCourseOwner).toHaveBeenCalledWith(expect.objectContaining({ id: "teacher-1" }), "course-1");
+    expect(mocks.requireCourseManager).toHaveBeenCalledWith(expect.objectContaining({ id: "teacher-1" }), "course-1");
     expect(mocks.publishArtifact).toHaveBeenCalledWith(expect.any(Object), {
       courseId: "course-1", artifactId: "artifact-1", expectedLockVersion: 6
     });
@@ -69,7 +69,7 @@ describe("POST artifact publish", () => {
   });
 
   it("does not call the workflow when ownership fails", async () => {
-    mocks.requireCourseOwner.mockRejectedValue(new Error("无权管理课程"));
+    mocks.requireCourseManager.mockRejectedValue(new Error("无权管理课程"));
     const response = await POST(publishRequest(), context);
     expect(response.status).toBe(403);
     expect(mocks.publishArtifact).not.toHaveBeenCalled();

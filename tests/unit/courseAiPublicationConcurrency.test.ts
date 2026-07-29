@@ -36,8 +36,8 @@ describe("AI artifact publication SQLite invariant", () => {
     const seriesId = `publish-series-${suffix}`;
     const artifacts = await Promise.all([1, 2].map((version) => firstClient.courseAiArtifact.create({
       data: {
-        seriesId, courseId: course.id, userId: user.id, appType: "paper_assembly",
-        title: `试卷 v${version}`, payload: JSON.stringify({ title: "试卷", sections: [] }),
+        seriesId, courseId: course.id, userId: user.id, appType: "ppt_courseware",
+        title: `PPT v${version}`, payload: JSON.stringify({ slides: [{ title: "正文", bullets: ["要点"], speakerNotes: "备注" }] }),
         status: "APPROVED", version
       }
     })));

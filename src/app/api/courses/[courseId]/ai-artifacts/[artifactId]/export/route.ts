@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { CourseDriveError, ensureCoursePurposeFolder } from "@/lib/courseDrive/service";
 import type { CourseDrivePurpose } from "@/lib/courseDrive/constants";
 import {
@@ -312,7 +312,7 @@ export async function POST(request: Request, context: RouteContext) {
   const { courseId, artifactId } = await context.params;
   let course;
   try {
-    course = await requireCourseOwner(user, courseId);
+    course = await requireCourseManager(user, courseId);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }

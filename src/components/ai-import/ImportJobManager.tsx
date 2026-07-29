@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Network, PlaySquare, RefreshCw, Trash2 } from "lucide-react";
-import { Button, LinkButton } from "@/components/ui/Button";
+import { Network, RefreshCw, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 
 type KnowledgeMapSummary = {
   id: string;
@@ -14,26 +14,16 @@ type KnowledgeMapSummary = {
   edges: Array<{ id: string; type: string }>;
 };
 
-type HtmlArtifactSummary = {
-  id: string;
-  title: string;
-  status: string;
-  createdAt: string;
-  publishedAt: string | null;
-};
-
 export function ImportJobManager({
   courseId,
   jobId,
   status,
-  map,
-  htmlArtifact
+  map
 }: {
   courseId: string;
   jobId: string;
   status: string;
   map: KnowledgeMapSummary | null;
-  htmlArtifact: HtmlArtifactSummary | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
@@ -57,7 +47,7 @@ export function ImportJobManager({
   }
 
   function removeJob() {
-    if (!window.confirm("删除后会同步移除该任务生成的知识图谱；已发布课件保留。确认删除？")) return;
+    if (!window.confirm("删除记录不会删除课程云盘原文件，也不会回滚已保存的课程目录。确认删除？")) return;
     void action("delete", `/api/ai-import/${jobId}`, { method: "DELETE" }, () => {
       router.replace(`/space/courses/${courseId}/ai-workbench/content`);
       router.refresh();
@@ -106,47 +96,11 @@ export function ImportJobManager({
               <Network className="h-4 w-4" />
               {map.status === "PUBLISHED" ? "导图已发布" : "发布导图"}
             </Button>
-            <LinkButton href={`/space/courses/${courseId}/ai-workbench/apps/courseware`} variant="secondary">
-              编辑 AI 课件
-            </LinkButton>
-            <LinkButton href={`/space/courses/${courseId}/ai-workbench/apps/ppt_courseware`}>
-              <PlaySquare className="h-4 w-4" />
-              前往 PPT 课件
-            </LinkButton>
           </div>
         </div>
       ) : (
         <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-500">任务完成后会在这里出现知识图谱草稿。</p>
       )}
-
-      {htmlArtifact ? (
-        <div className="grid gap-3 rounded-md bg-slate-50 p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
-          <div>
-            <div className="flex items-center gap-2">
-              <PlaySquare className="h-4 w-4 text-blue-600" />
-              <h3 className="font-medium text-slate-900">{htmlArtifact.title}</h3>
-              <span className="rounded-full bg-white px-2 py-0.5 text-xs text-slate-500">{htmlArtifact.status === "PUBLISHED" ? "已发布" : "草稿"}</span>
-            </div>
-            <p className="mt-2 text-sm text-slate-600">HTML 课件生成后可独立发布，学生只会看到已发布版本。</p>
-          </div>
-          <div className="flex flex-wrap items-start gap-2 lg:justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => action("publish-html", `/api/courses/${courseId}/ai-artifacts/${htmlArtifact.id}/publish`, { method: "POST" })}
-              disabled={busy === "publish-html" || htmlArtifact.status === "PUBLISHED"}
-            >
-              <PlaySquare className="h-4 w-4" />
-              {htmlArtifact.status === "PUBLISHED" ? "课件已发布" : "发布课件"}
-            </Button>
-            {htmlArtifact.status === "PUBLISHED" ? (
-              <LinkButton href={`/space/courses/${courseId}/html-courseware`} variant="secondary">
-                播放课件
-              </LinkButton>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
 
       {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
     </section>

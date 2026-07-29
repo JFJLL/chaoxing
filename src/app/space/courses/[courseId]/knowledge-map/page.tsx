@@ -5,20 +5,31 @@ import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell
 import { KnowledgeMapGraph } from "@/components/course-workspace/KnowledgeMapGraph";
 import { PrepWorkflowNavigation } from "@/components/course-workspace/PrepWorkflowNavigation";
 
-type PageProps = { params: Promise<{ courseId: string }> };
+type PageProps = {
+  params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ sourceJobId?: string; version?: string }>;
+};
 
-export default async function KnowledgeMapPage({ params }: PageProps) {
+export default async function KnowledgeMapPage({ params, searchParams }: PageProps) {
   const user = await requireUser();
-  const { courseId } = await params;
+  const [{ courseId }, query] = await Promise.all([params, searchParams]);
   const course = await requireCourseAccess(user, courseId);
-  const map = await db.courseKnowledgeMap.findFirst({
+  const maps = await db.courseKnowledgeMap.findMany({
     where: { courseId, status: "PUBLISHED", sourceJobId: { not: null } },
-    orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
+    orderBy: [{ publishedAt: "desc" }, { version: "desc" }],
     include: {
+      sourceJob: { select: { id: true, originalName: true } },
       nodes: { orderBy: [{ type: "asc" }, { order: "asc" }, { createdAt: "asc" }] },
       edges: { orderBy: { createdAt: "asc" } }
     }
   });
+  const sourceJobId = maps.some((item) => item.sourceJobId === query.sourceJobId)
+    ? query.sourceJobId!
+    : maps[0]?.sourceJobId;
+  const sourceMaps = maps.filter((item) => item.sourceJobId === sourceJobId);
+  const requestedVersion = Number(query.version);
+  const map = sourceMaps.find((item) => item.version === requestedVersion) ?? sourceMaps[0] ?? null;
+  const sources = [...new Map(maps.flatMap((item) => item.sourceJob ? [[item.sourceJob.id, item.sourceJob]] : [])).values()];
   const relationLabels: Record<string, string> = {
     outcome: "目标关系",
     contains: "结构关系",
@@ -48,6 +59,13 @@ export default async function KnowledgeMapPage({ params }: PageProps) {
           </div>
           <PrepWorkflowNavigation courseId={course.id} workflow="content" active="knowledge-map" />
         </header>
+        {sources.length ? (
+          <form className="mt-5 flex flex-wrap items-end gap-3" method="GET">
+            <label className="space-y-1 text-sm font-medium text-slate-700"><span className="block">资料</span><select name="sourceJobId" defaultValue={sourceJobId ?? undefined} className="h-10 rounded-xl border border-slate-200 bg-white px-3 font-normal">{sources.map((source) => <option key={source.id} value={source.id}>{source.originalName}</option>)}</select></label>
+            <label className="space-y-1 text-sm font-medium text-slate-700"><span className="block">已发布版本</span><select name="version" defaultValue={map?.version} className="h-10 rounded-xl border border-slate-200 bg-white px-3 font-normal">{sourceMaps.map((item) => <option key={item.id} value={item.version}>v{item.version} · {item.publishedAt?.toLocaleString("zh-CN", { hour12: false, timeZone: "Asia/Shanghai" })}</option>)}</select></label>
+            <button type="submit" className="h-10 rounded-xl bg-[var(--cx-blue)] px-4 text-sm font-medium text-white">切换图谱</button>
+          </form>
+        ) : null}
         {!map ? (
           <p className="mt-5 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">暂无已发布知识图谱。</p>
         ) : (

@@ -122,5 +122,33 @@ describe("AI artifact export generators", () => {
     expect(slide4Xml).toContain("课程概览");
     expect(clonedSlideXml).toContain("案例分析");
     expect(clonedSlideXml).not.toContain("输入标题");
+    for (const xml of [slide4Xml, clonedSlideXml]) {
+      const visible = [...(xml ?? "").matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((match) => match[1]?.trim()).filter(Boolean);
+      expect(visible.length).toBeGreaterThanOrEqual(2);
+      expect(visible.some((value) => value?.startsWith("输入内文"))).toBe(false);
+    }
+  });
+
+  it("finds a semantic body placeholder page instead of assuming physical slide 4", async () => {
+    const templatePath = process.env.PPT_COURSEWARE_TEMPLATE_PATH ?? resolve("templates", "courseware-template.pptx");
+    const template = await JSZip.loadAsync(await readFile(templatePath));
+    const slide4 = await template.file("ppt/slides/slide4.xml")?.async("string");
+    expect(slide4).toBeTruthy();
+    template.file("ppt/slides/slide4.xml", slide4!.replace(/输入标题/g, "旧版占位"));
+    const modifiedTemplate = await template.generateAsync({ type: "nodebuffer" });
+
+    const buffer = await generateArtifactPptx({
+      templateBytes: modifiedTemplate,
+      title: "语义占位验收",
+      courseTitle: "课程",
+      payload: { slides: [{ title: "稳定正文", bullets: ["可见要点一", "可见要点二", "可见要点三"], speakerNotes: "备注" }] }
+    });
+    const output = await JSZip.loadAsync(buffer);
+    const presentation = await output.file("ppt/presentation.xml")?.async("string");
+    const relationships = await output.file("ppt/_rels/presentation.xml.rels")?.async("string");
+    const slide5Relationship = relationships?.match(/<Relationship\b[^>]*Id="([^"]+)"[^>]*Target="slides\/slide5\.xml"/)?.[1];
+    expect(slide5Relationship).toBeTruthy();
+    expect(presentation).toContain(`r:id="${slide5Relationship}"`);
+    expect(await output.file("ppt/slides/slide5.xml")?.async("string")).toContain("稳定正文");
   });
 });

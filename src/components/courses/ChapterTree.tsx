@@ -34,10 +34,13 @@ function reorderChapters(chapters: CourseDirectoryNode[]) {
 type ChapterTreeProps = {
   courseId: string;
   initialChapters: CourseDirectoryNode[];
+  initialOutlineVersion: number;
 };
 
-export function ChapterTree({ courseId, initialChapters }: ChapterTreeProps) {
+export function ChapterTree({ courseId, initialChapters, initialOutlineVersion }: ChapterTreeProps) {
   const [chapters, setChapters] = useState<CourseDirectoryNode[]>(initialChapters);
+  const [outlineVersion, setOutlineVersion] = useState(initialOutlineVersion);
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -134,10 +137,17 @@ export function ChapterTree({ courseId, initialChapters }: ChapterTreeProps) {
     const response = await fetch(`/api/courses/${courseId}/outline`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chapters: reorderChapters(chapters) })
+      body: JSON.stringify({ chapters: reorderChapters(chapters), expectedOutlineVersion: outlineVersion })
     });
     setSaving(false);
-    setMessage(response.ok ? "已保存" : "保存失败");
+    const body = (await response.json().catch(() => null)) as { error?: string; outlineVersion?: number } | null;
+    if (!response.ok) {
+      setMessage(body?.error ?? "保存失败");
+      return;
+    }
+    if (typeof body?.outlineVersion === "number") setOutlineVersion(body.outlineVersion);
+    setEditing(false);
+    setMessage("已保存修改");
   }
 
   return (
@@ -145,18 +155,14 @@ export function ChapterTree({ courseId, initialChapters }: ChapterTreeProps) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">课程目录</h2>
-          <p className="text-sm text-slate-500">编辑章、课时和任务点说明，保存后立即持久化。</p>
+          <p className="text-sm text-slate-500">目录默认只读；编辑保存时会校验版本，避免覆盖其他教师的修改。</p>
         </div>
-        <div className="flex gap-2">
-          <Button type="button" variant="secondary" onClick={addChapter}>
-            <Plus className="h-4 w-4" />
-            新增章节
-          </Button>
-          <Button type="button" onClick={save} disabled={saving}>
-            <Save className="h-4 w-4" />
-            {saving ? "保存中" : "保存目录"}
-          </Button>
-        </div>
+        {editing ? (
+          <div className="flex gap-2">
+            <Button type="button" variant="secondary" onClick={addChapter}><Plus className="h-4 w-4" />新增章节</Button>
+            <Button type="button" onClick={save} disabled={saving}><Save className="h-4 w-4" />{saving ? "保存中" : "保存修改"}</Button>
+          </div>
+        ) : <Button type="button" onClick={() => setEditing(true)}>编辑</Button>}
       </div>
       {message ? <p className="text-sm text-slate-500">{message}</p> : null}
       <div className="space-y-4">
@@ -164,10 +170,10 @@ export function ChapterTree({ courseId, initialChapters }: ChapterTreeProps) {
           <section key={chapter.id} className="rounded-md border border-[var(--cx-border)] bg-slate-50 p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
               <div className="grid flex-1 gap-3 md:grid-cols-[1fr_2fr]">
-                <Input value={chapter.title} onChange={(event) => updateChapter(chapterIndex, { title: event.target.value })} />
-                <Input value={chapter.summary} onChange={(event) => updateChapter(chapterIndex, { summary: event.target.value })} placeholder="章节简介" />
+                <Input disabled={!editing} value={chapter.title} onChange={(event) => updateChapter(chapterIndex, { title: event.target.value })} />
+                <Input disabled={!editing} value={chapter.summary} onChange={(event) => updateChapter(chapterIndex, { summary: event.target.value })} placeholder="章节简介" />
               </div>
-              <div className="flex gap-1">
+              {editing ? <div className="flex gap-1">
                 <Button type="button" variant="ghost" className="h-9 w-9 px-0" onClick={() => moveChapter(chapterIndex, -1)} aria-label="章节上移">
                   <ArrowUp className="h-4 w-4" />
                 </Button>
@@ -177,22 +183,23 @@ export function ChapterTree({ courseId, initialChapters }: ChapterTreeProps) {
                 <Button type="button" variant="ghost" className="h-9 w-9 px-0" onClick={() => removeChapter(chapterIndex)} aria-label="删除章节">
                   <Trash2 className="h-4 w-4" />
                 </Button>
-              </div>
+              </div> : null}
             </div>
             <div className="mt-4 space-y-3">
               {chapter.lessons.map((lesson, lessonIndex) => (
                 <div key={lesson.id} className="rounded-md border border-white bg-white p-3">
                   <div className="grid gap-3 lg:grid-cols-[1fr_2fr_110px_auto]">
-                    <Input value={lesson.title} onChange={(event) => updateLesson(chapterIndex, lessonIndex, { title: event.target.value })} />
-                    <Input value={lesson.summary} onChange={(event) => updateLesson(chapterIndex, lessonIndex, { summary: event.target.value })} placeholder="课时简介" />
+                    <Input disabled={!editing} value={lesson.title} onChange={(event) => updateLesson(chapterIndex, lessonIndex, { title: event.target.value })} />
+                    <Input disabled={!editing} value={lesson.summary} onChange={(event) => updateLesson(chapterIndex, lessonIndex, { summary: event.target.value })} placeholder="课时简介" />
                     <Input
+                      disabled={!editing}
                       type="number"
                       min={1}
                       value={lesson.estimatedMinutes}
                       onChange={(event) => updateLesson(chapterIndex, lessonIndex, { estimatedMinutes: Number(event.target.value) || 30 })}
                       aria-label="预计分钟"
                     />
-                    <div className="flex gap-1">
+                    {editing ? <div className="flex gap-1">
                       <Button type="button" variant="ghost" className="h-9 w-9 px-0" onClick={() => moveLesson(chapterIndex, lessonIndex, -1)} aria-label="课时上移">
                         <ArrowUp className="h-4 w-4" />
                       </Button>
@@ -202,9 +209,10 @@ export function ChapterTree({ courseId, initialChapters }: ChapterTreeProps) {
                       <Button type="button" variant="ghost" className="h-9 w-9 px-0" onClick={() => removeLesson(chapterIndex, lessonIndex)} aria-label="删除课时">
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    </div>
+                    </div> : null}
                   </div>
                   <Textarea
+                    disabled={!editing}
                     className="mt-3 w-full"
                     value={lesson.keyPoints.join("\n")}
                     onChange={(event) =>
@@ -216,10 +224,10 @@ export function ChapterTree({ courseId, initialChapters }: ChapterTreeProps) {
                   />
                 </div>
               ))}
-              <Button type="button" variant="secondary" className="h-9" onClick={() => addLesson(chapterIndex)}>
+              {editing ? <Button type="button" variant="secondary" className="h-9" onClick={() => addLesson(chapterIndex)}>
                 <Plus className="h-4 w-4" />
                 新增课时
-              </Button>
+              </Button> : null}
             </div>
           </section>
         ))}

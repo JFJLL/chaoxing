@@ -63,12 +63,7 @@ const defaultOptions: GeneratorOptions = {
 };
 
 const publishableAppTypes = new Set<CourseAiAppType>([
-  "question_generation",
-  "lesson_plan",
-  "courseware",
-  "paper_assembly",
-  "ppt_courseware",
-  "html_courseware"
+  "ppt_courseware"
 ]);
 
 const statusLabels: Record<Exclude<AiArtifactStatus, "QUEUED">, string> = {
@@ -80,7 +75,8 @@ const statusLabels: Record<Exclude<AiArtifactStatus, "QUEUED">, string> = {
   ARCHIVED: "历史版本"
 };
 
-export function getAiArtifactStatusText(artifact: Pick<ManagerAiArtifactDto, "status" | "jobsAhead">) {
+export function getAiArtifactStatusText(artifact: Pick<ManagerAiArtifactDto, "status" | "jobsAhead"> & { appType?: CourseAiAppType }) {
+  if (artifact.status === "PUBLISHED" && artifact.appType && !publishableAppTypes.has(artifact.appType)) return "内容已确认";
   if (artifact.status !== "QUEUED") return statusLabels[artifact.status];
   if (artifact.jobsAhead === null) return "等待系统处理";
   if (artifact.jobsAhead === 0) return "即将开始生成";
@@ -149,6 +145,8 @@ export function AiAppGenerator({
   chapters,
   approvedQuestions,
   coursewareSources,
+  documentSources = [],
+  preferredSourceId,
   initialArtifacts,
   hasCourseContent = true
 }: {
@@ -157,6 +155,8 @@ export function AiAppGenerator({
   chapters: Array<{ id: string; title: string }>;
   approvedQuestions: Array<{ id: string; stem: string }>;
   coursewareSources: Array<{ id: string; title: string; version: number; status: string }>;
+  documentSources?: Array<{ id: string; title: string; sections: Array<{ id: string; title: string }> }>;
+  preferredSourceId?: string;
   initialArtifacts: ManagerAiArtifactDto[];
   hasCourseContent?: boolean;
 }) {
@@ -169,10 +169,13 @@ export function AiAppGenerator({
   const [error, setError] = useState("");
   const [pollError, setPollError] = useState("");
   const [editorDirty, setEditorDirty] = useState(false);
-  const [editingId, setEditingId] = useState("");
+  const [editingId, setEditingId] = useState(app.appType === "ppt_courseware" ? initialArtifacts[0]?.id ?? "" : "");
   const [deletingId, setDeletingId] = useState("");
   const [exportingId, setExportingId] = useState("");
-  const [sourceArtifactId, setSourceArtifactId] = useState(coursewareSources[0]?.id ?? "");
+  const [sourceArtifactId, setSourceArtifactId] = useState(
+    coursewareSources.some((source) => source.id === preferredSourceId) ? preferredSourceId! : coursewareSources[0]?.id ?? ""
+  );
+  const [sourceSelections, setSourceSelections] = useState<Record<string, string[]>>({});
   const actionLock = useRef(false);
 
   const selected = useMemo(
@@ -217,12 +220,37 @@ export function AiAppGenerator({
     setOptions((current) => ({ ...current, [key]: value }));
   }
 
+  function toggleDocument(documentId: string) {
+    setSourceSelections((current) => {
+      const next = { ...current };
+      if (documentId in next) delete next[documentId];
+      else next[documentId] = [];
+      return next;
+    });
+  }
+
+  function toggleDocumentSection(documentId: string, sectionId: string, allSectionIds: string[]) {
+    setSourceSelections((current) => {
+      const selected = current[documentId];
+      const next = { ...current };
+      if (selected === undefined) next[documentId] = [sectionId];
+      else if (selected.length === 0) next[documentId] = allSectionIds.filter((id) => id !== sectionId);
+      else {
+        const updated = selected.includes(sectionId) ? selected.filter((id) => id !== sectionId) : [...selected, sectionId];
+        if (!updated.length) delete next[documentId];
+        else if (updated.length === allSectionIds.length) next[documentId] = [];
+        else next[documentId] = updated;
+      }
+      return next;
+    });
+  }
+
   function structuredPrompt() {
     if (app.appType === "ppt_courseware") return "将已确认的 AI课件直接套用课程模板并导出为 PPTX";
     const common = [`范围：${chapterTitle}`, `难度：${options.difficulty}`];
     if (app.appType === "question_generation") return [...common, `题型：${options.questionType}`, `题量：${options.questionCount}`, `补充要求：${prompt || "无"}`].join("；");
     if (app.appType === "lesson_plan") return [...common, `课时：${options.lessonMinutes}`, `教法：${options.teachingMethod}`, `补充要求：${prompt || "无"}`].join("；");
-    if (app.appType === "courseware") return [...common, `页数：${options.slideCount}`, `风格：${options.coursewareStyle}`, `补充要求：${prompt || "无"}`].join("；");
+    if (app.appType === "courseware") return [`来源教案：${coursewareSources.find((item) => item.id === sourceArtifactId)?.title ?? "未选择"}`, `页数：${options.slideCount}`, `风格：${options.coursewareStyle}`, `补充要求：${prompt || "无"}`].join("；");
     return [...common, `总分：${options.paperScore}`, `补充要求：${prompt || "无"}`].join("；");
   }
 
@@ -251,15 +279,15 @@ export function AiAppGenerator({
         prompt: structuredPrompt(),
         title: defaultTitle(),
         scope: options.chapterId ? { kind: "chapter", chapterId: options.chapterId } : { kind: "course" },
-        ...(app.appType === "ppt_courseware" ? { sourceArtifactId } : {})
+        ...(app.appType === "courseware" || app.appType === "ppt_courseware" ? { sourceArtifactId } : {}),
+        ...(app.appType === "lesson_plan" ? {
+          sourceSelections: Object.entries(sourceSelections).map(([documentId, sectionIds]) => ({ documentId, sectionIds }))
+        } : {})
       });
       setArtifacts((current) => mergeArtifactHistory(current, artifact));
       setSelectedId(artifact.id);
-      setEditingId(app.appType === "ppt_courseware" ? "" : artifact.id);
+      setEditingId(artifact.id);
       setPrompt("");
-      if (app.appType === "ppt_courseware") {
-        await exportArtifact(artifact, { format: "PPTX", variant: "DEFAULT" });
-      }
     } catch (submitError) {
       setError(errorMessage(submitError, "AI 调用失败，请重试"));
     } finally {
@@ -291,7 +319,7 @@ export function AiAppGenerator({
   function selectArtifact(id: string) {
     if (editorDirty && selected?.id !== id && !window.confirm("当前修改尚未保存，确定离开吗？")) return;
     setSelectedId(id);
-    setEditingId("");
+    setEditingId(app.appType === "ppt_courseware" ? id : "");
     setEditorDirty(false);
   }
 
@@ -362,12 +390,14 @@ export function AiAppGenerator({
   );
   const missingCourseContent = prerequisites.includes("course_content") && !hasCourseContent;
   const missingApprovedQuestions = prerequisites.includes("approved_questions") && approvedQuestions.length < 3;
-  const missingApprovedCourseware = prerequisites.includes("approved_courseware") && !sourceArtifactId;
-  const generationBlocked = missingCourseContent || missingApprovedQuestions || missingApprovedCourseware;
+  const missingApprovedCourseware = (app.appType === "courseware" || prerequisites.includes("approved_courseware")) && !sourceArtifactId;
+  const missingLessonPlanSources = app.appType === "lesson_plan" && Object.keys(sourceSelections).length === 0;
+  const generationBlocked = missingCourseContent || missingApprovedQuestions || missingApprovedCourseware || missingLessonPlanSources;
   const isEditing = Boolean(selected && editingId === selected.id);
   const hasPendingPublishedUpdate = Boolean(
     selected
     && selected.status === "PUBLISHED"
+    && publishableAppTypes.has(selected.appType)
     && selected.publishedPayload != null
     && selected.payload !== selected.publishedPayload
   );
@@ -387,7 +417,7 @@ export function AiAppGenerator({
           </p>
         ) : null}
         <form onSubmit={submit} className={app.appType === "html_courseware" ? "hidden" : "space-y-4"}>
-          {app.appType !== "ppt_courseware" ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          {!(["lesson_plan", "courseware", "ppt_courseware"] as CourseAiAppType[]).includes(app.appType) ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             <label className="space-y-1 text-sm font-medium text-slate-700">
               <span>内容范围</span>
               <select value={options.chapterId} onChange={(event) => updateOption("chapterId", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400">
@@ -398,19 +428,25 @@ export function AiAppGenerator({
             <label className="space-y-1 text-sm font-medium text-slate-700"><span>难度</span><select value={options.difficulty} onChange={(event) => updateOption("difficulty", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option>基础</option><option>提高</option><option>综合</option><option>挑战</option></select></label>
           </div> : null}
 
+          {app.appType === "lesson_plan" ? <fieldset className="space-y-3"><legend className="text-sm font-medium text-slate-700">资料与章节来源</legend>{documentSources.map((document) => {
+            const selected = sourceSelections[document.id];
+            const allIds = document.sections.map((section) => section.id);
+            return <div key={document.id} className="rounded-xl border border-slate-200 p-3"><label className="flex items-center gap-2 text-sm font-medium text-slate-800"><input type="checkbox" checked={selected !== undefined && selected.length === 0} ref={(node) => { if (node) node.indeterminate = Boolean(selected?.length); }} onChange={() => toggleDocument(document.id)} /><span>{document.title}</span></label><div className="ml-6 mt-2 space-y-2">{document.sections.map((section) => <label key={section.id} className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={selected !== undefined && (selected.length === 0 || selected.includes(section.id))} onChange={() => toggleDocumentSection(document.id, section.id, allIds)} /><span>{section.title}</span></label>)}</div></div>;
+          })}{!documentSources.length ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">暂无解析成功的课程资料，请先导入并保存课程目录。</p> : null}{missingLessonPlanSources && documentSources.length ? <p className="text-xs text-amber-700">请选择整份资料或资料内具体章节。</p> : null}</fieldset> : null}
+
           {app.appType === "question_generation" ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1"><label className="space-y-1 text-sm font-medium text-slate-700"><span>题型</span><select value={options.questionType} onChange={(event) => updateOption("questionType", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option>混合</option><option>单选</option><option>多选</option><option>简答</option></select></label><label className="space-y-1 text-sm font-medium text-slate-700"><span>题量</span><input type="number" min={3} max={12} value={options.questionCount} onChange={(event) => updateOption("questionCount", Number(event.target.value))} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label></div> : null}
           {app.appType === "lesson_plan" ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1"><label className="space-y-1 text-sm font-medium text-slate-700"><span>课时分钟</span><input type="number" min={30} max={180} value={options.lessonMinutes} onChange={(event) => updateOption("lessonMinutes", Number(event.target.value))} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="space-y-1 text-sm font-medium text-slate-700"><span>教法</span><select value={options.teachingMethod} onChange={(event) => updateOption("teachingMethod", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option>讲授结合实践</option><option>任务驱动</option><option>案例研讨</option><option>翻转课堂</option></select></label></div> : null}
           {app.appType === "courseware" ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1"><label className="space-y-1 text-sm font-medium text-slate-700"><span>页数</span><input type="number" min={5} max={16} value={options.slideCount} onChange={(event) => updateOption("slideCount", Number(event.target.value))} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="space-y-1 text-sm font-medium text-slate-700"><span>风格</span><select value={options.coursewareStyle} onChange={(event) => updateOption("coursewareStyle", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option>课堂讲授</option><option>案例分析</option><option>实训操作</option><option>复习总结</option></select></label></div> : null}
           {app.appType === "paper_assembly" ? <label className="space-y-1 text-sm font-medium text-slate-700"><span>试卷总分</span><input type="number" min={30} max={150} value={options.paperScore} onChange={(event) => updateOption("paperScore", Number(event.target.value))} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label> : null}
           {app.appType === "paper_assembly" ? <div className={`rounded-xl p-3 text-sm ${missingApprovedQuestions ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-700"}`}><p>已审核题目 {approvedQuestions.length} 道</p>{missingApprovedQuestions ? <div className="mt-2"><p>请先生成并审核至少 3 道题目。</p><div className="mt-3 flex flex-wrap gap-3"><Link className="font-medium underline underline-offset-4" href={`/space/courses/${courseId}/ai-workbench/apps/question_generation`}>去 AI出题</Link><Link className="font-medium underline underline-offset-4" href={`/space/courses/${courseId}/question-bank`}>审核题库</Link></div></div> : null}</div> : null}
-          {app.appType === "ppt_courseware" ? <div className="space-y-3"><div className="rounded-xl bg-blue-50 p-3 text-sm leading-6 text-blue-800"><p className="font-medium">直接将已有课件转换为 PPT</p><p className="mt-1">不会再次调用 AI 生成内容；系统会使用已确认课件并套用课程 PPT 模板。</p></div><label className="space-y-1 text-sm font-medium text-slate-700"><span>来源课件</span><select value={sourceArtifactId} onChange={(event) => setSourceArtifactId(event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option value="">请选择已确认课件</option>{coursewareSources.map((source) => <option key={source.id} value={source.id}>{source.title} · {source.status === "PUBLISHED" ? "已发布" : "已确认"}</option>)}</select></label>{missingApprovedCourseware ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">还没有可用的来源课件。先生成并确认一份 AI课件，再回来制作 PPT。<Link className="ml-1 font-medium underline underline-offset-4" href={`/space/courses/${courseId}/ai-workbench/apps/courseware`}>生成 AI课件</Link></p> : null}</div> : null}
+          {app.appType === "courseware" || app.appType === "ppt_courseware" ? <div className="space-y-3"><div className="rounded-xl bg-blue-50 p-3 text-sm leading-6 text-blue-800"><p className="font-medium">{app.appType === "courseware" ? "只从已确认教案生成 AI课件" : "将已确认 AI课件生成可编辑 PPT"}</p><p className="mt-1">系统固定记录来源版本，上游修改不会静默覆盖当前产物。</p></div><label className="space-y-1 text-sm font-medium text-slate-700"><span>{app.appType === "courseware" ? "来源教案" : "来源AI课件"}</span><select value={sourceArtifactId} onChange={(event) => setSourceArtifactId(event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option value="">请选择已确认{app.appType === "courseware" ? "教案" : "AI课件"}</option>{coursewareSources.map((source) => <option key={source.id} value={source.id}>{source.title} · v{source.version}</option>)}</select></label>{missingApprovedCourseware ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">还没有可用的已确认{app.appType === "courseware" ? "教案" : "AI课件"}。</p> : null}</div> : null}
 
           {app.appType !== "ppt_courseware" ? <><div><label htmlFor="ai-app-prompt" className="text-sm font-medium text-slate-700">生成要求</label><textarea id="ai-app-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={`补充${app.title}要求`} className="mt-2 min-h-24 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-400" /></div><div className="rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-700">{structuredPrompt()}</div></> : null}
           {missingCourseContent ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p className="font-medium">当前课程还没有可用于 AI 生成的内容</p><p className="mt-1 leading-5">先导入课程文档或添加课程资料，系统才知道应该依据什么生成。</p><div className="mt-3 flex flex-wrap gap-3"><Link className="font-medium underline underline-offset-4" href={`/space/courses/${courseId}/ai-workbench/content`}>AI文档建课</Link><Link className="font-medium underline underline-offset-4" href={`/space/courses/${courseId}/resources`}>查看课程资料库</Link></div></div> : null}
           {error ? <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
           <Button type="submit" className="w-full" disabled={isBusy || generationBlocked}>
             {creating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : app.appType === "ppt_courseware" ? <Download className="h-4 w-4" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
-            {creating ? (app.appType === "ppt_courseware" ? "正在生成 PPT" : "正在创建 AI 任务") : (app.appType === "ppt_courseware" ? "生成并下载 PPT" : "开始 AI 生成")}
+            {creating ? (app.appType === "ppt_courseware" ? "正在生成 PPT" : "正在创建 AI 任务") : (app.appType === "ppt_courseware" ? "生成PPT" : "开始 AI 生成")}
           </Button>
         </form>
 
@@ -440,7 +476,7 @@ export function AiAppGenerator({
                       </div>
                     </details>
                   ) : null}
-                  <button type="button" disabled={deletingId === artifact.id} onClick={() => removeArtifact(artifact)} className={`ml-auto inline-flex items-center gap-1 text-xs font-medium ${artifact.status === "PUBLISHED" ? "text-slate-400" : "text-red-600"}`} title={artifact.status === "PUBLISHED" ? "请先撤回再删除" : "删除"}>
+                  <button type="button" disabled={deletingId === artifact.id} onClick={() => removeArtifact(artifact)} className={`ml-auto inline-flex items-center gap-1 text-xs font-medium ${artifact.status === "PUBLISHED" && publishableAppTypes.has(artifact.appType) ? "text-slate-400" : "text-red-600"}`} title={artifact.status === "PUBLISHED" && publishableAppTypes.has(artifact.appType) ? "请先撤回再删除" : "删除"}>
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />{deletingId === artifact.id ? "删除中" : "删除"}
                   </button>
                 </div>
@@ -458,14 +494,20 @@ export function AiAppGenerator({
               <div><p className="text-sm text-slate-500">AI 产物</p><h2 className="mt-1 text-xl font-semibold text-slate-900">{selected.title}</h2></div>
               <div className="flex flex-wrap gap-2">
                 {selected.status === "FAILED" ? <Button type="button" variant="secondary" disabled={isBusy} onClick={() => runAction("retry", () => retryCourseAiArtifact(courseId, selected.id))}>{busyAction === "retry" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}重试 AI 生成</Button> : null}
-                {canEditSelected && !isEditing ? <Button type="button" variant="secondary" disabled={isBusy} onClick={() => setEditingId(selected.id)}><Edit3 className="h-4 w-4" aria-hidden="true" />编辑</Button> : null}
+                {canEditSelected && !isEditing && selected.appType !== "ppt_courseware" ? <Button type="button" variant="secondary" disabled={isBusy} onClick={() => setEditingId(selected.id)}><Edit3 className="h-4 w-4" aria-hidden="true" />编辑</Button> : null}
                 {selected.status === "DRAFT" && !isEditing ? <Button type="button" variant="secondary" disabled={!canConfirmAiArtifact(selected.status, editorDirty, isBusy)} onClick={() => {
                   if (!canConfirmAiArtifact(selected.status, editorDirty, isBusy)) return;
-                  runAction("confirm", () => confirmCourseAiArtifact(courseId, selected.id, selected.lockVersion ?? 0));
+                  void (async () => {
+                    const confirmed = await runAction("confirm", () => confirmCourseAiArtifact(courseId, selected.id, selected.lockVersion ?? 0));
+                    if (confirmed && selected.appType === "lesson_plan") {
+                      window.location.assign(`/space/courses/${courseId}/ai-workbench/apps/courseware?sourceArtifactId=${encodeURIComponent(selected.id)}`);
+                    }
+                  })();
                 }}>{busyAction === "confirm" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}确认内容</Button> : null}
-                {selected.status === "APPROVED" && publishableAppTypes.has(selected.appType) && !isEditing ? <Button type="button" disabled={isBusy} onClick={() => runAction("publish", () => publishCourseAiArtifact(courseId, selected.id, selected.lockVersion ?? 0))}>{busyAction === "publish" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}发布给学生</Button> : null}
-                {hasPendingPublishedUpdate && !isEditing ? <Button type="button" disabled={isBusy} onClick={() => runAction("confirm-update", () => confirmCourseAiArtifactUpdate(courseId, selected.id, selected.lockVersion ?? 0))}>{busyAction === "confirm-update" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}确认更新</Button> : null}
-                {selected.status === "PUBLISHED" && !isEditing ? <Button type="button" variant="secondary" disabled={isBusy} onClick={() => runAction("withdraw", () => withdrawCourseAiArtifact(courseId, selected.id, selected.lockVersion ?? 0))}>{busyAction === "withdraw" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}撤回</Button> : null}
+                {["APPROVED", "PUBLISHED"].includes(selected.status) && selected.appType === "courseware" && !isEditing ? <Link href={`/space/courses/${courseId}/ai-workbench/apps/ppt_courseware?sourceArtifactId=${encodeURIComponent(selected.id)}`} className="inline-flex min-h-10 items-center rounded-xl bg-[var(--cx-blue)] px-4 text-sm font-medium text-white">生成PPT</Link> : null}
+                {selected.status === "APPROVED" && publishableAppTypes.has(selected.appType) ? <Button type="button" disabled={isBusy || editorDirty} title={editorDirty ? "请先保存修改" : undefined} onClick={() => runAction("publish", () => publishCourseAiArtifact(courseId, selected.id, selected.lockVersion ?? 0))}>{busyAction === "publish" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}发布给学生</Button> : null}
+                {hasPendingPublishedUpdate ? <Button type="button" disabled={isBusy || editorDirty} title={editorDirty ? "请先保存修改" : undefined} onClick={() => runAction("confirm-update", () => confirmCourseAiArtifactUpdate(courseId, selected.id, selected.lockVersion ?? 0))}>{busyAction === "confirm-update" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}更新发布</Button> : null}
+                {selected.status === "PUBLISHED" && publishableAppTypes.has(selected.appType) ? <Button type="button" variant="secondary" disabled={isBusy || editorDirty} title={editorDirty ? "请先保存修改" : undefined} onClick={() => runAction("withdraw", () => withdrawCourseAiArtifact(courseId, selected.id, selected.lockVersion ?? 0))}>{busyAction === "withdraw" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}撤回</Button> : null}
               </div>
             </div>
 
@@ -482,7 +524,7 @@ export function AiAppGenerator({
                   ...body,
                   lockVersion: selected.lockVersion ?? 0
                 }));
-                if (saved) setEditingId("");
+                if (saved) setEditingId(selected.appType === "ppt_courseware" ? selected.id : "");
               }} /> : selected.status === "FAILED" ? null : <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">生成完成后可在此编辑和确认内容。</p>}
             </div>
           </>

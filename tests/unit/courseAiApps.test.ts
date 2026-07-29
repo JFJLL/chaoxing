@@ -28,7 +28,7 @@ describe("course AI apps", () => {
     expect(enabled.find((capability) => capability.id === "ai-ppt-courseware")?.title).toBe("PPT课件");
     expect(teacherPrepWorkflows.map((workflow) => workflow.id)).toEqual(["course-content", "lesson-plan", "courseware", "assessment"]);
     expect(teacherPrepWorkflows.find((workflow) => workflow.id === "assessment")?.includes).toEqual(["生成题目", "审核题库", "智能组卷"]);
-    expect(teacherPrepWorkflows.find((workflow) => workflow.id === "courseware")?.includes).toEqual(["生成课件", "PPT课件", "已发布课件"]);
+    expect(teacherPrepWorkflows.find((workflow) => workflow.id === "courseware")?.includes).toEqual(["生成课件", "PPT课件", "发布PPT"]);
   });
 
   it("builds relational knowledge maps beyond a plain outline", () => {

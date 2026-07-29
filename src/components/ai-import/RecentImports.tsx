@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { ImportTimeline } from "@/components/ai-import/ImportTimeline";
+import { DeleteImportRecordButton } from "@/components/ai-import/DeleteImportRecordButton";
 
 export async function RecentImports({ courseId }: { courseId: string }) {
   const imports = await db.documentImportJob.findMany({
-    where: { courseId },
+    where: { courseId, deletedAt: null },
     orderBy: { createdAt: "desc" },
     take: 5,
     select: {
@@ -22,9 +23,7 @@ export async function RecentImports({ courseId }: { courseId: string }) {
         <div key={job.id} className="rounded-md border border-[var(--cx-border)] p-4">
           <div className="mb-3 flex items-center justify-between text-sm">
             <span className="font-medium text-slate-800">{job.originalName}</span>
-            <Link prefetch={false} className="text-[var(--cx-blue)]" href={`/space/courses/${courseId}/ai-import/${job.id}`}>
-              查看
-            </Link>
+            <span className="flex items-center gap-3"><Link prefetch={false} className="text-[var(--cx-blue)]" href={`/space/courses/${courseId}/ai-import/${job.id}#outline-review`}>查看并确认</Link><DeleteImportRecordButton jobId={job.id} /></span>
           </div>
           <ImportTimeline
             status={job.status}
