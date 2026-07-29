@@ -2,16 +2,13 @@ import { randomUUID } from "crypto";
 import { spawn } from "child_process";
 import { mkdir, readdir, readFile, rm, writeFile } from "fs/promises";
 import { dirname, join, resolve } from "path";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
+import type { GeneratedCourseOutline } from "../../src/types/course";
 
+const mocks = vi.hoisted(() => ({ generateCourseOutline: vi.fn() }));
 vi.mock("@/lib/ai/generateCourseOutline", () => ({
-  generateCourseOutline: vi.fn(async () => {
-    throw Object.assign(
-      new Error("AI 模型未配置，请联系管理员检查模型设置"),
-      { code: "MODEL_NOT_CONFIGURED" }
-    );
-  })
+  generateCourseOutline: mocks.generateCourseOutline
 }));
 
 let prisma: PrismaClient;
@@ -19,6 +16,7 @@ let applicationDb: PrismaClient;
 let runImportJob: typeof import("../../src/lib/imports/runImportJob").runImportJob;
 let enqueueImportJob: typeof import("../../src/lib/imports/importQueue").enqueueImportJob;
 let recoverImportJobFromDatabase: typeof import("../../src/lib/imports/importQueue").recoverImportJobFromDatabase;
+let saveImportBatchOutline: typeof import("../../src/lib/imports/saveImportBatchOutline").saveImportBatchOutline;
 let courseId: string;
 let userId: string;
 let institutionId: string;
@@ -63,6 +61,7 @@ const aiEnvNames = [
 const previousAiEnv = Object.fromEntries(aiEnvNames.map((name) => [name, process.env[name]]));
 const previousDatabaseUrl = process.env.DATABASE_URL;
 const createdJobIds = new Set<string>();
+const createdBatchIds = new Set<string>();
 const createdFilePaths = new Set<string>();
 const testJobPrefix = "__vitest_import_pipeline__";
 const testDatabaseName = `import-pipeline-${randomUUID()}.db`;
@@ -75,26 +74,78 @@ async function migrateIsolatedDatabase() {
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
-  for (const migrationDirectory of migrationDirectories) {
+  const migrationSql = (await Promise.all(migrationDirectories.map(async (migrationDirectory) => {
     const sql = await readFile(join(migrationsRoot, migrationDirectory, "migration.sql"), "utf8");
-    await new Promise<void>((resolveMigration, rejectMigration) => {
-      const child = spawn("sqlite3", [testDatabasePath], {
-        windowsHide: true,
-        stdio: ["pipe", "ignore", "pipe"]
-      });
-      let stderr = "";
-      child.stderr.setEncoding("utf8");
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk;
-      });
-      child.on("error", rejectMigration);
-      child.on("close", (code) => {
-        if (code === 0) resolveMigration();
-        else rejectMigration(new Error(`迁移 ${migrationDirectory} 失败：${stderr.trim() || `sqlite3 退出码 ${code}`}`));
-      });
-      child.stdin.end(`.bail on\n${sql}\n`);
+    return `-- ${migrationDirectory}\n${sql}`;
+  }))).join("\n\n");
+  await new Promise<void>((resolveMigration, rejectMigration) => {
+    const child = spawn("sqlite3", [testDatabasePath], {
+      windowsHide: true,
+      stdio: ["pipe", "ignore", "pipe"]
     });
+    let stderr = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", rejectMigration);
+    child.on("close", (code) => {
+      if (code === 0) resolveMigration();
+      else rejectMigration(new Error(`隔离数据库迁移失败：${stderr.trim() || `sqlite3 退出码 ${code}`}`));
+    });
+    child.stdin.end(`.bail on\n${migrationSql}\n`);
+  });
+}
+
+function outline(title: string): GeneratedCourseOutline {
+  return {
+    title,
+    description: `${title}课程说明`,
+    targetAudience: "课程学习者",
+    learningObjectives: ["理解资料内容", "掌握核心方法", "完成课程实践"],
+    chapters: [{
+      title: `${title} 第一章`,
+      summary: `${title}章节简介`,
+      order: 1,
+      lessons: [{
+        title: `${title} 第一课`,
+        summary: `${title}课时简介`,
+        order: 1,
+        estimatedMinutes: 45,
+        keyPoints: [`${title}知识点`],
+        suggestedActivities: [`${title}活动`],
+        assessmentPrompts: [`${title}评价`]
+      }]
+    }]
+  };
+}
+
+async function createBatchJobs(documents: Array<{ name: string; text: string }>) {
+  const batch = await prisma.documentImportBatch.create({
+    data: { courseId, userId, status: "PROCESSING" }
+  });
+  createdBatchIds.add(batch.id);
+  const jobs = [];
+  for (const document of documents) {
+    const filePath = join(".uploads/test", `${randomUUID()}-${document.name}`);
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, document.text, "utf8");
+    createdFilePaths.add(filePath);
+    const job = await prisma.documentImportJob.create({
+      data: {
+        courseId,
+        userId,
+        batchId: batch.id,
+        status: "QUEUED",
+        originalName: document.name,
+        filePath,
+        mimeType: "text/markdown"
+      }
+    });
+    createdJobIds.add(job.id);
+    jobs.push(job);
   }
+  return { batch, jobs };
 }
 
 async function waitForJobStatus(jobId: string, status: string) {
@@ -121,6 +172,7 @@ describe("import pipeline", () => {
     applicationDb = dbModule.db;
     ({ runImportJob } = await import("../../src/lib/imports/runImportJob"));
     ({ enqueueImportJob, recoverImportJobFromDatabase } = await import("../../src/lib/imports/importQueue"));
+    ({ saveImportBatchOutline } = await import("../../src/lib/imports/saveImportBatchOutline"));
 
     const institution = await prisma.institution.create({
       data: { name: `导入流水线测试 ${randomUUID()}` }
@@ -146,10 +198,26 @@ describe("import pipeline", () => {
     courseId = course.id;
   });
 
+  beforeEach(() => {
+    mocks.generateCourseOutline.mockReset();
+    mocks.generateCourseOutline.mockRejectedValue(Object.assign(
+      new Error("AI 模型未配置，请联系管理员检查模型设置"),
+      { code: "MODEL_NOT_CONFIGURED" }
+    ));
+  });
+
   afterEach(async () => {
+    await prisma.auditLog.deleteMany({ where: { entity: "Course", entityId: courseId } });
+    await prisma.chapter.deleteMany({ where: { courseId } });
+    await prisma.course.updateMany({ where: { id: courseId }, data: { outlineVersion: 0 } });
     if (createdJobIds.size) {
+      await prisma.courseKnowledgeMap.deleteMany({ where: { sourceJobId: { in: [...createdJobIds] } } });
       await prisma.documentImportJob.deleteMany({ where: { id: { in: [...createdJobIds] } } });
       createdJobIds.clear();
+    }
+    if (createdBatchIds.size) {
+      await prisma.documentImportBatch.deleteMany({ where: { id: { in: [...createdBatchIds] } } });
+      createdBatchIds.clear();
     }
     await Promise.all([...createdFilePaths].map((filePath) => rm(filePath, { force: true })));
     createdFilePaths.clear();
@@ -246,5 +314,147 @@ describe("import pipeline", () => {
       if (previousProvider === undefined) delete process.env.IMPORT_QUEUE_PROVIDER;
       else process.env.IMPORT_QUEUE_PROVIDER = previousProvider;
     }
+  });
+
+  it("combines two completed documents exactly once after both independent maps are ready", async () => {
+    const { batch, jobs } = await createBatchJobs([
+      { name: "资料甲.md", text: "# 资料甲\n\n## 甲章节\n甲资料真实内容。" },
+      { name: "资料乙.md", text: "# 资料乙\n\n## 乙章节\n乙资料真实内容。" }
+    ]);
+    let combinedCalls = 0;
+    mocks.generateCourseOutline.mockImplementation(async (input: { documentText: string }) => {
+      if (input.documentText.includes("资料 1：")) {
+        combinedCalls += 1;
+        expect(input.documentText).toContain("资料甲.md");
+        expect(input.documentText).toContain("甲资料真实内容");
+        expect(input.documentText).toContain("资料乙.md");
+        expect(input.documentText).toContain("乙资料真实内容");
+        return { outline: outline("综合目录") };
+      }
+      return { outline: outline(input.documentText.includes("资料甲") ? "资料甲" : "资料乙") };
+    });
+
+    await runImportJob(jobs[0]!.id);
+    const afterFirst = await prisma.documentImportBatch.findUniqueOrThrow({ where: { id: batch.id } });
+    expect(afterFirst.status).toBe("PROCESSING");
+    expect(afterFirst.generatedOutline).toBeNull();
+
+    await runImportJob(jobs[1]!.id);
+    const completed = await prisma.documentImportBatch.findUniqueOrThrow({ where: { id: batch.id } });
+    expect(completed.status).toBe("READY_FOR_REVIEW");
+    expect(completed.generatedOutlineVersion).toBe(1);
+    expect(JSON.parse(completed.generatedOutline ?? "{}")).toMatchObject({ title: "综合目录" });
+    expect(combinedCalls).toBe(1);
+    expect(await prisma.courseKnowledgeMap.count({ where: { sourceJobId: { in: jobs.map((job) => job.id) } } })).toBe(2);
+  }, 20_000);
+
+  it("allows only one concurrent batch combiner when the last documents finish together", async () => {
+    const { batch, jobs } = await createBatchJobs([
+      { name: "并发甲.md", text: "# 并发甲\n\n甲正文。" },
+      { name: "并发乙.md", text: "# 并发乙\n\n乙正文。" }
+    ]);
+    let combinedCalls = 0;
+    mocks.generateCourseOutline.mockImplementation(async (input: { documentText: string }) => {
+      if (input.documentText.includes("资料 1：")) {
+        combinedCalls += 1;
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 40));
+        return { outline: outline("并发综合目录") };
+      }
+      return { outline: outline(input.documentText.includes("并发甲") ? "并发甲" : "并发乙") };
+    });
+
+    await Promise.all(jobs.map((job) => runImportJob(job.id)));
+
+    const completed = await prisma.documentImportBatch.findUniqueOrThrow({ where: { id: batch.id } });
+    expect(completed.status).toBe("READY_FOR_REVIEW");
+    expect(completed.generatedOutlineVersion).toBe(1);
+    expect(combinedCalls).toBe(1);
+  }, 20_000);
+
+  it("marks a batch failed and never exposes a partial outline when one document fails", async () => {
+    const { batch, jobs } = await createBatchJobs([
+      { name: "成功资料.md", text: "# 成功资料\n\n成功正文。" },
+      { name: "失败资料.md", text: "# 失败资料\n\n触发失败。" }
+    ]);
+    mocks.generateCourseOutline.mockImplementation(async (input: { documentText: string }) => {
+      if (input.documentText.includes("失败资料")) throw new Error("稳定模拟的资料解析失败");
+      return { outline: outline("成功资料") };
+    });
+
+    await runImportJob(jobs[0]!.id);
+    await expect(runImportJob(jobs[1]!.id)).rejects.toThrow("稳定模拟的资料解析失败");
+
+    const failed = await prisma.documentImportBatch.findUniqueOrThrow({ where: { id: batch.id } });
+    expect(failed.status).toBe("FAILED");
+    expect(failed.generatedOutline).toBeNull();
+    expect((await prisma.documentImportJob.findUniqueOrThrow({ where: { id: jobs[0]!.id } })).status).toBe("READY_FOR_REVIEW");
+    expect((await prisma.documentImportJob.findUniqueOrThrow({ where: { id: jobs[1]!.id } })).status).toBe("FAILED");
+  }, 20_000);
+
+  it("rejects saving an incomplete batch without changing the persisted course directory", async () => {
+    const { batch, jobs } = await createBatchJobs([
+      { name: "待完成甲.md", text: "# 待完成甲\n\n已完成正文。" },
+      { name: "待完成乙.md", text: "# 待完成乙\n\n仍在排队。" }
+    ]);
+    await prisma.documentImportJob.update({
+      where: { id: jobs[0]!.id },
+      data: { status: "READY_FOR_REVIEW", generatedOutline: JSON.stringify(outline("资料甲")) }
+    });
+    await prisma.documentImportBatch.update({
+      where: { id: batch.id },
+      data: {
+        status: "READY_FOR_REVIEW",
+        generatedOutline: JSON.stringify(outline("不应保存的综合目录")),
+        generatedOutlineVersion: 1
+      }
+    });
+
+    await expect(saveImportBatchOutline({
+      jobId: jobs[0]!.id,
+      actorId: userId,
+      outline: outline("不应保存的综合目录"),
+      expectedOutlineVersion: 0,
+      expectedBatchVersion: 1
+    })).rejects.toMatchObject({ code: "IMPORT_BATCH_DOCUMENTS_INCOMPLETE" });
+
+    expect(await prisma.chapter.count({ where: { courseId } })).toBe(0);
+    expect((await prisma.course.findUniqueOrThrow({ where: { id: courseId } })).outlineVersion).toBe(0);
+    expect((await prisma.documentImportBatch.findUniqueOrThrow({ where: { id: batch.id } })).savedAt).toBeNull();
+  });
+
+  it("applies one ready batch once and rejects a repeated formal save", async () => {
+    const { batch, jobs } = await createBatchJobs([
+      { name: "正式保存甲.md", text: "# 正式保存甲\n\n正文甲。" },
+      { name: "正式保存乙.md", text: "# 正式保存乙\n\n正文乙。" }
+    ]);
+    await prisma.documentImportJob.updateMany({
+      where: { id: { in: jobs.map((job) => job.id) } },
+      data: { status: "READY_FOR_REVIEW", generatedOutline: JSON.stringify(outline("单份目录")) }
+    });
+    const combined = outline("正式综合目录");
+    await prisma.documentImportBatch.update({
+      where: { id: batch.id },
+      data: { status: "READY_FOR_REVIEW", generatedOutline: JSON.stringify(combined), generatedOutlineVersion: 1 }
+    });
+
+    const saved = await saveImportBatchOutline({
+      jobId: jobs[0]!.id,
+      actorId: userId,
+      outline: combined,
+      expectedOutlineVersion: 0,
+      expectedBatchVersion: 1
+    });
+    expect(saved.outlineVersion).toBe(1);
+    expect(saved.chapters).toHaveLength(1);
+
+    await expect(saveImportBatchOutline({
+      jobId: jobs[1]!.id,
+      actorId: userId,
+      outline: combined,
+      expectedOutlineVersion: 1,
+      expectedBatchVersion: 1
+    })).rejects.toMatchObject({ code: "IMPORT_BATCH_ALREADY_APPLIED" });
+    expect(await prisma.chapter.count({ where: { courseId } })).toBe(1);
+    expect((await prisma.course.findUniqueOrThrow({ where: { id: courseId } })).outlineVersion).toBe(1);
   });
 });

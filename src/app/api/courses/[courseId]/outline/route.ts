@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseAccess, requireCourseManager } from "@/lib/permissions";
 import type { CourseDirectoryNode } from "@/types/course";
+import { CourseOutlineSyncError, syncCourseOutline } from "@/lib/imports/applyOutline";
 
 type RouteContext = {
   params: Promise<{ courseId: string }>;
@@ -85,44 +86,21 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const body = outlineSchema.parse(await request.json());
 
   try {
-    await db.$transaction(async (tx) => {
-      const claimed = await tx.course.updateMany({
-        where: { id: courseId, outlineVersion: body.expectedOutlineVersion },
-        data: { outlineVersion: { increment: 1 } }
-      });
-      if (claimed.count !== 1) throw new Error("COURSE_OUTLINE_VERSION_CONFLICT");
-      await tx.chapter.deleteMany({ where: { courseId } });
-      for (const [chapterIndex, chapter] of body.chapters.entries()) {
-        await tx.chapter.create({
-          data: {
-            courseId,
-            title: chapter.title,
-            summary: chapter.summary,
-            order: chapterIndex + 1,
-            lessons: {
-              create: chapter.lessons.map((lesson, lessonIndex) => ({
-                title: lesson.title,
-                summary: lesson.summary,
-                order: lessonIndex + 1,
-                estimatedMinutes: lesson.estimatedMinutes,
-                keyPoints: lesson.keyPoints.join("\n"),
-                activities: lesson.suggestedActivities.join("\n"),
-                assessments: lesson.assessmentPrompts.join("\n")
-              }))
-            }
-          }
-        });
-      }
-    });
+    const result = await db.$transaction((tx) => syncCourseOutline({
+      courseId,
+      outline: { chapters: body.chapters },
+      actorId: user.id,
+      expectedOutlineVersion: body.expectedOutlineVersion,
+      tx
+    }));
+    return NextResponse.json({ ok: true, outlineVersion: result.outlineVersion, chapters: result.chapters });
   } catch (error) {
-    if (error instanceof Error && error.message === "COURSE_OUTLINE_VERSION_CONFLICT") {
+    if (error instanceof CourseOutlineSyncError) {
       return NextResponse.json({
-        error: "课程目录已被其他教师更新，请刷新后重试",
-        code: "COURSE_OUTLINE_VERSION_CONFLICT"
-      }, { status: 409 });
+        error: error.message,
+        code: error.code
+      }, { status: error.code === "COURSE_OUTLINE_ITEM_INVALID" ? 400 : 409 });
     }
     throw error;
   }
-
-  return NextResponse.json({ ok: true, outlineVersion: body.expectedOutlineVersion + 1 });
 }

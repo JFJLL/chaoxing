@@ -140,12 +140,13 @@ export function ChapterTree({ courseId, initialChapters, initialOutlineVersion }
       body: JSON.stringify({ chapters: reorderChapters(chapters), expectedOutlineVersion: outlineVersion })
     });
     setSaving(false);
-    const body = (await response.json().catch(() => null)) as { error?: string; outlineVersion?: number } | null;
+    const body = (await response.json().catch(() => null)) as { error?: string; outlineVersion?: number; chapters?: CourseDirectoryNode[] } | null;
     if (!response.ok) {
       setMessage(body?.error ?? "保存失败");
       return;
     }
     if (typeof body?.outlineVersion === "number") setOutlineVersion(body.outlineVersion);
+    if (Array.isArray(body?.chapters)) setChapters(body.chapters);
     setEditing(false);
     setMessage("已保存修改");
   }

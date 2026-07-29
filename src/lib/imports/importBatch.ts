@@ -8,13 +8,13 @@ export async function finalizeImportBatch(batchId: string) {
     where: { id: batchId },
     include: {
       course: { select: { title: true } },
-      documents: { orderBy: { createdAt: "asc" } }
+      documents: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } }
     }
   });
-  if (!batch || batch.savedAt || batch.status === "READY_FOR_REVIEW" || batch.status === "APPLIED") return;
+  if (!batch || batch.savedAt || batch.status === "READY_FOR_REVIEW" || batch.status === "APPLIED" || batch.status === "COMBINING") return;
   if (batch.documents.some((document) => document.status === "FAILED")) {
     await db.documentImportBatch.updateMany({
-      where: { id: batchId, status: { notIn: ["READY_FOR_REVIEW", "APPLIED"] } },
+      where: { id: batchId, savedAt: null, status: { notIn: ["READY_FOR_REVIEW", "APPLIED"] } },
       data: { status: "FAILED" }
     });
     return;
@@ -42,11 +42,18 @@ export async function finalizeImportBatch(batchId: string) {
       });
       generatedOutline = JSON.stringify(generated.outline);
     }
-    await db.documentImportBatch.update({
-      where: { id: batchId },
-      data: { generatedOutline, status: "READY_FOR_REVIEW" }
+    await db.documentImportBatch.updateMany({
+      where: { id: batchId, status: "COMBINING", savedAt: null },
+      data: {
+        generatedOutline,
+        generatedOutlineVersion: { increment: 1 },
+        status: "READY_FOR_REVIEW"
+      }
     });
   } catch {
-    await db.documentImportBatch.update({ where: { id: batchId }, data: { status: "FAILED" } });
+    await db.documentImportBatch.updateMany({
+      where: { id: batchId, status: "COMBINING", savedAt: null },
+      data: { status: "FAILED" }
+    });
   }
 }

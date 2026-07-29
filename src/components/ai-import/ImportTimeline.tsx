@@ -69,7 +69,7 @@ export function ImportTimeline({
           {pollError ? <p className="rounded-md border border-orange-100 bg-orange-50 px-4 py-3 text-sm text-orange-700">{pollError}</p> : null}
         </div>
       ) : null}
-      <ol aria-label="文档建课进度" className="grid gap-3 md:grid-cols-6">
+      <ol aria-label="课程文档导入进度" className="grid gap-3 md:grid-cols-6">
         {steps.map((step) => (
           <li
             key={step.key}

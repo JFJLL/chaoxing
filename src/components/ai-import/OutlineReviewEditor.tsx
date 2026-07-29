@@ -15,12 +15,14 @@ export function OutlineReviewEditor({
   jobId,
   courseId,
   initialOutline,
-  initialOutlineVersion
+  initialOutlineVersion,
+  initialBatchVersion
 }: {
   jobId: string;
   courseId: string;
   initialOutline: GeneratedCourseOutline;
   initialOutlineVersion: number;
+  initialBatchVersion: number;
 }) {
   const router = useRouter();
   const [outline, setOutline] = useState(initialOutline);
@@ -33,7 +35,11 @@ export function OutlineReviewEditor({
     const response = await fetch(`/api/ai-import/${jobId}/apply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ outline, expectedOutlineVersion: initialOutlineVersion })
+      body: JSON.stringify({
+        outline,
+        expectedOutlineVersion: initialOutlineVersion,
+        expectedBatchVersion: initialBatchVersion
+      })
     });
     setSubmitting(false);
     if (!response.ok) {
@@ -41,7 +47,7 @@ export function OutlineReviewEditor({
       setError(body?.error ?? "保存失败，请检查目录内容。");
       return;
     }
-    router.push(`/space/courses/${courseId}/builder`);
+    router.push(`/space/courses/${courseId}/builder?saved=1`);
   }
 
   return (

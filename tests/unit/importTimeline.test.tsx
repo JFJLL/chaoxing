@@ -49,7 +49,7 @@ describe("ImportTimeline", () => {
   it("exposes an accessible status for every step", () => {
     const html = renderToStaticMarkup(<ImportTimeline status="STRUCTURING" />);
 
-    expect(html).toContain('aria-label="文档建课进度"');
+    expect(html).toContain('aria-label="课程文档导入进度"');
     expect(html).toContain('aria-label="文档上传：已完成"');
     expect(html).toContain('aria-label="内容解析：已完成"');
     expect(html).toContain('aria-label="目录生成：进行中"');

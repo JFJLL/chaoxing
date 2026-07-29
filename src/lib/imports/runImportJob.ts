@@ -5,6 +5,7 @@ import { createKnowledgeMapDraft } from "@/lib/knowledgeMap/generateKnowledgeMap
 import { withImportFilePath } from "@/lib/storage";
 import { withDriveFilePath } from "@/lib/modules/driveFiles";
 import { finalizeImportBatch } from "@/lib/imports/importBatch";
+import { buildDocumentSections } from "@/lib/imports/documentSections";
 
 export async function runImportJob(jobId: string) {
   const job = await db.documentImportJob.findUnique({ where: { id: jobId }, include: { driveFile: true } });
@@ -21,11 +22,16 @@ export async function runImportJob(jobId: string) {
     const extracted = job.driveFile
       ? await withDriveFilePath(job.driveFile, extract)
       : await withImportFilePath(job.filePath, extract);
+    const parsedSections = buildDocumentSections({
+      documentId: job.id,
+      text: extracted.text,
+      chunks: extracted.chunks
+    });
     await db.documentImportJob.update({
       where: { id: jobId },
       data: {
         extractedText: extracted.text,
-        parsedSections: JSON.stringify(extracted.chunks),
+        parsedSections: JSON.stringify(parsedSections),
         status: "STRUCTURING",
         currentStage: "课程结构生成"
       }
@@ -48,7 +54,6 @@ export async function runImportJob(jobId: string) {
         currentStage: "知识图谱生成"
       }
     });
-    if (job.batchId) await finalizeImportBatch(job.batchId);
     await createKnowledgeMapDraft({
       courseId: job.courseId,
       sourceJobId: job.id,
@@ -64,6 +69,7 @@ export async function runImportJob(jobId: string) {
         finishedAt: new Date()
       }
     });
+    if (job.batchId) await finalizeImportBatch(job.batchId);
   } catch (error) {
     await db.documentImportJob.update({
       where: { id: jobId },

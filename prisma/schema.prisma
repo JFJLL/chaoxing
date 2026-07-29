@@ -222,18 +222,19 @@ model DocumentImportJob {
 }
 
 model DocumentImportBatch {
-  id                  String              @id @default(cuid())
-  courseId            String
-  course              Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  userId              String
-  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status              String              @default("QUEUED")
-  generatedOutline    String?
-  savedOutlineVersion Int?
-  savedAt             DateTime?
-  documents           DocumentImportJob[]
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  id                      String              @id @default(cuid())
+  courseId                String
+  course                  Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId                  String
+  user                    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status                  String              @default("QUEUED")
+  generatedOutline        String?
+  generatedOutlineVersion Int                 @default(0)
+  savedOutlineVersion     Int?
+  savedAt                 DateTime?
+  documents               DocumentImportJob[]
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
 
   @@index([courseId, createdAt])
   @@index([userId, createdAt])
