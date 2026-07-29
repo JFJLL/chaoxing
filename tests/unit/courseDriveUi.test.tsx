@@ -17,6 +17,7 @@ import { CourseResourceLibraries } from "@/components/course-workspace/CourseRes
 import { CourseResourceUpload } from "@/components/course-workspace/CourseResourceUpload";
 import {
   DriveClient,
+  driveMutationBasePath,
   MoveDestinationBrowser,
   refreshDriveAfterMutation
 } from "@/components/modules/DriveClient";
@@ -155,5 +156,10 @@ describe("course drive UI", () => {
 
     expect(reloadCourseChildren).toHaveBeenCalledTimes(1);
     expect(refreshRoute).not.toHaveBeenCalled();
+  });
+
+  it("routes course-drive mutations through course-scoped authorization", () => {
+    expect(driveMutationBasePath("course-1")).toBe("/api/courses/course-1/drive");
+    expect(driveMutationBasePath()).toBe("/api/drive");
   });
 });

@@ -1,7 +1,5 @@
-import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { CourseDriveWorkspace } from "@/components/course-workspace/CourseDriveWorkspace";
 
@@ -14,10 +12,7 @@ export default async function CourseDrivePage({ params, searchParams }: PageProp
   const user = await requireUser();
   const { courseId } = await params;
   const { parentId } = await searchParams;
-  await requireCourseOwner(user, courseId);
-  const course = await db.course.findUnique({ where: { id: courseId } });
-
-  if (!course) notFound();
+  const course = await requireCourseManager(user, courseId);
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="drive">

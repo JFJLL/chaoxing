@@ -24,6 +24,10 @@ type DriveClientFile = {
 type DriveFolder = { id: string; name: string; parentId: string | null };
 type UploadState = { fileName: string; percent: number; phase: "uploading" | "processing" };
 
+export function driveMutationBasePath(courseId?: string) {
+  return courseId ? `/api/courses/${courseId}/drive` : "/api/drive";
+}
+
 export function MoveDestinationBrowser({
   folders,
   rootParentId,
@@ -144,10 +148,10 @@ export async function refreshDriveAfterMutation(
   else refreshRoute();
 }
 
-function uploadDriveFile(formData: FormData, onProgress: (percent: number) => void, onProcessing: () => void) {
+function uploadDriveFile(url: string, formData: FormData, onProgress: (percent: number) => void, onProcessing: () => void) {
   return new Promise<Record<string, any>>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/drive");
+    xhr.open("POST", url);
     xhr.responseType = "json";
     xhr.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
@@ -244,7 +248,7 @@ function DriveItemActionsMenu({
               打开文件夹
             </Link>
           ) : (
-            <a href={`/api/drive/${file.id}?download=1`} role="menuitem" onClick={() => setOpen(false)} className={driveMenuItemClassName}>
+            <a href={`${driveMutationBasePath(courseId)}/${file.id}?download=1`} role="menuitem" onClick={() => setOpen(false)} className={driveMenuItemClassName}>
               <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
               下载
             </a>
@@ -255,7 +259,7 @@ function DriveItemActionsMenu({
                 <Pencil className="h-4 w-4 shrink-0" aria-hidden="true" />
                 重命名
               </button>
-              {file.kind === "file" ? (
+              {file.kind === "file" && !courseId ? (
                 <button type="button" role="menuitem" disabled={disabled} onClick={() => runAction(onShare)} className={driveMenuItemClassName}>
                   <Share2 className="h-4 w-4 shrink-0" aria-hidden="true" />
                   分享
@@ -323,6 +327,7 @@ export function DriveClient({
   const [moveParentId, setMoveParentId] = useState("");
   const parentBreadcrumb = breadcrumbs.length > 1 ? breadcrumbs[breadcrumbs.length - 2] : null;
   const browsingRoot = parentId === rootParentId;
+  const mutationBasePath = driveMutationBasePath(courseId);
   const folderHref = (folderId: string) => `${baseHref}?parentId=${encodeURIComponent(folderId)}`;
   const upHref = parentBreadcrumb ? folderHref(parentBreadcrumb.id) : baseHref;
 
@@ -392,7 +397,7 @@ export function DriveClient({
 
   async function createFolder(formData: FormData) {
     const succeeded = await run("create-folder", async () => {
-      const body = await request("/api/drive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: formData.get("name"), parentId }) }, "文件夹已创建，可以点击文件夹进入");
+      const body = await request(mutationBasePath, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: formData.get("name"), parentId }) }, "文件夹已创建，可以点击文件夹进入");
       if (body?.file) setVisibleFiles((current) => [body.file, ...current]);
     });
     if (succeeded) setCreateDialogOpen(false);
@@ -405,6 +410,7 @@ export function DriveClient({
     setUploadState({ fileName: file.name, percent: 0, phase: "uploading" });
     const succeeded = await run("upload", async () => {
       const body = await uploadDriveFile(
+        mutationBasePath,
         formData,
         (percent) => setUploadState((current) => current ? { ...current, percent } : current),
         () => setUploadState((current) => current ? { ...current, percent: 100, phase: "processing" } : current)
@@ -458,7 +464,7 @@ export function DriveClient({
     const name = window.prompt("重命名", currentName);
     if (!name || name === currentName) return;
     await run(`rename:${id}`, async () => {
-      await request(`/api/drive/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }, "已重命名");
+      await request(`${mutationBasePath}/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }, "已重命名");
       setVisibleFiles((current) => current.map((file) => file.id === id ? { ...file, name } : file));
     });
   }
@@ -472,7 +478,7 @@ export function DriveClient({
     }
     const destination = nextParentId === rootParentId ? rootLabel : nextParentId ? folderPaths.get(nextParentId) : rootLabel;
     await run(`move:${moveTarget.id}`, async () => {
-      await request(`/api/drive/${moveTarget.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ parentId: nextParentId }) }, `已移动到“${destination}”`);
+      await request(`${mutationBasePath}/${moveTarget.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ parentId: nextParentId }) }, `已移动到“${destination}”`);
       setVisibleFiles((current) => current.filter((file) => file.id !== moveTarget.id));
       setMoveTarget(null);
     });
@@ -484,7 +490,7 @@ export function DriveClient({
       : `确定删除“${file.name}”吗？文件会从 OSS 或本地存储中删除，并从已关联的课程资料中移除。`;
     if (!window.confirm(message)) return;
     await run(`delete:${file.id}`, async () => {
-      await request(`/api/drive/${file.id}`, { method: "DELETE" }, "文件及存储对象已删除");
+      await request(`${mutationBasePath}/${file.id}`, { method: "DELETE" }, "文件及存储对象已删除");
       setVisibleFiles((current) => current.filter((item) => item.id !== file.id));
     });
   }

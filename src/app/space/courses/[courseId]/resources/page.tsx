@@ -1,13 +1,12 @@
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseAccess } from "@/lib/permissions";
+import { isCourseManagerRecord, requireCourseAccess } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { CourseModulePanel } from "@/components/course-workspace/CourseModulePanel";
 import { PrepWorkflowNavigation } from "@/components/course-workspace/PrepWorkflowNavigation";
 import { CourseResourceUpload } from "@/components/course-workspace/CourseResourceUpload";
 import { CourseResourceLibraries } from "@/components/course-workspace/CourseResourceLibraries";
 import { CourseResourceCard } from "@/components/course-workspace/CourseResourceCard";
-import { isTeacher } from "@/lib/permissions";
 import { listCourseDrivePicker } from "@/lib/courseDrive/service";
 
 type PageProps = { params: Promise<{ courseId: string }> };
@@ -16,7 +15,7 @@ export default async function ResourcesPage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
   const course = await requireCourseAccess(user, courseId);
-  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const canManage = isCourseManagerRecord(user, course);
   const allResources = await db.resource.findMany({
     where: { courseId: course.id },
     orderBy: [{ updatedAt: "desc" }, { id: "asc" }],

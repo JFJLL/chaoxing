@@ -7,6 +7,7 @@ import {
 } from "@/lib/courseWorkspace/courseKnowledgeSources";
 
 const teacher = { id: "teacher-1", name: "教师", role: "TEACHER" as const, institutionId: "institution-1" };
+const collaborator = { id: "teacher-2", name: "协作教师", role: "TEACHER" as const, institutionId: "institution-1" };
 const student = { id: "student-1", name: "学生", role: "STUDENT" as const, institutionId: "institution-1" };
 
 function dependencies(): CourseKnowledgeSourceDependencies {
@@ -33,14 +34,32 @@ function dependencies(): CourseKnowledgeSourceDependencies {
           { id: "artifact-draft", appType: "lesson_plan", title: "内部教案", payload: "{\"objectives\":[\"内部目标\"]}", status: "DRAFT" },
           { id: "artifact-published", appType: "courseware", title: "公开课件", payload: "{\"slides\":[{\"title\":\"公开内容\"}]}", status: "PUBLISHED" }
         ]
-      : [{
-          id: "artifact-published",
-          appType: "courseware",
-          title: "公开课件",
-          payload: "{\"slides\":[{\"title\":\"尚未确认的修改\"}]}",
-          publishedPayload: "{\"slides\":[{\"title\":\"公开内容\"}]}",
-          status: "PUBLISHED"
-        }]),
+      : [
+          {
+            id: "artifact-published",
+            appType: "courseware",
+            title: "旧 AI 课件",
+            payload: "{\"slides\":[{\"title\":\"未发布修改\"}]}",
+            publishedPayload: "{\"slides\":[{\"title\":\"旧公开内容\"}]}",
+            status: "PUBLISHED"
+          },
+          {
+            id: "artifact-html",
+            appType: "html_courseware",
+            title: "历史 HTML 课件",
+            payload: "{\"html\":\"<p>内部修改</p>\"}",
+            publishedPayload: "{\"html\":\"<p>历史公开内容</p>\"}",
+            status: "PUBLISHED"
+          },
+          {
+            id: "artifact-ppt",
+            appType: "ppt_courseware",
+            title: "PPT 课件",
+            payload: "{\"slides\":[{\"title\":\"尚未发布的修改\"}]}",
+            publishedPayload: "{\"slides\":[{\"title\":\"学生可见 PPT\"}]}",
+            status: "PUBLISHED"
+          }
+        ]),
     loadPrivate: vi.fn().mockResolvedValue({
       imports: [{ id: "import-1", originalName: "内部资料.docx", extractedText: "仅教师可见的导入原文" }],
       questions: [{ id: "question-1", stem: "私有题干", answer: "私有答案", explanation: "私有解析", status: "APPROVED" }]
@@ -63,7 +82,7 @@ describe("permission-filtered course knowledge sources", () => {
     ]));
   });
 
-  it("never loads private rows for students and returns only active structure, public resources, announcements, and published artifacts", async () => {
+  it("never loads private rows for students and exposes only the published PPT artifact snapshot", async () => {
     const deps = dependencies();
     const sources = await buildCourseKnowledgeSources({ courseId: "course-1", user: student, dependencies: deps });
 
@@ -74,8 +93,33 @@ describe("permission-filtered course knowledge sources", () => {
     ]));
     expect(sources.some((source) => source.type === "import" || source.type === "question")).toBe(false);
     expect(sources.some((source) => source.id.includes("artifact-draft"))).toBe(false);
-    expect(sources.find((source) => source.id === "ai_artifact:artifact-published:1")?.snippet).toContain("公开内容");
-    expect(sources.find((source) => source.id === "ai_artifact:artifact-published:1")?.snippet).not.toContain("尚未确认的修改");
+    const artifactSources = sources.filter((source) => source.type === "ai_artifact");
+    expect(artifactSources).toHaveLength(1);
+    expect(artifactSources[0]).toMatchObject({ id: "ai_artifact:artifact-ppt:1" });
+    expect(artifactSources[0]?.snippet).toContain("学生可见 PPT");
+    expect(artifactSources[0]?.snippet).not.toContain("尚未发布的修改");
+    expect(sources.some((source) => source.snippet.includes("旧公开内容") || source.snippet.includes("历史公开内容"))).toBe(false);
+  });
+
+  it("treats a collaborating teacher as a course manager for private AI context", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.requireAccess).mockResolvedValue({
+      id: "course-1",
+      title: "人工智能导论",
+      description: "课程原始简介",
+      status: "ACTIVE",
+      ownerId: "teacher-1",
+      collaborators: [{ userId: "teacher-2" }]
+    });
+
+    const sources = await buildCourseKnowledgeSources({ courseId: "course-1", user: collaborator, dependencies: deps });
+
+    expect(deps.loadArtifacts).toHaveBeenCalledWith("course-1", true);
+    expect(deps.loadPrivate).toHaveBeenCalledWith("course-1");
+    expect(sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "import:import-1:1", type: "import" }),
+      expect.objectContaining({ id: "ai_artifact:artifact-draft:1", type: "ai_artifact" })
+    ]));
   });
 
   it("rejects inactive-course student content even if an unsafe caller bypasses the normal access guard", async () => {

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { SessionUser } from "@/lib/auth";
 import type { CourseWorkspaceTab } from "@/types/courseWorkspace";
-import { isTeacher } from "@/lib/permissions";
+import { isCourseManagerRecord } from "@/lib/permissions";
 import { CourseWorkspaceHeader } from "@/components/course-workspace/CourseWorkspaceHeader";
 import { CourseWorkspaceSidebar } from "@/components/course-workspace/CourseWorkspaceSidebar";
 import { getZoviiDemoCredential } from "@/lib/zoviiDemoCredentials";
@@ -13,11 +13,11 @@ export function FanyaCourseShell({
   children
 }: {
   user: SessionUser;
-  course: { id: string; title: string; ownerId: string; cover?: string | null };
+  course: { id: string; title: string; ownerId: string; cover?: string | null; collaborators?: Array<{ userId: string }> };
   activeTab: CourseWorkspaceTab;
   children: ReactNode;
 }) {
-  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const canManage = isCourseManagerRecord(user, course);
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[var(--cx-course-page)]">

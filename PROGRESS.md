@@ -1,5 +1,24 @@
 # 执行进度
 
+## R5 收口计划（2026-07-29，不超过 10 行）
+1. 目标：只收口课程云盘 CourseManager、旧重复入口、协作现场链和一次发布回执。
+2. 从 R4 当前提交创建 `codex/prep-production-chain-r5-release`，不再改备课生产链核心。
+3. 先把课程云盘写操作限定在绑定根目录内，并保护被导入/产物引用的文件。
+4. 再清理或重定向旧 structure、历史 HTML 重复入口。
+5. 使用李素艳、王一帆现场验证同机构协作码和课程云盘上传。
+6. 检测真实 AI Key；缺失则记录阻塞，不用 mock 冒充现场生成。
+7. 最后执行一次完整回执，提交并推送 R5；最大风险是云盘并发移动和引用数据丢失。
+
+## R5 完成记录
+
+- 课程云盘页面和专用 API 已按 CourseManager 放权；服务端强制同机构、绑定课程根目录 ancestry，禁止访问所有者其他个人文件、跨课程移动及根目录改名/移动/删除。
+- 云盘移动/删除改为事务内重新鉴权和父链校验；导入来源、课程资料、AI 导出等仍引用的文件返回 409，避免协作教师破坏追溯链。
+- CourseManager 访问旧 structure 自动重定向统一内容工作台；历史 HTML 仅管理者可看，学生页面与 AI 知识来源只允许已发布 PPT。
+- 李素艳生成协作码、王一帆加入后课程列表立即显示“协作教师”；王一帆进入备课/课堂/云盘并真实上传文件，读取所有者协作码接口返回 403；学生普通邀请码链通过。
+- `.env` 的兼容模型配置解析为 Gemini provider、`api.im-red-magic.cn`、`gemini-3.6-flash`（未输出 Key）。真实 UI 上传两份新 TXT，完成综合目录一次保存→真实章节教案→确认 AI 课件→编辑 PPT 新版本→仅 PPT 发布。
+- 浏览器证据：`artifacts/verification/r5-browser/real-ai-outline-ready.png`、`real-ai-ppt-published.png`，以及 `r4-browser/collaborator-*.png`；目标单测 26/26、集成 4/4、typecheck、diff-check 均通过。
+- 最终一次完整回执以 `.verification/receipt.json` 为准；为保持差异指纹新鲜，回执后不再修改本文件。
+
 ## 开工计划（2026-07-29，不超过 10 行）
 1. 目标：打通“多资料→课程目录→教案→AI课件→PPT→发布”且全链路来源可追溯。
 2. 先记录 Git 状态，从最新 `origin/main` 建功能分支并实测任务 0 基线。

@@ -1,6 +1,6 @@
 import type { SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseAccess } from "@/lib/permissions";
+import { isCourseManagerRecord, requireCourseAccess } from "@/lib/permissions";
 
 export type CourseKnowledgeSourceType =
   | "course"
@@ -27,6 +27,7 @@ type AccessibleCourse = {
   description: string | null;
   status: string;
   ownerId: string;
+  collaborators?: Array<{ userId: string }>;
 };
 
 type PublicKnowledgeRows = {
@@ -120,7 +121,10 @@ const defaultDependencies: CourseKnowledgeSourceDependencies = {
   },
   loadArtifacts(courseId, canManage) {
     return db.courseAiArtifact.findMany({
-      where: { courseId, ...(canManage ? {} : { status: "PUBLISHED" }) },
+      where: {
+        courseId,
+        ...(canManage ? {} : { status: "PUBLISHED", appType: "ppt_courseware" })
+      },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       take: 100,
       select: { id: true, appType: true, title: true, payload: true, publishedPayload: true, status: true }
@@ -203,8 +207,7 @@ export async function buildCourseKnowledgeSources(input: {
 }): Promise<CourseKnowledgeSource[]> {
   const dependencies = input.dependencies ?? defaultDependencies;
   const course = await dependencies.requireAccess(input.user, input.courseId);
-  const canManage = input.user.role === "ADMIN"
-    || (input.user.role === "TEACHER" && course.ownerId === input.user.id);
+  const canManage = isCourseManagerRecord(input.user, course);
   if (!canManage && course.status !== "ACTIVE") throw new CourseKnowledgeAccessError();
 
   const [publicRows, artifacts] = await Promise.all([
@@ -259,8 +262,10 @@ export async function buildCourseKnowledgeSources(input: {
     });
   }
   for (const artifact of artifacts) {
+    // Keep the student boundary here as well as in the Prisma query so custom
+    // dependency implementations cannot leak legacy published artifact types.
+    if (!canManage && (artifact.status !== "PUBLISHED" || artifact.appType !== "ppt_courseware")) continue;
     const artifactText = canManage ? artifact.payload : artifact.publishedPayload;
-    if (!canManage && artifact.appType === "question_generation") continue;
     appendChunks(sources, {
       baseId: `ai_artifact:${artifact.id}`,
       type: "ai_artifact",

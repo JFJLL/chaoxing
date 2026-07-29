@@ -6,6 +6,10 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const managerPages = [
+  "src/app/space/courses/[courseId]/page.tsx",
+  "src/app/space/courses/[courseId]/resources/page.tsx",
+  "src/app/space/courses/[courseId]/structure/page.tsx",
+  "src/app/space/courses/[courseId]/html-courseware/page.tsx",
   "src/app/space/courses/[courseId]/activities/page.tsx",
   "src/app/space/courses/[courseId]/activities/copilot/page.tsx",
   "src/app/space/courses/[courseId]/activities/tutor/page.tsx",
@@ -51,6 +55,26 @@ describe("collaborator course management surface", () => {
     for (const path of managerMutationRoutes) {
       expect(read(path), path).toContain("requireCourseManager");
     }
+  });
+
+  it("lets collaborators enter the course drive and receive manager navigation", () => {
+    const drivePage = read("src/app/space/courses/[courseId]/drive/page.tsx");
+    const shell = read("src/components/course-workspace/FanyaCourseShell.tsx");
+
+    expect(drivePage).toContain("requireCourseManager");
+    expect(drivePage).not.toContain("requireCourseOwner");
+    expect(shell).toContain("isCourseManagerRecord");
+    expect(shell).not.toMatch(/course\.ownerId\s*===\s*user\.id/);
+  });
+
+  it("keeps legacy HTML courseware away from students and redirects the old manager structure entry", () => {
+    const htmlCourseware = read("src/app/space/courses/[courseId]/html-courseware/page.tsx");
+    const structure = read("src/app/space/courses/[courseId]/structure/page.tsx");
+
+    expect(htmlCourseware).toContain("if (!canManage) redirect");
+    expect(structure).toContain("if (canManage) redirect(`/space/courses/${courseId}/ai-workbench/content`)");
+    expect(structure).not.toContain("导入课程文档");
+    expect(structure).not.toContain("AI 文档建课");
   });
 
   it("keeps student actions and analytics scoped to CourseEnrollment", () => {

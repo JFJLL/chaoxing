@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import type { SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isCourseManagerRecord, requireCourseAccess, requireCourseManager } from "@/lib/permissions";
+import { isCourseManagerRecord, isTeacher, requireCourseAccess, requireCourseManager } from "@/lib/permissions";
 import {
   COURSE_DRIVE_PURPOSES,
   type CourseDriveAccess,
@@ -65,6 +65,52 @@ function ancestryToRoot(
   return null;
 }
 
+function assertCourseDriveInstitution(
+  user: SessionUser,
+  course: { institutionId: string; ownerId: string }
+) {
+  if (
+    isTeacher(user)
+    && user.role !== "ADMIN"
+    && user.id !== course.ownerId
+    && user.institutionId !== course.institutionId
+  ) {
+    throw new CourseDriveError("不能管理其他机构的课程云盘", 403, "COURSE_DRIVE_INSTITUTION_MISMATCH");
+  }
+}
+
+async function requireCourseDriveManagerAccess(user: SessionUser, courseId: string) {
+  const course = await requireCourseManager(user, courseId);
+  assertCourseDriveInstitution(user, course);
+  return course;
+}
+
+async function requireCourseDriveManagerAccessInTransaction(
+  tx: Prisma.TransactionClient,
+  user: SessionUser,
+  courseId: string
+) {
+  if (!isTeacher(user)) {
+    throw new CourseDriveError("需要教师权限", 403, "COURSE_DRIVE_MANAGER_REQUIRED");
+  }
+  const course = await tx.course.findFirst({
+    where: {
+      id: courseId,
+      OR: [
+        ...(user.role === "ADMIN" ? [{}] : []),
+        { ownerId: user.id },
+        { collaborators: { some: { userId: user.id } } }
+      ]
+    },
+    select: { id: true, ownerId: true, institutionId: true, driveRootFolderId: true }
+  });
+  if (!course) {
+    throw new CourseDriveError("无权管理课程", 403, "COURSE_DRIVE_MANAGER_REQUIRED");
+  }
+  assertCourseDriveInstitution(user, course);
+  return course;
+}
+
 export function resolveNearestDriveRule(
   ancestry: string[],
   rules: Array<{ driveFileId: string; access: string }>
@@ -77,8 +123,11 @@ export function resolveNearestDriveRule(
   return "DENY";
 }
 
-async function loadActiveOwnerNodes(ownerId: string) {
-  return db.driveFile.findMany({
+async function loadActiveOwnerNodes(
+  ownerId: string,
+  client: Pick<Prisma.TransactionClient, "driveFile"> = db
+) {
+  return client.driveFile.findMany({
     where: { ownerId, deletedAt: null },
     select: {
       id: true,
@@ -95,11 +144,15 @@ async function loadActiveOwnerNodes(ownerId: string) {
   });
 }
 
-async function loadTargetWithinRoot(course: { ownerId: string; driveRootFolderId: string | null }, fileId: string) {
+async function loadTargetWithinRoot(
+  course: { ownerId: string; driveRootFolderId: string | null },
+  fileId: string,
+  client: Pick<Prisma.TransactionClient, "driveFile"> = db
+) {
   if (!course.driveRootFolderId) {
     throw new CourseDriveError("当前课程尚未设置云盘文件夹", 409, "COURSE_DRIVE_NOT_CONFIGURED");
   }
-  const nodes = await loadActiveOwnerNodes(course.ownerId);
+  const nodes = await loadActiveOwnerNodes(course.ownerId, client);
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const target = byId.get(fileId);
   if (!target) throw new CourseDriveError("文件不存在", 404, "COURSE_DRIVE_FILE_NOT_FOUND");
@@ -112,6 +165,7 @@ async function loadTargetWithinRoot(course: { ownerId: string; driveRootFolderId
 
 export async function getCourseDriveRoot(user: SessionUser, courseId: string) {
   const course = await requireCourseAccess(user, courseId);
+  assertCourseDriveInstitution(user, course);
   if (!course.driveRootFolderId) return null;
   return db.driveFile.findFirst({
     where: { id: course.driveRootFolderId, kind: "folder", deletedAt: null },
@@ -120,7 +174,7 @@ export async function getCourseDriveRoot(user: SessionUser, courseId: string) {
 }
 
 export async function listCourseDriveRootCandidates(user: SessionUser, courseId: string) {
-  const course = await requireCourseManager(user, courseId);
+  const course = await requireCourseDriveManagerAccess(user, courseId);
   const nodes = await loadActiveOwnerNodes(course.ownerId);
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const occupiedRoots = new Set(
@@ -189,12 +243,12 @@ export async function createCourseDriveRoot(input: { courseId: string; ownerId: 
 }
 
 export async function ensureCourseDriveRoot(user: SessionUser, courseId: string) {
-  const course = await requireCourseManager(user, courseId);
+  const course = await requireCourseDriveManagerAccess(user, courseId);
   return createCourseDriveRoot({ courseId: course.id, ownerId: course.ownerId, title: course.title });
 }
 
 export async function bindCourseDriveRoot(user: SessionUser, courseId: string, folderId: string) {
-  const course = await requireCourseManager(user, courseId);
+  const course = await requireCourseDriveManagerAccess(user, courseId);
   const folder = await db.driveFile.findFirst({
     where: { id: folderId, ownerId: course.ownerId, kind: "folder", deletedAt: null },
     select: { id: true, name: true, parentId: true }
@@ -228,6 +282,7 @@ export async function bindCourseDriveRoot(user: SessionUser, courseId: string, f
 
 export async function requireCourseDriveTarget(user: SessionUser, courseId: string, fileId: string) {
   const course = await requireCourseAccess(user, courseId);
+  assertCourseDriveInstitution(user, course);
   const context = await loadTargetWithinRoot(course, fileId);
   if (isCourseManagerRecord(user, course)) return context.target;
   const rules = await db.courseDriveAccessRule.findMany({
@@ -242,6 +297,7 @@ export async function requireCourseDriveTarget(user: SessionUser, courseId: stri
 
 export async function resolveCourseDriveAccess(user: SessionUser, courseId: string, fileId: string) {
   const course = await requireCourseAccess(user, courseId);
+  assertCourseDriveInstitution(user, course);
   const context = await loadTargetWithinRoot(course, fileId);
   if (isCourseManagerRecord(user, course)) {
     return { access: "ALLOW" as const, inherited: false, manager: true };
@@ -264,7 +320,7 @@ export async function setCourseDriveAccess(
   fileId: string,
   access: CourseDriveAccess | "INHERIT"
 ) {
-  const course = await requireCourseManager(user, courseId);
+  const course = await requireCourseDriveManagerAccess(user, courseId);
   await loadTargetWithinRoot(course, fileId);
   if (access === "INHERIT") {
     await db.courseDriveAccessRule.deleteMany({ where: { courseId, driveFileId: fileId } });
@@ -285,7 +341,7 @@ export async function ensureCoursePurposeFolder(
   courseId: string,
   purpose: CourseDrivePurpose
 ) {
-  const course = await requireCourseManager(user, courseId);
+  const course = await requireCourseDriveManagerAccess(user, courseId);
   const root = await ensureCourseDriveRoot(user, courseId);
   const existingBinding = await db.courseDriveBinding.findUnique({
     where: { courseId_purpose: { courseId, purpose } },
@@ -390,6 +446,7 @@ export async function listCourseDrivePicker(
   options: { documentsOnly?: boolean } = {}
 ) {
   const course = await requireCourseAccess(user, courseId);
+  assertCourseDriveInstitution(user, course);
   if (!course.driveRootFolderId) return [];
   const nodes = await loadActiveOwnerNodes(course.ownerId);
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -422,6 +479,7 @@ export async function listCourseDrivePicker(
 
 export async function listCourseDriveChildren(user: SessionUser, courseId: string, parentId?: string | null) {
   const course = await requireCourseAccess(user, courseId);
+  assertCourseDriveInstitution(user, course);
   if (!course.driveRootFolderId) {
     throw new CourseDriveError("当前课程尚未设置云盘文件夹", 409, "COURSE_DRIVE_NOT_CONFIGURED");
   }
@@ -474,6 +532,141 @@ export async function countFilesBelowFolder(courseOwnerId: string, folderId: str
   const nodes = await loadActiveOwnerNodes(courseOwnerId);
   const byId = new Map(nodes.map((node) => [node.id, node]));
   return nodes.filter((node) => node.kind !== "folder" && ancestryToRoot(node, folderId, byId)).length;
+}
+
+export async function requireCourseDriveMutationTarget(
+  user: SessionUser,
+  courseId: string,
+  fileId: string
+) {
+  const course = await requireCourseDriveManagerAccess(user, courseId);
+  const context = await loadTargetWithinRoot(course, fileId);
+  return { course, ...context };
+}
+
+export async function requireCourseDriveMutationFolder(
+  user: SessionUser,
+  courseId: string,
+  folderId: string
+) {
+  const context = await requireCourseDriveMutationTarget(user, courseId, folderId);
+  if (context.target.kind !== "folder") {
+    throw new CourseDriveError("目标位置不是文件夹", 400, "COURSE_DRIVE_TARGET_NOT_FOLDER");
+  }
+  return context;
+}
+
+export async function createCourseDriveFolder(
+  user: SessionUser,
+  courseId: string,
+  parentId: string,
+  name: string
+) {
+  const context = await requireCourseDriveMutationFolder(user, courseId, parentId);
+  const normalizedName = name.trim();
+  if (!normalizedName) throw new CourseDriveError("请输入文件夹名称", 400, "COURSE_DRIVE_NAME_REQUIRED");
+  return db.driveFile.create({
+    data: {
+      ownerId: context.course.ownerId,
+      parentId: context.target.id,
+      name: normalizedName,
+      kind: "folder"
+    }
+  });
+}
+
+export async function updateCourseDriveItem(
+  user: SessionUser,
+  courseId: string,
+  fileId: string,
+  input: { name?: string; parentId?: string | null }
+) {
+  return db.$transaction(async (tx) => {
+    const course = await requireCourseDriveManagerAccessInTransaction(tx, user, courseId);
+    const context = await loadTargetWithinRoot(course, fileId, tx);
+    if (context.target.id === course.driveRootFolderId) {
+      throw new CourseDriveError("课程云盘根目录不能重命名或移动", 409, "COURSE_DRIVE_ROOT_PROTECTED");
+    }
+
+    let nextParentId = context.target.parentId;
+    if (Object.prototype.hasOwnProperty.call(input, "parentId")) {
+      if (!input.parentId) {
+        throw new CourseDriveError("课程云盘内容不能移出课程根目录", 403, "COURSE_DRIVE_OUTSIDE_ROOT");
+      }
+      const destination = await loadTargetWithinRoot(course, input.parentId, tx);
+      if (destination.target.kind !== "folder") {
+        throw new CourseDriveError("目标位置不是文件夹", 400, "COURSE_DRIVE_TARGET_NOT_FOLDER");
+      }
+      nextParentId = destination.target.id;
+      if (context.target.kind === "folder") {
+        const destinationAncestry = ancestryToRoot(destination.target, course.driveRootFolderId!, destination.byId) ?? [];
+        if (destinationAncestry.includes(context.target.id)) {
+          throw new CourseDriveError("不能把文件夹移动到自身或子文件夹中", 409, "COURSE_DRIVE_MOVE_CYCLE");
+        }
+      }
+    }
+
+    const normalizedName = input.name === undefined ? undefined : input.name.trim();
+    if (input.name !== undefined && !normalizedName) {
+      throw new CourseDriveError("文件名称不能为空", 400, "COURSE_DRIVE_NAME_REQUIRED");
+    }
+    const updated = await tx.driveFile.updateMany({
+      where: {
+        id: context.target.id,
+        ownerId: course.ownerId,
+        parentId: context.target.parentId,
+        deletedAt: null
+      },
+      data: { name: normalizedName, parentId: nextParentId }
+    });
+    if (updated.count !== 1) {
+      throw new CourseDriveError("文件已被其他操作修改，请刷新后重试", 409, "COURSE_DRIVE_WRITE_CONFLICT");
+    }
+    return tx.driveFile.findUniqueOrThrow({ where: { id: context.target.id } });
+  });
+}
+
+export async function deleteCourseDriveItem(user: SessionUser, courseId: string, fileId: string) {
+  return db.$transaction(async (tx) => {
+    const course = await requireCourseDriveManagerAccessInTransaction(tx, user, courseId);
+    const context = await loadTargetWithinRoot(course, fileId, tx);
+    if (context.target.id === course.driveRootFolderId) {
+      throw new CourseDriveError("课程云盘根目录不能删除", 409, "COURSE_DRIVE_ROOT_PROTECTED");
+    }
+    const ids = context.nodes
+      .filter((node) => ancestryToRoot(node, context.target.id, context.byId))
+      .map((node) => node.id);
+    const [resources, importJobs, artifactExports, topicResources, groupFiles, copilotAttachments] = await Promise.all([
+      tx.resource.count({ where: { driveFileId: { in: ids } } }),
+      tx.documentImportJob.count({ where: { driveFileId: { in: ids } } }),
+      tx.courseAiArtifactExport.count({ where: { driveFileId: { in: ids } } }),
+      tx.topicResource.count({ where: { driveFileId: { in: ids } } }),
+      tx.groupFile.count({ where: { driveFileId: { in: ids } } }),
+      tx.copilotConversationFile.count({ where: { driveFileId: { in: ids } } })
+    ]);
+    const protectedReferenceCount = resources + importJobs + artifactExports + topicResources + groupFiles + copilotAttachments;
+    if (protectedReferenceCount > 0) {
+      throw new CourseDriveError(
+        `文件已被课程内容、导入记录或 AI 产物引用（共 ${protectedReferenceCount} 处），不能删除`,
+        409,
+        "COURSE_DRIVE_FILE_IN_USE"
+      );
+    }
+
+    const deletedFiles = context.nodes.filter((node) => ids.includes(node.id) && node.kind !== "folder");
+    const deletedAt = new Date();
+    await tx.driveShare.deleteMany({ where: { fileId: { in: ids } } });
+    await tx.courseDriveBinding.deleteMany({ where: { courseId, folderId: { in: ids } } });
+    await tx.courseDriveAccessRule.deleteMany({ where: { courseId, driveFileId: { in: ids } } });
+    const deleted = await tx.driveFile.updateMany({
+      where: { id: { in: ids }, ownerId: course.ownerId, deletedAt: null },
+      data: { deletedAt }
+    });
+    if (deleted.count !== ids.length) {
+      throw new CourseDriveError("文件已被其他操作修改，请刷新后重试", 409, "COURSE_DRIVE_WRITE_CONFLICT");
+    }
+    return { deletedCount: deleted.count, deletedFiles };
+  });
 }
 
 export type CourseDriveTransaction = Prisma.TransactionClient;

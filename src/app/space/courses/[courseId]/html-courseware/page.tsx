@@ -1,9 +1,9 @@
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseAccess } from "@/lib/permissions";
+import { redirect } from "next/navigation";
+import { isCourseManagerRecord, requireCourseAccess } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { htmlCoursewarePayloadSchema, type HtmlCoursewarePayload } from "@/types/courseWorkspace";
-import { isTeacher } from "@/lib/permissions";
 import { LinkButton } from "@/components/ui/Button";
 import { PrepWorkflowNavigation } from "@/components/course-workspace/PrepWorkflowNavigation";
 
@@ -13,9 +13,10 @@ export default async function HtmlCoursewarePage({ params }: PageProps) {
   const user = await requireUser();
   const { courseId } = await params;
   const course = await requireCourseAccess(user, courseId);
-  const canManage = isTeacher(user) && (user.role === "ADMIN" || course.ownerId === user.id);
+  const canManage = isCourseManagerRecord(user, course);
+  if (!canManage) redirect(`/space/courses/${courseId}/after-class`);
   const artifact = await db.courseAiArtifact.findFirst({
-    where: { courseId, appType: "html_courseware", status: "PUBLISHED" },
+    where: { courseId, appType: "html_courseware", status: { in: ["APPROVED", "PUBLISHED"] } },
     orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }]
   });
   let payload: HtmlCoursewarePayload | null = null;

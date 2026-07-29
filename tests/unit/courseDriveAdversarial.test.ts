@@ -4,12 +4,14 @@ const mocks = vi.hoisted(() => ({
   findDriveFiles: vi.fn(),
   findCourses: vi.fn(),
   findRules: vi.fn(),
-  requireCourseAccess: vi.fn()
+  createDriveFile: vi.fn(),
+  requireCourseAccess: vi.fn(),
+  requireCourseManager: vi.fn()
 }));
 
 vi.mock("@/lib/db", () => ({
   db: {
-    driveFile: { findMany: mocks.findDriveFiles },
+    driveFile: { findMany: mocks.findDriveFiles, create: mocks.createDriveFile },
     course: { findMany: mocks.findCourses },
     courseDriveAccessRule: { findMany: mocks.findRules }
   }
@@ -19,11 +21,11 @@ vi.mock("@/lib/permissions", () => ({
   isCourseManagerRecord: (user: { id: string; role: string }, course: { ownerId: string; collaborators?: Array<{ userId: string }> }) =>
     user.role === "ADMIN" || course.ownerId === user.id || Boolean(course.collaborators?.some((item) => item.userId === user.id)),
   requireCourseAccess: mocks.requireCourseAccess,
-  requireCourseManager: vi.fn()
+  requireCourseManager: mocks.requireCourseManager
 }));
 
 import { assertDriveMoveAllowed } from "@/lib/copilot/files";
-import { listCourseDriveChildren, listCourseDrivePicker } from "@/lib/courseDrive/service";
+import { createCourseDriveFolder, listCourseDriveChildren, listCourseDrivePicker } from "@/lib/courseDrive/service";
 
 const node = (id: string, parentId: string | null, kind = "folder") => ({
   id,
@@ -43,6 +45,14 @@ describe("course drive adversarial boundaries", () => {
     mocks.requireCourseAccess.mockResolvedValue({
       id: "course-a",
       ownerId: "teacher-1",
+      institutionId: "institution-1",
+      driveRootFolderId: "root-a",
+      status: "ACTIVE"
+    });
+    mocks.requireCourseManager.mockResolvedValue({
+      id: "course-a",
+      ownerId: "teacher-1",
+      institutionId: "institution-1",
       driveRootFolderId: "root-a",
       status: "ACTIVE"
     });
@@ -106,5 +116,39 @@ describe("course drive adversarial boundaries", () => {
     }, "course-a", { documentsOnly: true });
 
     expect(result.map((item) => item.name)).toEqual(["lesson.md"]);
+  });
+
+  it("lets a same-institution collaborator create inside the owner-backed course root", async () => {
+    mocks.findDriveFiles.mockResolvedValue([node("root-a", null)]);
+    mocks.createDriveFile.mockResolvedValue({ id: "folder-new", parentId: "root-a", name: "协作资料" });
+
+    await expect(createCourseDriveFolder({
+      id: "teacher-2",
+      name: "协作教师",
+      role: "TEACHER",
+      institutionId: "institution-1"
+    }, "course-a", "root-a", " 协作资料 ")).resolves.toMatchObject({ id: "folder-new" });
+
+    expect(mocks.createDriveFile).toHaveBeenCalledWith({
+      data: {
+        ownerId: "teacher-1",
+        parentId: "root-a",
+        name: "协作资料",
+        kind: "folder"
+      }
+    });
+  });
+
+  it("rejects a cross-institution collaborator before reading or mutating the owner drive", async () => {
+    await expect(createCourseDriveFolder({
+      id: "teacher-2",
+      name: "外部教师",
+      role: "TEACHER",
+      institutionId: "institution-2"
+    }, "course-a", "root-a", "越权资料"))
+      .rejects.toMatchObject({ code: "COURSE_DRIVE_INSTITUTION_MISMATCH", status: 403 });
+
+    expect(mocks.findDriveFiles).not.toHaveBeenCalled();
+    expect(mocks.createDriveFile).not.toHaveBeenCalled();
   });
 });
