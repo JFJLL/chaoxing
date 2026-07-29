@@ -74,6 +74,8 @@ type PendingUserMessage = {
   contextFiles: Array<{ id: string; name: string }>;
 };
 
+type RootCandidateDto = { id: string; name: string; path: string };
+
 function errorMessage(body: unknown, fallback: string) {
   return body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : fallback;
 }
@@ -84,7 +86,10 @@ export function CopilotWorkspace({
   initialCopilotName,
   initialConversations,
   initialSkills,
-  initialAnalytics
+  initialAnalytics,
+  initialFolderId = null,
+  initialFolders = [],
+  canBindRoot = false
 }: {
   courseId: string;
   canManage: boolean;
@@ -94,7 +99,8 @@ export function CopilotWorkspace({
   initialAnalytics: AnalyticsDto;
   initialFolderId?: string | null;
   initialFiles?: unknown[];
-  initialFolders?: unknown[];
+  initialFolders?: RootCandidateDto[];
+  canBindRoot?: boolean;
 }) {
   const router = useRouter();
   const [view, setView] = useState<"chat" | "settings">("chat");
@@ -103,6 +109,11 @@ export function CopilotWorkspace({
   const [skills, setSkills] = useState(initialSkills);
   const [copilotName, setCopilotName] = useState(initialCopilotName);
   const [copilotNameDraft, setCopilotNameDraft] = useState(initialCopilotName);
+  const [folderId, setFolderId] = useState(initialFolderId);
+  const [folderIdDraft, setFolderIdDraft] = useState(initialFolderId ?? "");
+  const [rootFolders, setRootFolders] = useState(initialFolders);
+  const [canBindRootState, setCanBindRootState] = useState(canBindRoot);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [draft, setDraft] = useState("");
   const [streamText, setStreamText] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -151,6 +162,27 @@ export function CopilotWorkspace({
     composer.style.height = "auto";
     composer.style.height = `${Math.min(composer.scrollHeight, 128)}px`;
   }, [draft]);
+
+  useEffect(() => {
+    if (view !== "settings" || settingsLoaded) return;
+    let cancelled = false;
+    async function loadSettings() {
+      try {
+        const body = await api(`/api/courses/${courseId}/copilot/settings`, { cache: "no-store" });
+        if (cancelled) return;
+        setFolderId(body.folderId ?? null);
+        setFolderIdDraft(body.folderId ?? "");
+        setRootFolders(Array.isArray(body.folders) ? body.folders : []);
+        setCanBindRootState(body.canBindRoot === true);
+      } catch (error) {
+        if (!cancelled) setStatus({ tone: "error", text: error instanceof Error ? error.message : "Copilot 设置加载失败" });
+      } finally {
+        if (!cancelled) setSettingsLoaded(true);
+      }
+    }
+    void loadSettings();
+    return () => { cancelled = true; };
+  }, [courseId, settingsLoaded, view]);
 
   function replaceConversation(conversation: ConversationDto) {
     shouldFollowMessagesRef.current = true;
@@ -364,6 +396,27 @@ export function CopilotWorkspace({
     }
   }
 
+  async function saveCourseDriveRoot() {
+    if (!canBindRootState || !folderIdDraft || folderIdDraft === folderId) return;
+    setBusy("drive-root");
+    setStatus(null);
+    try {
+      const body = await api(`/api/courses/${courseId}/copilot/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folderId: folderIdDraft })
+      });
+      setFolderId(body.folderId);
+      setFolderIdDraft(body.folderId);
+      setStatus({ tone: "success", text: "课程云盘根目录已更新" });
+      router.refresh();
+    } catch (error) {
+      setStatus({ tone: "error", text: error instanceof Error ? error.message : "课程云盘根目录更新失败" });
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function uploadSkill(formData: FormData) {
     const file = formData.get("file");
     if (!(file instanceof File) || !file.size) return;
@@ -543,6 +596,39 @@ export function CopilotWorkspace({
                 {busy === "copilot-name" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}保存名称
               </Button>
             </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-100 bg-white p-5">
+            <h2 className="font-semibold text-slate-900">课程云盘根目录</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {!settingsLoaded
+                ? "正在读取当前绑定状态。"
+                : folderId
+                  ? "当前课程云盘已绑定。"
+                  : "当前课程云盘尚未绑定。"}
+              {settingsLoaded
+                ? canBindRootState
+                  ? " 只有课程所有者或管理员可以修改存储边界。"
+                  : " 如需变更，请联系课程所有者。"
+                : null}
+            </p>
+            {settingsLoaded && canBindRootState ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                <select
+                  aria-label="课程云盘根目录"
+                  value={folderIdDraft}
+                  onChange={(event) => setFolderIdDraft(event.target.value)}
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-400"
+                >
+                  <option value="">请选择文件夹</option>
+                  {rootFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.path}</option>)}
+                </select>
+                <Button onClick={() => void saveCourseDriveRoot()} disabled={busy === "drive-root" || !folderIdDraft || folderIdDraft === folderId}>
+                  {busy === "drive-root" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  {folderId ? "重新绑定" : "绑定根目录"}
+                </Button>
+              </div>
+            ) : null}
           </section>
 
           <section className="rounded-2xl border border-slate-100 bg-white p-5">

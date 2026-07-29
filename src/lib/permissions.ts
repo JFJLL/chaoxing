@@ -20,12 +20,13 @@ const findAccessibleCourse = cache(async (userId: string, role: SessionUser["rol
   const course = await db.course.findFirst({
     where: {
       id: courseId,
-      OR: [
-        ...(role === "ADMIN" ? [{}] : []),
-        { ownerId: userId },
-        { collaborators: { some: { userId } } },
-        { status: "ACTIVE", enrollments: { some: { userId } } }
-      ]
+      ...(role === "ADMIN" ? {} : {
+        OR: [
+          { ownerId: userId },
+          { collaborators: { some: { userId } } },
+          { status: "ACTIVE", enrollments: { some: { userId } } }
+        ]
+      })
     },
     include: {
       collaborators: {
@@ -63,10 +64,7 @@ export async function requireCourseOwner(user: SessionUser, courseId: string) {
   const course = await db.course.findFirst({
     where: {
       id: courseId,
-      OR: [
-        ...(user.role === "ADMIN" ? [{}] : []),
-        { ownerId: user.id }
-      ]
+      ...(user.role === "ADMIN" ? {} : { ownerId: user.id })
     }
   });
 
@@ -82,11 +80,12 @@ export async function requireCourseManager(user: SessionUser, courseId: string) 
   const course = await db.course.findFirst({
     where: {
       id: courseId,
-      OR: [
-        ...(user.role === "ADMIN" ? [{}] : []),
-        { ownerId: user.id },
-        { collaborators: { some: { userId: user.id } } }
-      ]
+      ...(user.role === "ADMIN" ? {} : {
+        OR: [
+          { ownerId: user.id },
+          { collaborators: { some: { userId: user.id } } }
+        ]
+      })
     },
     include: {
       collaborators: {

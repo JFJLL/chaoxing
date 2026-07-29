@@ -1,10 +1,9 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { requireCourseManager } from "@/lib/permissions";
-import { listOwnerDriveFolders } from "@/lib/copilot/files";
+import { requireCourseManager, requireCourseOwner } from "@/lib/permissions";
 import { getCopilotAnalytics } from "@/lib/courseWorkspace/copilot";
-import { bindCourseDriveRoot } from "@/lib/courseDrive/service";
+import { listCourseDriveRootCandidates, updateCourseDriveSettings } from "@/lib/courseDrive/service";
+import { courseDriveErrorResponse } from "@/lib/courseDrive/http";
 
 type RouteContext = { params: Promise<{ courseId: string }> };
 const settingsSchema = z.object({
@@ -17,10 +16,20 @@ export async function GET(_request: Request, context: RouteContext) {
   const { courseId } = await context.params;
   try {
     const course = await requireCourseManager(user, courseId);
-    const [folders, analytics] = await Promise.all([listOwnerDriveFolders(user), getCopilotAnalytics(user, courseId)]);
-    return Response.json({ folderId: course.driveRootFolderId, copilotName: course.copilotName, folders, analytics });
+    const canBindRoot = user.role === "ADMIN" || course.ownerId === user.id;
+    const [folders, analytics] = await Promise.all([
+      canBindRoot ? listCourseDriveRootCandidates(user, courseId) : Promise.resolve([]),
+      getCopilotAnalytics(user, courseId)
+    ]);
+    return Response.json({
+      folderId: course.driveRootFolderId,
+      copilotName: course.copilotName,
+      folders,
+      analytics,
+      canBindRoot
+    });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Copilot 设置加载失败" }, { status: 403 });
+    return courseDriveErrorResponse(error, "Copilot 设置加载失败");
   }
 }
 
@@ -31,18 +40,17 @@ export async function PUT(request: Request, context: RouteContext) {
     await requireCourseManager(user, courseId);
     const parsed = settingsSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return Response.json({ error: "Copilot 设置无效：名称为 1–40 个字符" }, { status: 400 });
+    const includesFolderId = Object.prototype.hasOwnProperty.call(parsed.data, "folderId");
+    if (includesFolderId) await requireCourseOwner(user, courseId);
     if (parsed.data.folderId === null) {
       return Response.json({ error: "课程云盘只能重新绑定，不能解除绑定" }, { status: 400 });
     }
-    if (parsed.data.folderId) await bindCourseDriveRoot(user, courseId, parsed.data.folderId);
-    const course = await db.course.update({
-      where: { id: courseId },
-      data: {
-        copilotName: parsed.data.copilotName
-      }
+    const course = await updateCourseDriveSettings(user, courseId, {
+      ...(parsed.data.folderId === undefined ? {} : { folderId: parsed.data.folderId }),
+      ...(parsed.data.copilotName === undefined ? {} : { copilotName: parsed.data.copilotName })
     });
     return Response.json({ folderId: course.driveRootFolderId, copilotName: course.copilotName });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Copilot 设置更新失败" }, { status: 403 });
+    return courseDriveErrorResponse(error, "Copilot 设置更新失败");
   }
 }

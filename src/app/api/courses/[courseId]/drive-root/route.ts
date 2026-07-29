@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
+import { requireCourseOwner } from "@/lib/permissions";
 import { bindCourseDriveRoot, ensureCourseDriveRoot, getCourseDriveRoot, listCourseDriveRootCandidates } from "@/lib/courseDrive/service";
 import { courseDriveErrorResponse } from "@/lib/courseDrive/http";
 
@@ -23,8 +24,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   const { courseId } = await context.params;
   try {
     const root = await getCourseDriveRoot(user, courseId);
-    const folders = await listCourseDriveRootCandidates(user, courseId).catch(() => []);
-    return NextResponse.json({ root, folders });
+    const canBindRoot = await requireCourseOwner(user, courseId).then(() => true).catch(() => false);
+    const folders = canBindRoot ? await listCourseDriveRootCandidates(user, courseId) : [];
+    return NextResponse.json({ root, folders, canBindRoot });
   } catch (error) {
     return courseDriveErrorResponse(error);
   }

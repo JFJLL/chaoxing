@@ -68,6 +68,7 @@ export function CourseDriveWorkspace({
 }) {
   const [root, setRoot] = useState<DriveRoot | null>();
   const [folders, setFolders] = useState<RootCandidate[]>([]);
+  const [canBindRoot, setCanBindRoot] = useState(false);
   const [children, setChildren] = useState<DriveChildren | null>(null);
   const [moveFolders, setMoveFolders] = useState<MoveFolder[]>([]);
   const [error, setError] = useState("");
@@ -81,12 +82,14 @@ export function CourseDriveWorkspace({
         const body = (await response.json().catch(() => null)) as {
           root?: DriveRoot | null;
           folders?: RootCandidate[];
+          canBindRoot?: boolean;
           error?: string;
         } | null;
         if (!response.ok) throw new Error(body?.error || "课程云盘加载失败");
         if (!cancelled) {
           setRoot(body?.root ?? null);
           setFolders(Array.isArray(body?.folders) ? body.folders : []);
+          setCanBindRoot(body?.canBindRoot === true);
         }
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : "课程云盘加载失败");
@@ -138,6 +141,13 @@ export function CourseDriveWorkspace({
   }
 
   if (!root) {
+    if (!canBindRoot) {
+      return (
+        <p role="status" className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-5 text-sm text-amber-800">
+          课程云盘尚未绑定，请联系课程所有者完成根目录设置。
+        </p>
+      );
+    }
     return (
       <div className="space-y-3">
         {error ? <p role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}

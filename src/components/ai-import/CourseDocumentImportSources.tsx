@@ -28,6 +28,7 @@ export function CourseDocumentImportSources({ courseId }: { courseId: string }) 
   const router = useRouter();
   const [root, setRoot] = useState<DriveRoot | null>();
   const [folders, setFolders] = useState<RootCandidate[]>([]);
+  const [canBindRoot, setCanBindRoot] = useState(false);
   const [items, setItems] = useState<PickerItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -43,12 +44,14 @@ export function CourseDocumentImportSources({ courseId }: { courseId: string }) 
         const body = (await response.json().catch(() => null)) as {
           root?: DriveRoot | null;
           folders?: RootCandidate[];
+          canBindRoot?: boolean;
           error?: string;
         } | null;
         if (!response.ok) throw new Error(body?.error || "课程云盘加载失败");
         if (!cancelled) {
           setRoot(body?.root ?? null);
           setFolders(Array.isArray(body?.folders) ? body.folders : []);
+          setCanBindRoot(body?.canBindRoot === true);
         }
       } catch (error) {
         if (!cancelled) {
@@ -134,9 +137,18 @@ export function CourseDocumentImportSources({ courseId }: { courseId: string }) 
   }
 
   if (!root) {
+    if (message?.tone === "error") {
+      return <p role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{message.text}</p>;
+    }
+    if (!canBindRoot) {
+      return (
+        <p role="status" className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-5 text-sm text-amber-800">
+          课程云盘尚未绑定，请联系课程所有者完成根目录设置后再导入资料。
+        </p>
+      );
+    }
     return (
       <div className="space-y-3">
-        {message ? <p role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{message.text}</p> : null}
         <p className="text-sm text-slate-600">导入前需要先设置当前课程的云盘根文件夹。</p>
         <CourseDriveRootSetup courseId={courseId} folders={folders} onReady={setRoot} />
       </div>

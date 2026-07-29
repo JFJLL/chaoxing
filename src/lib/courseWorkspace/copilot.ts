@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import type { SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseAccess } from "@/lib/permissions";
+import { requireCourseAccess, requireCourseManager } from "@/lib/permissions";
 import type { TextCompletionMessage } from "@/lib/ai/modelClient";
 import {
   assertCourseCopilotReferences,
@@ -444,8 +444,9 @@ export async function failCopilotTurn(input: {
 }
 
 export async function getCopilotAnalytics(user: SessionUser, courseId: string) {
-  const { canManage } = await courseContext(user, courseId);
-  if (!canManage) throw new CopilotError("COPILOT_SETTINGS_FORBIDDEN", "无权查看 Copilot 数据", 403);
+  await requireCourseManager(user, courseId).catch(() => {
+    throw new CopilotError("COPILOT_SETTINGS_FORBIDDEN", "无权查看 Copilot 数据", 403);
+  });
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1_000);
   const events = await db.copilotUsageEvent.findMany({
     where: { courseId, status: { in: ["SUCCESS", "FAILED"] }, createdAt: { gte: since } },
