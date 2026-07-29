@@ -31,11 +31,20 @@ export async function GET(request: NextRequest) {
         },
         enrollments: {
           select: { id: true, userId: true, progress: true, completedAt: true }
+        },
+        collaborators: {
+          where: { userId: user.id },
+          select: { userId: true }
         }
       },
       orderBy: { updatedAt: "desc" }
     });
-    return NextResponse.json({ courses });
+    return NextResponse.json({
+      courses: courses.map((course) => ({
+        ...course,
+        accessRole: course.ownerId === user.id ? "OWNER" : "COLLABORATOR"
+      }))
+    });
   }
 
   const enrollments = await db.courseEnrollment.findMany({

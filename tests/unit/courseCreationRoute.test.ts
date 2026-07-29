@@ -71,11 +71,31 @@ describe("GET /api/courses", () => {
         },
         enrollments: {
           select: { id: true, userId: true, progress: true, completedAt: true }
+        },
+        collaborators: {
+          where: { userId: "teacher-1" },
+          select: { userId: true }
         }
       },
       orderBy: { updatedAt: "desc" }
     });
     expect(JSON.stringify(mocks.courseFindMany.mock.calls[0]?.[0])).not.toContain("passwordHash");
+  });
+
+  it("labels owned and collaborated courses for owner-only UI actions", async () => {
+    mocks.courseFindMany.mockResolvedValue([
+      { id: "owned", ownerId: "teacher-1", collaborators: [] },
+      { id: "shared", ownerId: "teacher-2", collaborators: [{ userId: "teacher-1" }] }
+    ]);
+
+    const response = await GET(new NextRequest("http://localhost/api/courses?tab=taught"));
+
+    await expect(response.json()).resolves.toMatchObject({
+      courses: [
+        { id: "owned", accessRole: "OWNER" },
+        { id: "shared", accessRole: "COLLABORATOR" }
+      ]
+    });
   });
 });
 

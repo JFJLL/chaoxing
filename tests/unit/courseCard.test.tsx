@@ -22,12 +22,26 @@ describe("CourseCard", () => {
     const html = renderToStaticMarkup(<CourseCard course={course} mode="taught" />);
 
     expect(html).toContain("已发布");
+    expect(html).toContain("课程所有者");
     expect(html).toContain("更多课程操作：测试课程");
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain("撤回发布");
     expect(html).not.toContain("删除课程");
     expect(html).toContain("进入课程");
     expect(html).not.toContain("学习进度");
+  });
+
+  it("labels collaborated courses and hides every owner-only lifecycle action", () => {
+    const html = renderToStaticMarkup(
+      <CourseCard course={{ ...course, status: "DRAFT", accessRole: "COLLABORATOR" }} mode="taught" />
+    );
+
+    expect(html).toContain("协作教师");
+    expect(html).toContain("进入课程");
+    expect(html).not.toContain("发布课程");
+    expect(html).not.toContain("更多课程操作");
+    expect(html).not.toContain("管理协作教师");
+    expect(html).not.toContain("删除课程");
   });
 
   it("keeps publishing a draft visible while its delete action stays in the menu", () => {

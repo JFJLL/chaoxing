@@ -20,10 +20,25 @@ export default async function CoursesPage({ searchParams }: PageProps) {
   const courses =
     activeTab === "taught"
       ? await db.course.findMany({
-          where: { ownerId: user.id },
-          include: { owner: true, enrollments: true },
+          where: {
+            OR: [
+              { ownerId: user.id },
+              { collaborators: { some: { userId: user.id } } }
+            ]
+          },
+          include: {
+            owner: true,
+            enrollments: true,
+            collaborators: {
+              where: { userId: user.id },
+              select: { userId: true }
+            }
+          },
           orderBy: { updatedAt: "desc" }
-        })
+        }).then((items) => items.map((course) => ({
+          ...course,
+          accessRole: course.ownerId === user.id ? "OWNER" as const : "COLLABORATOR" as const
+        })))
       : (
           await db.courseEnrollment.findMany({
             where: { userId: user.id, course: { status: "ACTIVE" } },
@@ -61,7 +76,7 @@ export default async function CoursesPage({ searchParams }: PageProps) {
       ) : (
         <EmptyState
           title={activeTab === "taught" ? "暂无我教的课" : "暂无我学的课"}
-          description={activeTab === "taught" ? "新建课程后可继续使用 AI 文档建课。" : "通过邀请码添加课程后会显示学习进度。"}
+          description={activeTab === "taught" ? "新建课程后可继续导入课程文档。" : "通过邀请码添加课程后会显示学习进度。"}
         />
       )}
     </div>

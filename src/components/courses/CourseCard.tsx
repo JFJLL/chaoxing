@@ -16,6 +16,7 @@ type CourseCardProps = {
     progress?: number;
     enrollments?: Array<unknown>;
     status?: string;
+    accessRole?: "OWNER" | "COLLABORATOR";
   };
   mode: "learned" | "taught";
 };
@@ -54,9 +55,14 @@ export function CourseCard({ course, mode }: CourseCardProps) {
             </p>
           </div>
           {mode === "taught" ? (
-            <Badge tone={course.status === "ACTIVE" ? "green" : "orange"}>
-              {course.status === "ACTIVE" ? "已发布" : "草稿"}
-            </Badge>
+            <div className="flex flex-col items-end gap-1.5">
+              <Badge tone={course.accessRole === "COLLABORATOR" ? "blue" : "gray"}>
+                {course.accessRole === "COLLABORATOR" ? "协作教师" : "课程所有者"}
+              </Badge>
+              <Badge tone={course.status === "ACTIVE" ? "green" : "orange"}>
+                {course.status === "ACTIVE" ? "已发布" : "草稿"}
+              </Badge>
+            </div>
           ) : null}
         </div>
 
@@ -86,10 +92,10 @@ export function CourseCard({ course, mode }: CourseCardProps) {
             <BookOpen className="h-4 w-4" aria-hidden="true" />
             进入课程
           </LinkButton>
-          {mode === "taught" && course.status && course.status !== "ACTIVE" ? (
+          {mode === "taught" && course.accessRole !== "COLLABORATOR" && course.status && course.status !== "ACTIVE" ? (
             <CoursePublishButton courseId={course.id} status={course.status} className="h-9 w-full px-3 sm:w-auto" />
           ) : null}
-          {mode === "taught" && course.status ? <CourseActionsMenu courseId={course.id} title={course.title} status={course.status} /> : null}
+          {mode === "taught" && course.accessRole !== "COLLABORATOR" && course.status ? <CourseActionsMenu courseId={course.id} title={course.title} status={course.status} /> : null}
         </div>
       </div>
     </article>
