@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
   requireCourseAccess: vi.fn(),
-  requireCourseOwner: vi.fn(),
+  requireCourseManager: vi.fn(),
   findArtifact: vi.fn(),
   createArtifact: vi.fn(),
   generateHtml: vi.fn()
@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/lib/permissions", () => ({
   requireCourseAccess: mocks.requireCourseAccess,
-  requireCourseOwner: mocks.requireCourseOwner
+  requireCourseManager: mocks.requireCourseManager
 }));
 vi.mock("@/lib/db", () => ({
   db: {
@@ -31,7 +31,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireUser.mockResolvedValue({ id: "teacher-1", role: "TEACHER" });
   mocks.requireCourseAccess.mockResolvedValue({ id: "course-1" });
-  mocks.requireCourseOwner.mockResolvedValue({ id: "course-1" });
+  mocks.requireCourseManager.mockResolvedValue({ id: "course-1" });
   mocks.findArtifact.mockResolvedValue(null);
 });
 

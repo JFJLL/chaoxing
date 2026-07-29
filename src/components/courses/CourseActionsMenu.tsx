@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { CourseDeleteButton } from "@/components/courses/CourseDeleteButton";
 import { CoursePublishButton } from "@/components/courses/CoursePublishButton";
+import { CourseCollaborationDialog } from "@/components/courses/CourseCollaborationDialog";
 
 export function CourseActionsMenu({ courseId, title, status }: { courseId: string; title: string; status: string }) {
   const [open, setOpen] = useState(false);
@@ -40,6 +41,7 @@ export function CourseActionsMenu({ courseId, title, status }: { courseId: strin
       {open ? (
         <div role="menu" aria-label="课程操作" className="absolute bottom-full right-0 z-20 mb-2 w-44 space-y-2 rounded-xl border border-[var(--cx-border)] bg-white p-2 shadow-floating">
           {status === "ACTIVE" ? <CoursePublishButton courseId={courseId} status={status} className="h-9 w-full justify-start px-3" /> : null}
+          <CourseCollaborationDialog courseId={courseId} />
           <CourseDeleteButton courseId={courseId} title={title} className="w-full" />
         </div>
       ) : null}

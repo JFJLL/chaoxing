@@ -16,8 +16,10 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/lib/permissions", () => ({
   isTeacher: (user: { role: string }) => user.role === "TEACHER" || user.role === "ADMIN",
+  isCourseManagerRecord: (user: { id: string; role: string }, course: { ownerId: string; collaborators?: Array<{ userId: string }> }) =>
+    user.role === "ADMIN" || course.ownerId === user.id || Boolean(course.collaborators?.some((item) => item.userId === user.id)),
   requireCourseAccess: mocks.requireCourseAccess,
-  requireCourseOwner: vi.fn()
+  requireCourseManager: vi.fn()
 }));
 
 import { assertDriveMoveAllowed } from "@/lib/copilot/files";

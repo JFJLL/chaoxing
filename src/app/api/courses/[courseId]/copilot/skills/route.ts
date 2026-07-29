@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { readBoundedMultipartFormData } from "@/lib/imports/importUpload";
 import { CopilotError, listCopilotSkills } from "@/lib/courseWorkspace/copilot";
 import { COPILOT_MAX_SKILL_UPLOAD_BYTES, CopilotSkillPackageError, parseCopilotSkillPackage } from "@/lib/copilot/skillPackage";
@@ -22,7 +22,7 @@ export async function POST(request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
   try {
-    await requireCourseOwner(user, courseId);
+    await requireCourseManager(user, courseId);
     const form = await readBoundedMultipartFormData(request, COPILOT_MAX_SKILL_UPLOAD_BYTES + 1024 * 1024);
     const file = form.get("file");
     if (!(file instanceof File)) return Response.json({ error: "请选择 Skill 文件" }, { status: 400 });

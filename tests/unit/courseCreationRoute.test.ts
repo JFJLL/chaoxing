@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => {
   const tx = {
@@ -14,6 +15,8 @@ const mocks = vi.hoisted(() => {
     tx,
     requireUser: vi.fn(),
     assertTeacher: vi.fn(),
+    courseFindMany: vi.fn(),
+    enrollmentFindMany: vi.fn(),
     transaction: vi.fn(async (operation: (client: typeof tx) => unknown) =>
       operation(tx)
     )
@@ -32,12 +35,49 @@ vi.mock("@/lib/permissions", () => ({
 vi.mock("@/lib/db", () => ({
   db: {
     $transaction: mocks.transaction,
-    course: { findMany: vi.fn() },
-    courseEnrollment: { findMany: vi.fn() }
+    course: { findMany: mocks.courseFindMany },
+    courseEnrollment: { findMany: mocks.enrollmentFindMany }
   }
 }));
 
-import { POST } from "@/app/api/courses/route";
+import { GET, POST } from "@/app/api/courses/route";
+
+describe("GET /api/courses", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.requireUser.mockResolvedValue({
+      id: "teacher-1",
+      name: "教师",
+      role: "TEACHER",
+      institutionId: "institution-1"
+    });
+    mocks.courseFindMany.mockResolvedValue([]);
+  });
+
+  it("returns owned and collaborated courses without selecting password hashes", async () => {
+    const response = await GET(new NextRequest("http://localhost/api/courses?tab=taught"));
+
+    expect(response.status).toBe(200);
+    expect(mocks.courseFindMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { ownerId: "teacher-1" },
+          { collaborators: { some: { userId: "teacher-1" } } }
+        ]
+      },
+      include: {
+        owner: {
+          select: { id: true, name: true, email: true, avatar: true, role: true }
+        },
+        enrollments: {
+          select: { id: true, userId: true, progress: true, completedAt: true }
+        }
+      },
+      orderBy: { updatedAt: "desc" }
+    });
+    expect(JSON.stringify(mocks.courseFindMany.mock.calls[0]?.[0])).not.toContain("passwordHash");
+  });
+});
 
 describe("POST /api/courses", () => {
   beforeEach(() => {

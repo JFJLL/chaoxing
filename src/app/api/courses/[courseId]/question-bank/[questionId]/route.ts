@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { isValidChoiceAnswer, normalizeChoiceAnswer } from "@/lib/teaching/choiceQuestions";
 import { parseOptions } from "@/lib/teaching/assessmentInput";
 
@@ -22,7 +22,7 @@ const schema = z.object({
 export async function PUT(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId, questionId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  await requireCourseManager(user, courseId);
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "题目内容无效" }, { status: 400 });
   const options = parsed.data.type === "short_answer" ? [] : parsed.data.options ?? [];

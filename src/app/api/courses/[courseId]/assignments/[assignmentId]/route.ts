@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { assessmentQuestionInputSchema, questionCreateRows } from "@/lib/teaching/assessmentInput";
 
 type RouteContext = { params: Promise<{ courseId: string; assignmentId: string }> };
@@ -19,7 +19,7 @@ const schema = z.discriminatedUnion("action", [
 export async function PUT(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId, assignmentId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  await requireCourseManager(user, courseId);
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "作业操作无效" }, { status: 400 });
   const assignment = await db.assignment.findFirst({ where: { id: assignmentId, courseId }, include: { questions: { orderBy: { order: "asc" } }, _count: { select: { questions: true } } } });

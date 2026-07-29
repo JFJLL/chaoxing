@@ -19,7 +19,7 @@ export function AddCourseDialog() {
     setSubmitting(true);
     setError("");
 
-    const response = await fetch("/api/invite", {
+    const response = await fetch("/api/courses/collaborations/join", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code: form.get("code") })
@@ -45,8 +45,8 @@ export function AddCourseDialog() {
       <Dialog open={open} title="添加课程" onClose={() => setOpen(false)}>
         <form className="space-y-4" onSubmit={onSubmit}>
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">课程邀请码</span>
-            <Input name="code" required minLength={4} placeholder="输入课程邀请码" className="w-full" />
+            <span className="text-sm font-medium text-slate-700">教师协作码</span>
+            <Input name="code" required minLength={4} placeholder="输入同机构课程的教师协作码" className="w-full" />
           </label>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
           <div className="flex justify-end gap-2">

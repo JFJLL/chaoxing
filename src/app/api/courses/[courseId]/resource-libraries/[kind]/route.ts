@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { RESOURCE_LIBRARY_PURPOSES, type ResourceLibraryKind } from "@/lib/courseDrive/constants";
 import { courseDriveErrorResponse } from "@/lib/courseDrive/http";
 import { countFilesBelowFolder, ensureCoursePurposeFolder } from "@/lib/courseDrive/service";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 
 type RouteContext = { params: Promise<{ courseId: string; kind: string }> };
 
@@ -14,7 +14,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "资料库类型无效" }, { status: 404 });
   }
   try {
-    const course = await requireCourseOwner(user, courseId);
+    const course = await requireCourseManager(user, courseId);
     const libraryKind = kind as ResourceLibraryKind;
     const folder = await ensureCoursePurposeFolder(user, courseId, RESOURCE_LIBRARY_PURPOSES[libraryKind]);
     return NextResponse.json({

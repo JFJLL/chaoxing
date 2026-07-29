@@ -4,7 +4,7 @@ import { resolve } from "path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "../../src/lib/db";
 import type { SessionUser } from "../../src/lib/auth";
-import { requireCourseAccess, requireCourseOwner, requireTeacher } from "../../src/lib/permissions";
+import { requireCourseAccess, requireCourseManager, requireCourseOwner, requireTeacher } from "../../src/lib/permissions";
 import { requireDriveFileOwner, requireDriveFileReadable } from "../../src/lib/modules/drivePermissions";
 import { ensureCoursePurposeFolder } from "../../src/lib/courseDrive/service";
 import { publishCourseResourceUpload } from "../../src/lib/courseWorkspace/courseResources";
@@ -13,7 +13,9 @@ import { requireLiveParticipantOrHost } from "../../src/lib/modules/livePermissi
 
 type Fixture = {
   institutionId: string;
+  otherInstitutionId: string;
   teacher: SessionUser;
+  collaborator: SessionUser;
   student: SessionUser;
   outsider: SessionUser;
   activeCourseId: string;
@@ -51,6 +53,7 @@ beforeAll(async () => {
     data: { name: `权限测试 ${randomUUID()}` }
   });
   const teacher = await createUser(institution.id, "权限教师", "TEACHER");
+  const collaborator = await createUser(institution.id, "协作教师", "TEACHER");
   const student = await createUser(institution.id, "已选学生", "STUDENT");
   const outsider = await createUser(institution.id, "未授权学生", "STUDENT");
 
@@ -71,6 +74,10 @@ beforeAll(async () => {
       enrollments: { create: { userId: student.id } }
     }
   });
+  await db.courseCollaborator.create({
+    data: { courseId: enrolledCourse.id, userId: collaborator.id }
+  });
+  const otherInstitution = await db.institution.create({ data: { name: `其他机构 ${randomUUID()}` } });
   const driveFile = await db.driveFile.create({
     data: {
       ownerId: teacher.id,
@@ -105,7 +112,9 @@ beforeAll(async () => {
 
   fixture = {
     institutionId: institution.id,
+    otherInstitutionId: otherInstitution.id,
     teacher,
+    collaborator,
     student,
     outsider,
     activeCourseId: activeCourse.id,
@@ -122,6 +131,7 @@ afterAll(async () => {
   if (!fixture) return;
   await db.group.deleteMany({ where: { id: fixture.groupId } });
   await db.institution.deleteMany({ where: { id: fixture.institutionId } });
+  await db.institution.deleteMany({ where: { id: fixture.otherInstitutionId } });
   await db.$disconnect();
 });
 
@@ -134,6 +144,18 @@ describe("course permissions", () => {
     await expect(requireCourseAccess(fixture.student, fixture.enrolledCourseId)).resolves.toMatchObject({
       id: fixture.enrolledCourseId
     });
+  });
+
+  it("allows a collaborator to access and manage without enrolling them as a student", async () => {
+    await expect(requireCourseAccess(fixture.collaborator, fixture.enrolledCourseId)).resolves.toMatchObject({
+      id: fixture.enrolledCourseId
+    });
+    await expect(requireCourseManager(fixture.collaborator, fixture.enrolledCourseId)).resolves.toMatchObject({
+      id: fixture.enrolledCourseId
+    });
+    await expect(db.courseEnrollment.findUnique({
+      where: { courseId_userId: { courseId: fixture.enrolledCourseId, userId: fixture.collaborator.id } }
+    })).resolves.toBeNull();
   });
 });
 
@@ -268,5 +290,9 @@ describe("course owner permissions", () => {
   it("rejects students from teacher-only permissions", async () => {
     expect(() => requireTeacher(fixture.student)).toThrow("需要教师权限");
     await expect(requireCourseOwner(fixture.student, fixture.enrolledCourseId)).rejects.toThrow("需要教师权限");
+  });
+
+  it("keeps owner-only operations unavailable to collaborators", async () => {
+    await expect(requireCourseOwner(fixture.collaborator, fixture.enrolledCourseId)).rejects.toThrow("无权管理课程");
   });
 });

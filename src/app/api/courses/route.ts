@@ -19,10 +19,19 @@ export async function GET(request: NextRequest) {
   if (tab === "taught") {
     assertTeacher(user);
     const courses = await db.course.findMany({
-      where: { ownerId: user.id },
+      where: {
+        OR: [
+          { ownerId: user.id },
+          { collaborators: { some: { userId: user.id } } }
+        ]
+      },
       include: {
-        owner: true,
-        enrollments: true
+        owner: {
+          select: { id: true, name: true, email: true, avatar: true, role: true }
+        },
+        enrollments: {
+          select: { id: true, userId: true, progress: true, completedAt: true }
+        }
       },
       orderBy: { updatedAt: "desc" }
     });
@@ -34,7 +43,9 @@ export async function GET(request: NextRequest) {
     include: {
       course: {
         include: {
-          owner: true
+          owner: {
+            select: { id: true, name: true, email: true, avatar: true, role: true }
+          }
         }
       }
     },

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 
 type RouteContext = { params: Promise<{ courseId: string; assignmentId: string; submissionId: string }> };
 const schema = z.object({ feedback: z.string().max(10_000).default(""), answers: z.array(z.object({ answerId: z.string(), score: z.number().min(0).max(1_000), feedback: z.string().max(10_000).optional() })) });
@@ -10,7 +10,7 @@ const schema = z.object({ feedback: z.string().max(10_000).default(""), answers:
 export async function PUT(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId, assignmentId, submissionId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  await requireCourseManager(user, courseId);
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "评分内容无效" }, { status: 400 });
   const submission = await db.assignmentSubmission.findFirst({ where: { id: submissionId, assignmentId, assignment: { courseId } }, include: { answers: { include: { question: true } } } });

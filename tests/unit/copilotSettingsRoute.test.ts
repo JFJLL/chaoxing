@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
-  requireCourseOwner: vi.fn(),
+  requireCourseManager: vi.fn(),
   updateCourse: vi.fn(),
   bindCourseDriveRoot: vi.fn(),
   listOwnerDriveFolders: vi.fn(),
@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
-vi.mock("@/lib/permissions", () => ({ requireCourseOwner: mocks.requireCourseOwner }));
+vi.mock("@/lib/permissions", () => ({ requireCourseManager: mocks.requireCourseManager }));
 vi.mock("@/lib/db", () => ({ db: { course: { update: mocks.updateCourse } } }));
 vi.mock("@/lib/copilot/files", () => ({
   listOwnerDriveFolders: mocks.listOwnerDriveFolders
@@ -26,7 +26,7 @@ describe("PUT /api/courses/:courseId/copilot/settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireUser.mockResolvedValue({ id: "teacher-1", role: "TEACHER" });
-    mocks.requireCourseOwner.mockResolvedValue({ id: "course-1" });
+    mocks.requireCourseManager.mockResolvedValue({ id: "course-1" });
     mocks.updateCourse.mockResolvedValue({ driveRootFolderId: "root-1", copilotName: "课程小助手" });
   });
 

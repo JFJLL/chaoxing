@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseAccess, requireCourseOwner } from "@/lib/permissions";
+import { isCourseManagerRecord, requireCourseAccess, requireCourseManager } from "@/lib/permissions";
 
 type RouteContext = { params: Promise<{ courseId: string }> };
 
@@ -20,7 +20,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无权访问课程" }, { status: 403 });
   }
-  const canManage = user.role === "ADMIN" || course.ownerId === user.id;
+  const canManage = isCourseManagerRecord(user, course);
   const sessions = await db.attendanceSession.findMany({
     where: { courseId, ...(canManage ? {} : { status: { in: ["ACTIVE", "ENDED"] } }) },
     include: { records: canManage ? { include: { user: { select: { id: true, name: true } } } } : { where: { userId: user.id } } },
@@ -32,7 +32,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 export async function POST(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  await requireCourseManager(user, courseId);
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "签到名称或有效时长无效" }, { status: 400 });
   const startsAt = new Date();

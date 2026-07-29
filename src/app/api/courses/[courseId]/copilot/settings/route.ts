@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { listOwnerDriveFolders } from "@/lib/copilot/files";
 import { getCopilotAnalytics } from "@/lib/courseWorkspace/copilot";
 import { bindCourseDriveRoot } from "@/lib/courseDrive/service";
@@ -16,7 +16,7 @@ export async function GET(_request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
   try {
-    const course = await requireCourseOwner(user, courseId);
+    const course = await requireCourseManager(user, courseId);
     const [folders, analytics] = await Promise.all([listOwnerDriveFolders(user), getCopilotAnalytics(user, courseId)]);
     return Response.json({ folderId: course.driveRootFolderId, copilotName: course.copilotName, folders, analytics });
   } catch (error) {
@@ -28,7 +28,7 @@ export async function PUT(request: Request, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
   try {
-    await requireCourseOwner(user, courseId);
+    await requireCourseManager(user, courseId);
     const parsed = settingsSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return Response.json({ error: "Copilot 设置无效：名称为 1–40 个字符" }, { status: 400 });
     if (parsed.data.folderId === null) {

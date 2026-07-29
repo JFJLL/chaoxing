@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 
 export function NewCourseDialog() {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"create" | "join">("create");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
@@ -19,21 +20,20 @@ export function NewCourseDialog() {
     setSubmitting(true);
     setError("");
 
-    const response = await fetch("/api/courses", {
+    const joining = mode === "join";
+    const response = await fetch(joining ? "/api/courses/collaborations/join" : "/api/courses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: form.get("title"),
-        coverStyle: form.get("coverStyle"),
-        startsAt: form.get("startsAt") || undefined,
-        endsAt: form.get("endsAt") || undefined
+      body: JSON.stringify(joining ? { code: form.get("code") } : {
+        title: form.get("title"), coverStyle: form.get("coverStyle"),
+        startsAt: form.get("startsAt") || undefined, endsAt: form.get("endsAt") || undefined
       })
     });
 
     setSubmitting(false);
     if (!response.ok) {
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
-      setError(body?.error ?? "新建课程失败");
+      setError(body?.error ?? (joining ? "加入协作课程失败" : "新建课程失败"));
       return;
     }
 
@@ -48,12 +48,21 @@ export function NewCourseDialog() {
 
   return (
     <>
-      <Button type="button" onClick={() => setOpen(true)}>
+      <Button type="button" onClick={() => { setMode("create"); setOpen(true); }}>
         <Plus className="h-4 w-4" />
         新建课程
       </Button>
-      <Dialog open={open} title="新建课程" onClose={() => setOpen(false)}>
+      <Button type="button" variant="secondary" onClick={() => { setMode("join"); setOpen(true); }}>
+        加入协作课程
+      </Button>
+      <Dialog open={open} title={mode === "join" ? "加入协作课程" : "新建课程"} onClose={() => setOpen(false)}>
         <form className="space-y-4" onSubmit={onSubmit}>
+          {mode === "join" ? (
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-slate-700">教师协作码</span>
+              <Input name="code" required minLength={4} placeholder="输入同机构课程的教师协作码" className="w-full" />
+            </label>
+          ) : <>
           <label className="block space-y-2">
             <span className="text-sm font-medium text-slate-700">课程名称</span>
             <Input name="title" required minLength={2} placeholder="请输入课程名称" className="w-full" />
@@ -77,13 +86,14 @@ export function NewCourseDialog() {
               <Input name="endsAt" type="date" className="w-full" />
             </label>
           </div>
+          </>}
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               取消
             </Button>
             <Button type="submit" disabled={submitting}>
-              {submitting ? "创建中" : "创建"}
+              {submitting ? (mode === "join" ? "加入中" : "创建中") : (mode === "join" ? "加入" : "创建")}
             </Button>
           </div>
         </form>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { assessmentQuestionInputSchema, parseOptions, questionCreateRows } from "@/lib/teaching/assessmentInput";
 import { gradeObjectiveAnswer } from "@/lib/teaching/assessment";
 
@@ -46,7 +46,7 @@ async function submitExpiredAttempts(exam: { id: string; durationMinutes: number
 }
 
 export async function PUT(request: NextRequest, context: RouteContext) {
-  const user = await requireUser(); const { courseId, examId } = await context.params; await requireCourseOwner(user, courseId);
+  const user = await requireUser(); const { courseId, examId } = await context.params; await requireCourseManager(user, courseId);
   const parsed = schema.safeParse(await request.json().catch(() => null)); if (!parsed.success) return NextResponse.json({ error: "考试操作无效" }, { status: 400 });
   const exam = await db.exam.findFirst({ where: { id: examId, courseId }, include: { questions: { orderBy: { order: "asc" } }, _count: { select: { questions: true } } } }); if (!exam) return NextResponse.json({ error: "考试不存在" }, { status: 404 });
   if (parsed.data.action === "CREATE_REVISION") {

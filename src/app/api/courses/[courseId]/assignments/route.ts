@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseAccess, requireCourseOwner } from "@/lib/permissions";
+import { isCourseManagerRecord, requireCourseAccess, requireCourseManager } from "@/lib/permissions";
 import { assessmentQuestionInputSchema, questionCreateRows } from "@/lib/teaching/assessmentInput";
 import { loadSourceQuestionInputs } from "@/lib/teaching/sourceQuestions";
 
@@ -21,7 +21,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
   const course = await requireCourseAccess(user, courseId);
-  const canManage = user.role === "ADMIN" || course.ownerId === user.id;
+  const canManage = isCourseManagerRecord(user, course);
   const assignments = await db.assignment.findMany({
     where: { courseId, ...(canManage ? {} : { status: "PUBLISHED", OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] }) },
     include: { questions: { orderBy: { order: "asc" } }, submissions: canManage ? true : { where: { userId: user.id } } },
@@ -33,7 +33,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 export async function POST(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  await requireCourseManager(user, courseId);
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "作业内容无效", details: parsed.error.flatten() }, { status: 400 });
   const sourceQuestions = await loadSourceQuestionInputs(courseId, parsed.data.sourceQuestionIds);

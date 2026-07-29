@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
   requireCourseAccess: vi.fn(),
-  requireCourseOwner: vi.fn(),
+  requireCourseManager: vi.fn(),
   findSession: vi.fn(),
   findSessions: vi.fn()
 }));
@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/lib/permissions", () => ({
   requireCourseAccess: mocks.requireCourseAccess,
-  requireCourseOwner: mocks.requireCourseOwner
+  requireCourseManager: mocks.requireCourseManager
 }));
 vi.mock("@/lib/db", () => ({
   db: { attendanceSession: { findFirst: mocks.findSession, findMany: mocks.findSessions } }
@@ -28,7 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireUser.mockResolvedValue({ id: "student-1", role: "STUDENT" });
   mocks.requireCourseAccess.mockResolvedValue({ id: "course-1", ownerId: "teacher-1" });
-  mocks.requireCourseOwner.mockRejectedValue(new Error("无权管理课程"));
+    mocks.requireCourseManager.mockRejectedValue(new Error("无权管理课程"));
 });
 
 describe("GET attendance token", () => {

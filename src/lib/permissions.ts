@@ -23,8 +23,15 @@ const findAccessibleCourse = cache(async (userId: string, role: SessionUser["rol
       OR: [
         ...(role === "ADMIN" ? [{}] : []),
         { ownerId: userId },
+        { collaborators: { some: { userId } } },
         { status: "ACTIVE", enrollments: { some: { userId } } }
       ]
+    },
+    include: {
+      collaborators: {
+        where: { userId },
+        select: { userId: true, role: true }
+      }
     }
   });
 
@@ -68,4 +75,38 @@ export async function requireCourseOwner(user: SessionUser, courseId: string) {
   }
 
   return course;
+}
+
+export async function requireCourseManager(user: SessionUser, courseId: string) {
+  requireTeacher(user);
+  const course = await db.course.findFirst({
+    where: {
+      id: courseId,
+      OR: [
+        ...(user.role === "ADMIN" ? [{}] : []),
+        { ownerId: user.id },
+        { collaborators: { some: { userId: user.id } } }
+      ]
+    },
+    include: {
+      collaborators: {
+        where: { userId: user.id },
+        select: { userId: true, role: true }
+      }
+    }
+  });
+
+  if (!course) {
+    throw new Error("无权管理课程");
+  }
+
+  return course;
+}
+
+export function isCourseManagerRecord(
+  user: SessionUser,
+  course: { ownerId: string; collaborators?: Array<{ userId: string }> }
+) {
+  return Boolean(user.role === "ADMIN"
+    || (isTeacher(user) && (course.ownerId === user.id || course.collaborators?.some((item) => item.userId === user.id))));
 }

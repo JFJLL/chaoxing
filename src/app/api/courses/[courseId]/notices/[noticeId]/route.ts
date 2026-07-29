@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 import { normalizeNoticePublishAt } from "@/lib/teaching/notices";
 
 type RouteContext = { params: Promise<{ courseId: string; noticeId: string }> };
@@ -18,7 +18,7 @@ const updateSchema = z.object({
 export async function PUT(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId, noticeId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  await requireCourseManager(user, courseId);
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "通知内容无效" }, { status: 400 });
   const existing = await db.announcement.findFirst({
@@ -51,7 +51,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId, noticeId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  await requireCourseManager(user, courseId);
   const result = await db.announcement.updateMany({ where: { id: noticeId, courseId }, data: { status: "WITHDRAWN" } });
   return result.count ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "通知不存在" }, { status: 404 });
 }

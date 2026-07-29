@@ -27,7 +27,9 @@ model User {
   institutionId           String
   institution             Institution             @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   ownedCourses            Course[]                @relation("CourseOwner")
+  courseCollaborations    CourseCollaborator[]
   enrollments             CourseEnrollment[]
+  importBatches           DocumentImportBatch[]
   importJobs              DocumentImportJob[]
   sentMessages            Message[]               @relation("SentMessages")
   receivedMessages        Message[]               @relation("ReceivedMessages")
@@ -84,10 +86,13 @@ model Course {
   driveRootFolderId  String?                 @unique
   driveRootFolder    DriveFile?              @relation("CourseDriveRoot", fields: [driveRootFolderId], references: [id], onDelete: SetNull)
   copilotName        String                  @default("Copilot")
+  outlineVersion     Int                     @default(0)
+  collaborators      CourseCollaborator[]
   enrollments        CourseEnrollment[]
   chapters           Chapter[]
   resources          Resource[]
   imports            DocumentImportJob[]
+  importBatches      DocumentImportBatch[]
   aiArtifacts        CourseAiArtifact[]
   questions          CourseQuestion[]
   aiConversations    CourseAiConversation[]
@@ -104,6 +109,20 @@ model Course {
   driveAccessRules   CourseDriveAccessRule[]
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
+}
+
+model CourseCollaborator {
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("MANAGER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([courseId, userId])
+  @@index([userId, updatedAt])
 }
 
 model CourseEnrollment {
@@ -179,7 +198,11 @@ model DocumentImportJob {
   mimeType         String?
   driveFileId      String?
   driveFile        DriveFile?           @relation("ImportSourceDriveFile", fields: [driveFileId], references: [id], onDelete: SetNull)
+  batchId          String?
+  batch            DocumentImportBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  contentHash      String?
   extractedText    String?
+  parsedSections   String?
   generatedOutline String?
   warning          String?
   errorMessage     String?
@@ -187,10 +210,33 @@ model DocumentImportJob {
   retryCount       Int                  @default(0)
   startedAt        DateTime?
   finishedAt       DateTime?
+  deletedAt        DateTime?
   knowledgeMaps    CourseKnowledgeMap[]
   aiArtifacts      CourseAiArtifact[]
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
+
+  @@index([batchId, createdAt])
+  @@index([courseId, contentHash])
+  @@index([courseId, deletedAt, createdAt])
+}
+
+model DocumentImportBatch {
+  id                  String              @id @default(cuid())
+  courseId            String
+  course              Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status              String              @default("QUEUED")
+  generatedOutline    String?
+  savedOutlineVersion Int?
+  savedAt             DateTime?
+  documents           DocumentImportJob[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([courseId, createdAt])
+  @@index([userId, createdAt])
 }
 
 model CourseAiArtifact {
@@ -373,6 +419,8 @@ model CourseKnowledgeMap {
   edges       KnowledgeEdge[]
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
+
+  @@index([sourceJobId, status, version])
 }
 
 model KnowledgeNode {
@@ -660,17 +708,17 @@ model CourseAiArtifactExport {
 }
 
 model DriveShare {
-  id          String    @id @default(cuid())
+  id          String            @id @default(cuid())
   fileId      String
-  file        DriveFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  file        DriveFile         @relation(fields: [fileId], references: [id], onDelete: Cascade)
   ownerId     String
-  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  code        String    @unique
+  owner       User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  code        String            @unique
   expiresAt   DateTime?
-  accessCount Int       @default(0)
+  accessCount Int               @default(0)
   grants      DriveShareGrant[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 }
 
 model DriveShareGrant {

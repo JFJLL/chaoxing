@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseOwner } from "@/lib/permissions";
+import { requireCourseManager } from "@/lib/permissions";
 
 type RouteContext = { params: Promise<{ courseId: string; sessionId: string }> };
 
@@ -15,7 +15,7 @@ const actionSchema = z.discriminatedUnion("action", [
 export async function PUT(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId, sessionId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  await requireCourseManager(user, courseId);
   const parsed = actionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "签到操作无效" }, { status: 400 });
   const session = await db.attendanceSession.findFirst({ where: { id: sessionId, courseId } });

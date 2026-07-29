@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { requireCourseAccess, requireCourseOwner } from "@/lib/permissions";
+import { isCourseManagerRecord, requireCourseAccess, requireCourseManager } from "@/lib/permissions";
 
 type RouteContext = { params: Promise<{ courseId: string }> };
 
@@ -18,7 +18,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
   const course = await requireCourseAccess(user, courseId);
-  const canManage = user.role === "ADMIN" || course.ownerId === user.id;
+  const canManage = isCourseManagerRecord(user, course);
   const now = new Date();
   const notices = await db.announcement.findMany({
     where: {
@@ -38,7 +38,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 export async function POST(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId } = await context.params;
-  await requireCourseOwner(user, courseId);
+  await requireCourseManager(user, courseId);
   const parsed = noticeSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "通知内容不完整" }, { status: 400 });
   const notice = await db.announcement.create({

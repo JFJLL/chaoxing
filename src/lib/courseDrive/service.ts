@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import type { SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isTeacher, requireCourseAccess, requireCourseOwner } from "@/lib/permissions";
+import { isCourseManagerRecord, requireCourseAccess, requireCourseManager } from "@/lib/permissions";
 import {
   COURSE_DRIVE_PURPOSES,
   type CourseDriveAccess,
@@ -18,6 +18,7 @@ type DriveNode = {
   mimeType: string | null;
   size: number;
   path: string | null;
+  contentHash: string | null;
   deletedAt: Date | null;
 };
 
@@ -30,10 +31,6 @@ export class CourseDriveError extends Error {
     super(message);
     this.name = "CourseDriveError";
   }
-}
-
-function isCourseManager(user: SessionUser, ownerId: string) {
-  return user.role === "ADMIN" || (isTeacher(user) && user.id === ownerId);
 }
 
 function nodePath(node: DriveNode, byId: Map<string, DriveNode>, stopId?: string) {
@@ -92,6 +89,7 @@ async function loadActiveOwnerNodes(ownerId: string) {
       mimeType: true,
       size: true,
       path: true,
+      contentHash: true,
       deletedAt: true
     }
   });
@@ -122,7 +120,7 @@ export async function getCourseDriveRoot(user: SessionUser, courseId: string) {
 }
 
 export async function listCourseDriveRootCandidates(user: SessionUser, courseId: string) {
-  const course = await requireCourseOwner(user, courseId);
+  const course = await requireCourseManager(user, courseId);
   const nodes = await loadActiveOwnerNodes(course.ownerId);
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const occupiedRoots = new Set(
@@ -191,12 +189,12 @@ export async function createCourseDriveRoot(input: { courseId: string; ownerId: 
 }
 
 export async function ensureCourseDriveRoot(user: SessionUser, courseId: string) {
-  const course = await requireCourseOwner(user, courseId);
+  const course = await requireCourseManager(user, courseId);
   return createCourseDriveRoot({ courseId: course.id, ownerId: course.ownerId, title: course.title });
 }
 
 export async function bindCourseDriveRoot(user: SessionUser, courseId: string, folderId: string) {
-  const course = await requireCourseOwner(user, courseId);
+  const course = await requireCourseManager(user, courseId);
   const folder = await db.driveFile.findFirst({
     where: { id: folderId, ownerId: course.ownerId, kind: "folder", deletedAt: null },
     select: { id: true, name: true, parentId: true }
@@ -231,7 +229,7 @@ export async function bindCourseDriveRoot(user: SessionUser, courseId: string, f
 export async function requireCourseDriveTarget(user: SessionUser, courseId: string, fileId: string) {
   const course = await requireCourseAccess(user, courseId);
   const context = await loadTargetWithinRoot(course, fileId);
-  if (isCourseManager(user, course.ownerId)) return context.target;
+  if (isCourseManagerRecord(user, course)) return context.target;
   const rules = await db.courseDriveAccessRule.findMany({
     where: { courseId, driveFileId: { in: context.ancestry } },
     select: { driveFileId: true, access: true }
@@ -245,7 +243,7 @@ export async function requireCourseDriveTarget(user: SessionUser, courseId: stri
 export async function resolveCourseDriveAccess(user: SessionUser, courseId: string, fileId: string) {
   const course = await requireCourseAccess(user, courseId);
   const context = await loadTargetWithinRoot(course, fileId);
-  if (isCourseManager(user, course.ownerId)) {
+  if (isCourseManagerRecord(user, course)) {
     return { access: "ALLOW" as const, inherited: false, manager: true };
   }
   const rules = await db.courseDriveAccessRule.findMany({
@@ -266,7 +264,7 @@ export async function setCourseDriveAccess(
   fileId: string,
   access: CourseDriveAccess | "INHERIT"
 ) {
-  const course = await requireCourseOwner(user, courseId);
+  const course = await requireCourseManager(user, courseId);
   await loadTargetWithinRoot(course, fileId);
   if (access === "INHERIT") {
     await db.courseDriveAccessRule.deleteMany({ where: { courseId, driveFileId: fileId } });
@@ -287,7 +285,7 @@ export async function ensureCoursePurposeFolder(
   courseId: string,
   purpose: CourseDrivePurpose
 ) {
-  const course = await requireCourseOwner(user, courseId);
+  const course = await requireCourseManager(user, courseId);
   const root = await ensureCourseDriveRoot(user, courseId);
   const existingBinding = await db.courseDriveBinding.findUnique({
     where: { courseId_purpose: { courseId, purpose } },
@@ -402,7 +400,7 @@ export async function listCourseDrivePicker(
     where: { courseId, driveFileId: { in: descendantRows.map((node) => node.id) } },
     select: { driveFileId: true, access: true }
   });
-  const manager = isCourseManager(user, course.ownerId);
+  const manager = isCourseManagerRecord(user, course);
   return descendantRows
     .filter((node) => node.id !== root.id)
     .filter((node) => {
@@ -439,7 +437,7 @@ export async function listCourseDriveChildren(user: SessionUser, courseId: strin
     where: { courseId },
     select: { driveFileId: true, access: true }
   });
-  const manager = isCourseManager(user, course.ownerId);
+  const manager = isCourseManagerRecord(user, course);
   const requestedParentAncestry = ancestryToRoot(requestedParent, root.id, byId) ?? [];
   if (!manager && requestedParent.id !== root.id && resolveNearestDriveRule(requestedParentAncestry, rules) !== "ALLOW") {
     throw new CourseDriveError("教师尚未向学生开放此文件夹", 403, "COURSE_DRIVE_ACCESS_DENIED");
