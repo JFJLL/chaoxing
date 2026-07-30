@@ -3,18 +3,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   Download,
   Edit3,
   Loader2,
+  Pencil,
   RefreshCw,
   Save,
   Send,
   Sparkles,
   Trash2,
-  Undo2
+  Undo2,
+  X
 } from "lucide-react";
 import type { CourseAiAppType, CourseAiArtifactPayload } from "@/types/courseWorkspace";
 import type { CourseAiAppDefinition } from "@/lib/courseWorkspace/aiApps";
@@ -26,6 +29,7 @@ import {
   getCourseAiArtifact,
   isActiveAiArtifact,
   publishCourseAiArtifact,
+  renameCourseAiArtifact,
   retryCourseAiArtifact,
   saveCourseAiArtifactRevision,
   withdrawCourseAiArtifact,
@@ -194,6 +198,9 @@ export function AiAppGenerator({
   const [editorDirty, setEditorDirty] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [deletingId, setDeletingId] = useState("");
+  const [renamingId, setRenamingId] = useState("");
+  const [renameValue, setRenameValue] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
   const [exportingId, setExportingId] = useState("");
   const [sourceArtifactId, setSourceArtifactId] = useState(
     coursewareSources.some((source) => source.id === preferredSourceId) ? preferredSourceId! : coursewareSources[0]?.id ?? ""
@@ -452,6 +459,31 @@ export function AiAppGenerator({
     setEditorDirty(false);
   }
 
+  function startRename(artifact: ManagerAiArtifactDto) {
+    setRenamingId(artifact.id);
+    setRenameValue(artifact.title);
+  }
+
+  async function submitRename(artifact: ManagerAiArtifactDto) {
+    const title = renameValue.trim();
+    if (!title || title === artifact.title) {
+      setRenamingId("");
+      return;
+    }
+    setRenameBusy(true);
+    setError("");
+    try {
+      const updated = await renameCourseAiArtifact(courseId, artifact.id, title);
+      // Update the title in place so history order stays stable.
+      setArtifacts((current) => current.map((item) => (item.id === updated.id ? { ...item, title: updated.title } : item)));
+      setRenamingId("");
+    } catch (renameError) {
+      setError(errorMessage(renameError, "重命名失败，请重试"));
+    } finally {
+      setRenameBusy(false);
+    }
+  }
+
   async function removeArtifact(artifact: ManagerAiArtifactDto) {
     if (artifact.status === "PUBLISHED") {
       setError("已发布内容必须先在详情中撤回，再删除");
@@ -603,10 +635,38 @@ export function AiAppGenerator({
             const exportable = Boolean(artifact.payload) && !isActiveAiArtifact(artifact) && artifact.status !== "FAILED" && choices.length > 0;
             return (
               <article key={artifact.id} className={`rounded-xl border p-3 text-sm transition ${selected?.id === artifact.id ? "border-blue-200 bg-blue-50" : "border-slate-100 bg-slate-50"}`}>
-                <button type="button" onClick={() => selectArtifact(artifact.id)} className="w-full text-left">
-                  <span className={`line-clamp-1 font-medium ${selected?.id === artifact.id ? "text-blue-700" : "text-slate-700"}`}>{artifact.title}</span>
-                  <span className="mt-1 flex items-center justify-between gap-2 text-xs text-slate-400"><span>{new Date(artifact.updatedAt).toLocaleString("zh-CN", { hour12: false, timeZone: "Asia/Shanghai" })}</span><span>{getAiArtifactStatusText(artifact)}</span></span>
-                </button>
+                {renamingId === artifact.id ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      autoFocus
+                      value={renameValue}
+                      onChange={(event) => setRenameValue(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") { event.preventDefault(); void submitRename(artifact); }
+                        if (event.key === "Escape") setRenamingId("");
+                      }}
+                      maxLength={200}
+                      aria-label="产物名称"
+                      className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-blue-400"
+                    />
+                    <button type="button" disabled={renameBusy} onClick={() => void submitRename(artifact)} title="保存名称" className="shrink-0 rounded p-1 text-emerald-600 hover:bg-emerald-50 disabled:opacity-40">
+                      {renameBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+                    </button>
+                    <button type="button" disabled={renameBusy} onClick={() => setRenamingId("")} title="取消" className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 disabled:opacity-40">
+                      <X className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-1">
+                    <button type="button" onClick={() => selectArtifact(artifact.id)} className="min-w-0 flex-1 text-left">
+                      <span className={`line-clamp-1 font-medium ${selected?.id === artifact.id ? "text-blue-700" : "text-slate-700"}`}>{artifact.title}</span>
+                      <span className="mt-1 flex items-center justify-between gap-2 text-xs text-slate-400"><span>{new Date(artifact.updatedAt).toLocaleString("zh-CN", { hour12: false, timeZone: "Asia/Shanghai" })}</span><span>{getAiArtifactStatusText(artifact)}</span></span>
+                    </button>
+                    <button type="button" onClick={() => startRename(artifact)} title="重命名" className="mt-0.5 shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
                 <div className="mt-3 flex items-center gap-2 border-t border-slate-200/70 pt-2">
                   {choices.length === 1 ? (
                     <button type="button" disabled={!exportable || exportingId === artifact.id} onClick={() => exportArtifact(artifact, choices[0]!)} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 disabled:text-slate-300">
@@ -652,7 +712,7 @@ export function AiAppGenerator({
                       window.location.assign(`/space/courses/${courseId}/ai-workbench/apps/courseware?sourceArtifactId=${encodeURIComponent(selected.id)}`);
                     }
                   })();
-                }}>{busyAction === "confirm" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}确认内容</Button> : null}
+                }}>{busyAction === "confirm" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}{selected.appType === "lesson_plan" ? "生成AI课件" : "确认内容"}</Button> : null}
                 {["APPROVED", "PUBLISHED"].includes(selected.status) && selected.appType === "courseware" && !isEditing ? <Link href={`/space/courses/${courseId}/ai-workbench/apps/ppt_courseware?sourceArtifactId=${encodeURIComponent(selected.id)}`} className="inline-flex min-h-10 items-center rounded-xl bg-[var(--cx-blue)] px-4 text-sm font-medium text-white">生成PPT</Link> : null}
                 {selected.status === "APPROVED" && publishableAppTypes.has(selected.appType) ? <Button type="button" disabled={isBusy || editorDirty} title={editorDirty ? "请先保存修改" : undefined} onClick={() => runAction("publish", () => publishCourseAiArtifact(courseId, selected.id, selected.lockVersion ?? 0))}>{busyAction === "publish" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}发布给学生</Button> : null}
                 {hasPendingPublishedUpdate ? <Button type="button" disabled={isBusy || editorDirty} title={editorDirty ? "请先保存修改" : undefined} onClick={() => runAction("confirm-update", () => confirmCourseAiArtifactUpdate(courseId, selected.id, selected.lockVersion ?? 0))}>{busyAction === "confirm-update" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}更新发布</Button> : null}

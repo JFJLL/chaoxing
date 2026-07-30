@@ -65,7 +65,7 @@ function pagePresentation(appType: CourseAiAppType, fallback: { title: string; d
         ? "将已确认的 AI课件生成可逐页编辑、保存版本并发布的 PPT。"
         : "历史 HTML 课件仅保留查看，不再生成新内容。",
       workflow: "courseware",
-      active: "interactive"
+      active: appType === "ppt_courseware" ? "ppt-courseware" : "interactive"
     };
   }
   return fallback;

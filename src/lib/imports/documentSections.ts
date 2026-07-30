@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import type { GeneratedCourseOutline } from "@/types/course";
 
 export type ParsedDocumentSection = {
   id: string;
@@ -117,6 +118,42 @@ export function buildDocumentSections({
   const drafts = headingSections(text);
   const sections = drafts.length ? drafts : chunkSections(text, chunks);
   return sections.map((section, index) => ({
+    id: stableSectionId(documentId, section),
+    order: index + 1,
+    ...section
+  }));
+}
+
+/**
+ * Builds selectable sections from the model-generated course outline (目录).
+ * Used when raw-text sectioning is too coarse or unavailable (e.g. scanned PDFs
+ * with no text layer) so the lesson-plan source panel can still show and select
+ * concrete sub-points. Each lesson becomes a section whose text is its summary
+ * and key points, with synthetic but self-consistent offsets.
+ */
+export function buildSectionsFromOutline(documentId: string, outline: GeneratedCourseOutline): ParsedDocumentSection[] {
+  const drafts: SectionDraft[] = [];
+  let offset = 0;
+  const push = (title: string, body: string) => {
+    const text = (body.trim() || title.trim());
+    if (!text) return;
+    const startOffset = offset;
+    const endOffset = offset + text.length;
+    offset = endOffset + 1;
+    drafts.push({ title: title.trim() || "小节", text, startOffset, endOffset, confidence: 0.8 });
+  };
+  for (const chapter of outline.chapters ?? []) {
+    const lessons = chapter.lessons ?? [];
+    if (!lessons.length) {
+      push(chapter.title, chapter.summary ?? chapter.title);
+      continue;
+    }
+    for (const lesson of lessons) {
+      const body = [lesson.summary, ...(lesson.keyPoints ?? [])].filter(Boolean).join("\n");
+      push(`${chapter.title} · ${lesson.title}`, body || lesson.title);
+    }
+  }
+  return drafts.map((section, index) => ({
     id: stableSectionId(documentId, section),
     order: index + 1,
     ...section

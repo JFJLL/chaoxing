@@ -195,7 +195,7 @@ async function requestArtifact(url: string, init: RequestInit | undefined, reque
   return parseManagerAiArtifactDto(body.artifact);
 }
 
-function jsonInit(method: "POST" | "PUT" | "DELETE", body?: unknown): RequestInit {
+function jsonInit(method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown): RequestInit {
   return body === undefined
     ? { method }
     : {
@@ -234,6 +234,16 @@ export function saveCourseAiArtifactRevision(
   request: RequestLike = fetch
 ) {
   return requestArtifact(`/api/courses/${courseId}/ai-artifacts/${artifactId}`, jsonInit("PUT", body), request);
+}
+
+// Renames an AI artifact in place (label only); does not create a new revision.
+export function renameCourseAiArtifact(
+  courseId: string,
+  artifactId: string,
+  title: string,
+  request: RequestLike = fetch
+) {
+  return requestArtifact(`/api/courses/${courseId}/ai-artifacts/${artifactId}`, jsonInit("PATCH", { title }), request);
 }
 
 export function confirmCourseAiArtifact(

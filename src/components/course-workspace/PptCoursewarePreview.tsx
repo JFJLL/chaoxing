@@ -79,19 +79,27 @@ export function PptCoursewarePreview({
         <div className="space-y-3">
           <div className="aspect-video w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex h-full flex-col">
-              <div className="flex items-center gap-3 border-b border-slate-100 px-6 py-4 lg:px-8">
-                <span className="h-8 w-1.5 shrink-0 rounded" style={{ backgroundColor: BRAND }} />
-                <h3 className="min-w-0 flex-1 line-clamp-2 text-xl font-bold text-slate-900 lg:text-2xl">{slide.title}</h3>
+              <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 lg:gap-4 lg:px-7">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/ppt-template/school-logo.png" alt="文化产业管理学院" className="h-8 w-auto shrink-0 lg:h-10" />
+                <span className="h-8 w-px shrink-0 bg-slate-200 lg:h-9" />
+                <h3 className="min-w-0 flex-1 line-clamp-1 text-lg font-bold tracking-wide text-slate-900 lg:text-2xl">{slide.title}</h3>
                 <span className="shrink-0 rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500">{String(index + 1).padStart(2, "0")}</span>
               </div>
-              <ul className="flex-1 space-y-2.5 overflow-y-auto px-6 py-5 lg:px-10">
-                {slide.bullets.map((bullet, bulletIndex) => (
-                  <li key={`${bullet}-${bulletIndex}`} className="flex gap-3 text-sm text-slate-700 lg:text-base">
-                    <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: BRAND }} />
-                    <span className="min-w-0 break-words">{bullet}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="flex min-h-0 flex-1 gap-4 px-5 py-4 lg:gap-6 lg:px-7">
+                <ul className="min-w-0 flex-1 space-y-2.5 overflow-y-auto pr-1">
+                  {slide.bullets.map((bullet, bulletIndex) => (
+                    <li key={`${bullet}-${bulletIndex}`} className="flex gap-3 text-sm text-slate-700 lg:text-base">
+                      <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: BRAND }} />
+                      <span className="min-w-0 break-words">{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="hidden w-2/5 shrink-0 self-stretch sm:block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/ppt-template/campus.jpg" alt="校园图" className="h-full w-full rounded-lg object-cover" />
+                </div>
+              </div>
             </div>
           </div>
 

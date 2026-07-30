@@ -117,6 +117,45 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   }
 }
 
+// Renames an AI artifact in place (label only). Unlike PUT this never creates a
+// new revision or touches the payload/version, so teachers can tidy up history
+// names for any status.
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  const user = await requireUser();
+  const { courseId, artifactId } = await context.params;
+  try {
+    await requireCourseManager(user, courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
+  }
+
+  let title: string;
+  try {
+    const body = (await request.json()) as { title?: unknown };
+    const value = typeof body.title === "string" ? body.title.trim() : "";
+    if (!value || value.length > 200) throw new Error();
+    title = value;
+  } catch {
+    return NextResponse.json({ code: "INVALID_REQUEST", error: "名称不能为空且不超过 200 字" }, { status: 400 });
+  }
+
+  const updated = await db.courseAiArtifact.updateMany({
+    where: { id: artifactId, courseId, deletedAt: null },
+    data: { title }
+  });
+  if (updated.count !== 1) {
+    return NextResponse.json({ code: "AI_ARTIFACT_NOT_FOUND", error: "AI 产物不存在" }, { status: 404 });
+  }
+  const artifact = await db.courseAiArtifact.findFirst({
+    where: { id: artifactId, courseId },
+    select: safeAiArtifactSelect
+  });
+  if (!artifact) {
+    return NextResponse.json({ code: "AI_ARTIFACT_NOT_FOUND", error: "AI 产物不存在" }, { status: 404 });
+  }
+  return NextResponse.json({ artifact: toSafeAiArtifactDto(artifact, { canManage: true, jobsAhead: null }) });
+}
+
 export async function DELETE(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId, artifactId } = await context.params;

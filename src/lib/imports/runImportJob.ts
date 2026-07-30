@@ -7,7 +7,7 @@ import { createKnowledgeMapDraft } from "@/lib/knowledgeMap/generateKnowledgeMap
 import { withImportFilePath } from "@/lib/storage";
 import { withDriveFilePath } from "@/lib/modules/driveFiles";
 import { finalizeImportBatch } from "@/lib/imports/importBatch";
-import { buildDocumentSections } from "@/lib/imports/documentSections";
+import { buildDocumentSections, buildSectionsFromOutline } from "@/lib/imports/documentSections";
 
 class ImportJobDeletedError extends Error {
   constructor() {
@@ -60,14 +60,8 @@ export async function runImportJob(jobId: string) {
       ? await withDriveFilePath(job.driveFile, process)
       : await withImportFilePath(job.filePath, process);
 
-    const parsedSections = buildDocumentSections({
-      documentId: job.id,
-      text: extracted.text,
-      chunks: extracted.chunks
-    });
     await advance({
       extractedText: extracted.text,
-      parsedSections: JSON.stringify(parsedSections),
       status: "STRUCTURING",
       currentStage: "课程结构生成"
     });
@@ -78,7 +72,20 @@ export async function runImportJob(jobId: string) {
           documentText: extracted.text,
           chunks: extracted.chunks
         });
+    // Prefer sections parsed from the real text; when that is too coarse or
+    // unavailable (e.g. a scanned PDF), fall back to the generated outline (目录)
+    // so the lesson-plan source panel always shows selectable sub-points.
+    let parsedSections = buildDocumentSections({
+      documentId: job.id,
+      text: extracted.text,
+      chunks: extracted.chunks
+    });
+    if (parsedSections.length <= 1) {
+      const outlineSections = buildSectionsFromOutline(job.id, generated.outline);
+      if (outlineSections.length > 1) parsedSections = outlineSections;
+    }
     await advance({
+      parsedSections: JSON.stringify(parsedSections),
       generatedOutline: JSON.stringify(generated.outline),
       warning: null,
       status: "MAPPING",
