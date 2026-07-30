@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
-import { extractText } from "@/lib/document/extractText";
-import { generateCourseOutline } from "@/lib/ai/generateCourseOutline";
+import { extractText, type ExtractedDocument } from "@/lib/document/extractText";
+import { PdfHasNoTextLayerError } from "@/lib/document/extractPdf";
+import { generateCourseOutline, generateCourseOutlineFromPdf } from "@/lib/ai/generateCourseOutline";
+import type { GeneratedCourseOutline } from "@/types/course";
 import { createKnowledgeMapDraft } from "@/lib/knowledgeMap/generateKnowledgeMap";
 import { withImportFilePath } from "@/lib/storage";
 import { withDriveFilePath } from "@/lib/modules/driveFiles";
@@ -34,10 +36,30 @@ export async function runImportJob(jobId: string) {
 
   try {
     await advance({ status: "EXTRACTING", currentStage: "文档解析", errorMessage: null, startedAt: new Date(), finishedAt: null });
-    const extract = (localPath: string) => extractText(localPath, job.mimeType);
-    const extracted = job.driveFile
-      ? await withDriveFilePath(job.driveFile, extract)
-      : await withImportFilePath(job.filePath, extract);
+    const course = await db.course.findUnique({
+      where: { id: job.courseId },
+      select: { title: true }
+    });
+    const courseTitle = course?.title ?? job.originalName;
+
+    // For a scanned PDF (no text layer) we skip transcription and generate the
+    // outline directly from the file via a multimodal model, reading it while
+    // it is still materialised locally.
+    const process = async (localPath: string): Promise<{ extracted: ExtractedDocument; outline?: GeneratedCourseOutline }> => {
+      try {
+        return { extracted: await extractText(localPath, job.mimeType) };
+      } catch (error) {
+        if (error instanceof PdfHasNoTextLayerError) {
+          const generated = await generateCourseOutlineFromPdf({ courseTitle, filePath: localPath });
+          return { extracted: { text: "", chunks: [], wordCount: 0, pages: error.pages }, outline: generated.outline };
+        }
+        throw error;
+      }
+    };
+    const { extracted, outline: pdfOutline } = job.driveFile
+      ? await withDriveFilePath(job.driveFile, process)
+      : await withImportFilePath(job.filePath, process);
+
     const parsedSections = buildDocumentSections({
       documentId: job.id,
       text: extracted.text,
@@ -49,15 +71,13 @@ export async function runImportJob(jobId: string) {
       status: "STRUCTURING",
       currentStage: "课程结构生成"
     });
-    const course = await db.course.findUnique({
-      where: { id: job.courseId },
-      select: { title: true }
-    });
-    const generated = await generateCourseOutline({
-      courseTitle: course?.title ?? job.originalName,
-      documentText: extracted.text,
-      chunks: extracted.chunks
-    });
+    const generated = pdfOutline
+      ? { outline: pdfOutline }
+      : await generateCourseOutline({
+          courseTitle,
+          documentText: extracted.text,
+          chunks: extracted.chunks
+        });
     await advance({
       generatedOutline: JSON.stringify(generated.outline),
       warning: null,

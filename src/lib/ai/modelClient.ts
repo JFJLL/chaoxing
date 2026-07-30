@@ -381,6 +381,44 @@ export async function createFileTextCompletion(input: GeminiFileCompletionInput)
   return createGeminiFileTextCompletion(config, input);
 }
 
+async function createGeminiFileJsonCompletion(config: AiModelConfig, input: GeminiFileCompletionInput) {
+  const response = await fetch(buildGeminiGenerateContentUrl(config), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": config.apiKey },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { file_data: { mime_type: input.file.mimeType, file_uri: input.file.uri } },
+            { text: `${input.system}\n\n${input.user}` }
+          ]
+        }
+      ],
+      generationConfig: { responseMimeType: "application/json" }
+    })
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Gemini API failed: ${response.status} ${message.slice(0, 300)}`);
+  }
+  const body = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  return body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+}
+
+/**
+ * Sends an already-uploaded file plus a text instruction and asks the model for
+ * a JSON response. Gemini only. Used to generate a course outline directly from
+ * a scanned PDF without transcribing the whole document.
+ */
+export async function createFileJsonCompletion(input: GeminiFileCompletionInput) {
+  const config = resolveAiModelConfig(input.model);
+  if (!config || config.provider !== "gemini") return null;
+  return createGeminiFileJsonCompletion(config, input);
+}
+
 export async function createJsonCompletion(input: JsonCompletionInput) {
   const config = resolveAiModelConfig(input.model);
   if (!config) return null;

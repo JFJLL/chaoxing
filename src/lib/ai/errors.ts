@@ -1,9 +1,11 @@
 export type AiErrorCode =
   | "MODEL_NOT_CONFIGURED"
+  | "MODEL_NOT_MULTIMODAL"
   | "MODEL_TIMEOUT"
   | "MODEL_RATE_LIMITED"
   | "MODEL_INVALID_OUTPUT"
-  | "MODEL_REQUEST_FAILED";
+  | "MODEL_REQUEST_FAILED"
+  | "PDF_TOO_LARGE";
 
 export class AiServiceError extends Error {
   constructor(public readonly code: AiErrorCode, message: string) {

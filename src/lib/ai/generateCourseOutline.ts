@@ -1,7 +1,14 @@
 import type { GeneratedCourseOutline } from "@/types/course";
+import { readFile } from "fs/promises";
 import { generatedCourseOutlineSchema } from "@/lib/ai/courseOutlineSchema";
 import { AiServiceError, toSafeAiError } from "@/lib/ai/errors";
-import { createJsonCompletion, resolveAiModelConfig, type AiModelConfig } from "@/lib/ai/modelClient";
+import {
+  createFileJsonCompletion,
+  createJsonCompletion,
+  resolveAiModelConfig,
+  uploadFileToGemini,
+  type AiModelConfig
+} from "@/lib/ai/modelClient";
 import { buildCourseOutlinePrompt } from "@/lib/ai/prompts";
 
 type GenerateCourseOutlineInput = {
@@ -14,6 +21,12 @@ type GenerateCourseOutlineInput = {
 type GenerateCourseOutlineResult = {
   outline: GeneratedCourseOutline;
 };
+
+// A scanned PDF is sent to the model as a whole file; the model reads every
+// page visually and returns the outline directly. Bounded by size and a hard
+// timeout so it can never hang the import worker.
+const PDF_OUTLINE_MAX_BYTES = 100 * 1024 * 1024;
+const PDF_OUTLINE_TIMEOUT_MS = 180_000;
 
 export { resolveAiModelConfig, type AiModelConfig };
 
@@ -164,4 +177,63 @@ export async function generateCourseOutline(input: GenerateCourseOutlineInput): 
   }
 
   throw toSafeAiError(lastError);
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: () => Error): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(onTimeout()), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Generates a course outline directly from a PDF file (typically a scanned /
+ * image-only PDF with no text layer) by uploading it to the model and asking
+ * for the outline JSON. The model reads every page visually; the output is just
+ * the outline (small and fast), so we never transcribe the whole document.
+ * Gemini only — other providers throw MODEL_NOT_MULTIMODAL.
+ */
+export async function generateCourseOutlineFromPdf(input: {
+  courseTitle: string;
+  filePath: string;
+  model?: string;
+}): Promise<GenerateCourseOutlineResult> {
+  const config = resolveAiModelConfig(input.model);
+  if (!config) {
+    throw new AiServiceError("MODEL_NOT_CONFIGURED", "AI 模型未配置，请联系管理员检查模型设置");
+  }
+  if (config.provider !== "gemini") {
+    throw new AiServiceError("MODEL_NOT_MULTIMODAL", "当前模型不支持直接解析扫描 PDF，请上传含文字层的 PDF");
+  }
+
+  const bytes = await readFile(input.filePath);
+  if (!bytes.length || bytes.length > PDF_OUTLINE_MAX_BYTES) {
+    throw new AiServiceError("PDF_TOO_LARGE", "扫描 PDF 超过大小上限，无法直接识别");
+  }
+
+  const prompt = buildCourseOutlinePrompt({
+    courseTitle: input.courseTitle,
+    documentText: "内容见随附的 PDF 文件（扫描件，无文字层）。请直接阅读该 PDF 的全部页面，据此生成课程目录。"
+  });
+
+  try {
+    const file = await withTimeout(
+      uploadFileToGemini(config, { bytes, mimeType: "application/pdf", displayName: "scanned-pdf-import" }),
+      PDF_OUTLINE_TIMEOUT_MS,
+      () => new AiServiceError("MODEL_TIMEOUT", "扫描 PDF 上传超时，请稍后重试")
+    );
+    const raw = await withTimeout(
+      createFileJsonCompletion({ model: config.model, file, system: "你只输出符合约束的 JSON 对象。", user: prompt }),
+      PDF_OUTLINE_TIMEOUT_MS,
+      () => new AiServiceError("MODEL_TIMEOUT", "扫描 PDF 识别超时，请稍后重试")
+    );
+    return { outline: parseGeneratedOutline(raw || "", { courseTitle: input.courseTitle, documentText: "", chunks: [], model: input.model }) };
+  } catch (error) {
+    throw toSafeAiError(error);
+  }
 }
