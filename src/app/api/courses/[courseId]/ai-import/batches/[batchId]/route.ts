@@ -12,17 +12,20 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId, batchId } = await context.params;
 
+  // Authorize before probing existence so a non-manager cannot use the 404/403
+  // difference as an existence oracle for (courseId, batchId) pairs.
+  try {
+    await requireCourseManager(user, courseId);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
+  }
+
   const batch = await db.documentImportBatch.findFirst({
     where: { id: batchId, courseId },
     select: { id: true }
   });
   if (!batch) {
     return NextResponse.json({ error: "导入批次不存在" }, { status: 404 });
-  }
-  try {
-    await requireCourseManager(user, courseId);
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "无权管理课程" }, { status: 403 });
   }
 
   // Soft-delete every remaining job in the batch. The course drive originals,

@@ -15,14 +15,19 @@ export function DeleteImportBatchButton({ courseId, batchId, applied }: { course
     if (!window.confirm(message)) return;
     setBusy(true);
     setError("");
-    const response = await fetch(`/api/courses/${courseId}/ai-import/batches/${batchId}`, { method: "DELETE" });
-    setBusy(false);
-    if (!response.ok) {
-      const body = await response.json().catch(() => null) as { error?: string } | null;
-      setError(body?.error ?? "删除失败");
-      return;
+    try {
+      const response = await fetch(`/api/courses/${courseId}/ai-import/batches/${batchId}`, { method: "DELETE" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        setError(body?.error ?? "删除失败");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("删除失败，请检查网络后重试");
+    } finally {
+      setBusy(false);
     }
-    router.refresh();
   }
 
   return (

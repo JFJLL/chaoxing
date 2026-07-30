@@ -169,6 +169,9 @@ export function AiArtifactEditor({
 
   function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Guard here so both the footer and the header (form-attribute) submit
+    // buttons reject a blank or whitespace-only title.
+    if (!draft.title.trim()) return;
     onSave(editorDraftToRevisionBody(draft));
   }
 
