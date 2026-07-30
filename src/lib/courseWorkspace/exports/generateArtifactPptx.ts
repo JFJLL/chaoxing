@@ -193,23 +193,35 @@ export async function generateArtifactPptx(input: GenerateArtifactPptxInput) {
   );
 
   const contentsLabels = input.payload.slides.slice(0, 3).map((slide) => slide.title);
+  // The template's contents slide has small title boxes (章节一/二) and larger
+  // body boxes (输入内文…). Long AI slide titles must go into a short headline
+  // for the title box, otherwise they wrap and overlap the number blocks; the
+  // full title goes into the roomier body box as the description.
+  const contentsHeadline = (index: number, fallback: string) => {
+    const label = contentsLabels[index];
+    return label ? slideHeader(label) : fallback;
+  };
+  const contentsDetail = (index: number, fallback: string) => {
+    const label = contentsLabels[index];
+    return label ? clipText(label, 22) : fallback;
+  };
   zip.file(
     contentsSlide.path,
     replaceTextRuns(contentsSlide.xml, [
       "C",
       "O",
       "NTENTS",
-      contentsLabels[0] ?? "课程导入",
-      input.courseTitle,
+      contentsHeadline(0, "课程导入"),
+      contentsDetail(0, input.courseTitle),
       "01",
-      contentsLabels[1] ?? "核心知识",
-      input.courseTitle,
+      contentsHeadline(1, "核心知识"),
+      contentsDetail(1, input.courseTitle),
       "02",
       "目录",
-      contentsLabels[2] ?? "课堂实践",
+      contentsHeadline(2, "课堂实践"),
       input.payload.slides.length > 3
         ? `另有 ${input.payload.slides.length - 3} 页内容`
-        : input.courseTitle,
+        : contentsDetail(2, input.courseTitle),
       "03"
     ])
   );

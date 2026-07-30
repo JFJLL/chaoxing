@@ -45,7 +45,7 @@ vi.mock("@/lib/db", () => ({
     driveFile: { findFirst: mocks.driveFileFindFirst }
   }
 }));
-vi.mock("@/lib/copilot/files", () => ({ storeDriveUpload: mocks.storeDriveUpload }));
+vi.mock("@/lib/copilot/files", () => ({ findOrCreateDriveImportUpload: mocks.storeDriveUpload }));
 vi.mock("@/lib/imports/runImportJob", () => ({ runImportJob: mocks.runImportJob }));
 
 import { POST } from "../../src/app/api/courses/[courseId]/ai-import/route";
@@ -88,7 +88,7 @@ describe("POST /api/courses/:courseId/ai-import", () => {
     mocks.findMany.mockResolvedValue([]);
     mocks.updateMany.mockResolvedValue({ count: 0 });
     mocks.driveFileFindFirst.mockResolvedValue({ ownerId: "teacher-1" });
-    mocks.storeDriveUpload.mockResolvedValue({ id: "file-1", path: ".uploads/drive/course.pdf" });
+    mocks.storeDriveUpload.mockResolvedValue({ file: { id: "file-1", path: ".uploads/drive/course.pdf" }, reused: false });
     mocks.runImportJob.mockResolvedValue(undefined);
   });
 
@@ -121,7 +121,7 @@ describe("POST /api/courses/:courseId/ai-import", () => {
   });
 
   it("allows one active upload per user and course and releases the guard in finally", async () => {
-    const stored = deferred<{ id: string; path: string }>();
+    const stored = deferred<{ file: { id: string; path: string }; reused: boolean }>();
     mocks.storeDriveUpload.mockReturnValueOnce(stored.promise);
     const first = POST(uploadRequest() as never, context);
     await vi.waitFor(() => expect(mocks.storeDriveUpload).toHaveBeenCalledOnce());
@@ -130,7 +130,7 @@ describe("POST /api/courses/:courseId/ai-import", () => {
     expect(concurrent.status).toBe(429);
     await expect(concurrent.json()).resolves.toMatchObject({ code: "AI_IMPORT_RATE_LIMITED", retryable: true });
 
-    stored.resolve({ id: "file-1", path: ".uploads/drive/course.pdf" });
+    stored.resolve({ file: { id: "file-1", path: ".uploads/drive/course.pdf" }, reused: false });
     await expect(first).resolves.toMatchObject({ status: 202 });
     expect(mocks.storeDriveUpload).toHaveBeenCalledWith(expect.objectContaining({
       ownerId: "teacher-1",
@@ -167,8 +167,8 @@ describe("POST /api/courses/:courseId/ai-import", () => {
 
   it("creates one analysis batch and queues every selected document before review", async () => {
     mocks.storeDriveUpload
-      .mockResolvedValueOnce({ id: "file-1", path: ".uploads/drive/first.pdf", contentHash: "hash-1" })
-      .mockResolvedValueOnce({ id: "file-2", path: ".uploads/drive/second.md", contentHash: "hash-2" });
+      .mockResolvedValueOnce({ file: { id: "file-1", path: ".uploads/drive/first.pdf", contentHash: "hash-1" }, reused: false })
+      .mockResolvedValueOnce({ file: { id: "file-2", path: ".uploads/drive/second.md", contentHash: "hash-2" }, reused: false });
     mocks.create.mockResolvedValueOnce({ id: "job-1" }).mockResolvedValueOnce({ id: "job-2" });
 
     const response = await POST(multiUploadRequest() as never, context);

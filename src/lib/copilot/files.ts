@@ -86,6 +86,55 @@ export async function storeCourseConversationUpload(user: SessionUser, courseId:
   return storeDriveUpload({ ownerId: folder.ownerId, parentId: folder.id, file });
 }
 
+/**
+ * Import upload with content-hash de-duplication. If an identical file (same
+ * SHA-256) already lives, undeleted, in the same folder we reuse that drive
+ * file instead of uploading the bytes again — saving storage and bandwidth when
+ * a teacher re-imports the same document. Returns `reused` so callers can tell.
+ */
+export async function findOrCreateDriveImportUpload(input: {
+  ownerId: string;
+  parentId: string | null;
+  file: File;
+}) {
+  const bytes = Buffer.from(await input.file.arrayBuffer());
+  const contentHash = driveContentHash(bytes);
+  const existing = await db.driveFile.findFirst({
+    where: {
+      ownerId: input.ownerId,
+      parentId: input.parentId,
+      contentHash,
+      kind: "file",
+      deletedAt: null
+    },
+    orderBy: { createdAt: "desc" }
+  });
+  if (existing) return { file: existing, reused: true as const };
+
+  const path = await storeDriveFile({
+    ownerId: input.ownerId,
+    fileName: input.file.name,
+    bytes,
+    mimeType: input.file.type || null
+  });
+  const record = await db.driveFile.create({
+    data: {
+      ownerId: input.ownerId,
+      parentId: input.parentId,
+      name: input.file.name,
+      kind: "file",
+      mimeType: input.file.type || null,
+      size: input.file.size,
+      path,
+      contentHash,
+      extractionStatus: "PENDING"
+    }
+  });
+  await indexDriveFile(record.id);
+  const file = await db.driveFile.findUniqueOrThrow({ where: { id: record.id } });
+  return { file, reused: false as const };
+}
+
 export async function assertDriveMoveAllowed(ownerId: string, fileId: string, parentId: string | null) {
   const [nodes, courses] = await Promise.all([
     db.driveFile.findMany({

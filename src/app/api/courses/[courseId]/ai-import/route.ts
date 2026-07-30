@@ -6,7 +6,7 @@ import {
   assertSupportedUpload,
   assertUploadSize
 } from "@/lib/storage";
-import { storeDriveUpload } from "@/lib/copilot/files";
+import { findOrCreateDriveImportUpload } from "@/lib/copilot/files";
 import { CourseDriveError, ensureCoursePurposeFolder } from "@/lib/courseDrive/service";
 import {
   ImportAdmissionError,
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         throw error;
       }
       try {
-        const driveFile = await storeDriveUpload({
+        const driveFile = await findOrCreateDriveImportUpload({
           ownerId: courseDocumentsFolder.ownerId,
           parentId: courseDocumentsFolder.id,
           file
@@ -167,9 +167,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
             originalName: file.name,
             fileSize: file.size,
             mimeType: file.type || null,
-            filePath: driveFile.path,
-            driveFileId: driveFile.id,
-            contentHash: driveFile.contentHash
+            filePath: driveFile.file.path,
+            driveFileId: driveFile.file.id,
+            contentHash: driveFile.file.contentHash
           },
           select: { id: true }
         });

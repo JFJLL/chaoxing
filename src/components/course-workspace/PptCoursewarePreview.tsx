@@ -4,11 +4,17 @@ import { useEffect, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 import type { AiCoursewarePayload } from "@/types/courseWorkspace";
 
+// Template brand accent (crimson) reused from courseware-template.pptx so the
+// web preview reads as the same designed deck rather than a plain bullet list.
+const BRAND = "#c8102e";
+
 /**
- * Read-only 16:9 preview for a generated PPT courseware artifact. It renders the
- * persisted slides of the currently selected artifact — never the latest source
- * courseware, another version, or client placeholder data. Editing PPT content
- * is done by revising the source AI courseware and regenerating a new PPT.
+ * Read-only preview for a generated PPT courseware artifact. Native .pptx cannot
+ * render in the browser, so instead of converting the file we redraw each slide
+ * in HTML using the template's visual language (brand accent header, numbered
+ * pages, styled bullets). It renders only the persisted slides of the selected
+ * artifact — never the latest source courseware or client placeholder data.
+ * Editing PPT content is done by revising the source AI courseware.
  */
 export function PptCoursewarePreview({
   title,
@@ -57,9 +63,13 @@ export function PptCoursewarePreview({
                 type="button"
                 onClick={() => setCurrent(thumbIndex)}
                 aria-current={thumbIndex === index ? "true" : undefined}
-                className={`flex aspect-video w-40 flex-col overflow-hidden rounded-lg border p-2 text-left transition lg:w-full ${thumbIndex === index ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+                className={`flex aspect-video w-40 flex-col overflow-hidden rounded-lg border p-2 text-left transition lg:w-full ${thumbIndex === index ? "border-[color:var(--ppt-brand)] bg-rose-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+                style={{ ["--ppt-brand" as string]: BRAND }}
               >
-                <span className="text-[10px] font-medium text-slate-400">第 {thumbIndex + 1} 页</span>
+                <span className="flex items-center gap-1 text-[10px] font-medium text-slate-400">
+                  <span aria-hidden="true" className="inline-block h-2 w-1 rounded-sm" style={{ backgroundColor: BRAND }} />
+                  第 {thumbIndex + 1} 页
+                </span>
                 <span className="mt-1 line-clamp-2 text-xs font-medium text-slate-700">{thumb.title}</span>
               </button>
             </li>
@@ -68,12 +78,16 @@ export function PptCoursewarePreview({
 
         <div className="space-y-3">
           <div className="aspect-video w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex h-full flex-col p-6 lg:p-8">
-              <h3 className="line-clamp-2 shrink-0 text-xl font-semibold text-slate-900 lg:text-2xl">{slide.title}</h3>
-              <ul className="mt-4 flex-1 space-y-2 overflow-y-auto pr-1">
+            <div className="flex h-full flex-col">
+              <div className="flex items-center gap-3 border-b border-slate-100 px-6 py-4 lg:px-8">
+                <span className="h-8 w-1.5 shrink-0 rounded" style={{ backgroundColor: BRAND }} />
+                <h3 className="min-w-0 flex-1 line-clamp-2 text-xl font-bold text-slate-900 lg:text-2xl">{slide.title}</h3>
+                <span className="shrink-0 rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500">{String(index + 1).padStart(2, "0")}</span>
+              </div>
+              <ul className="flex-1 space-y-2.5 overflow-y-auto px-6 py-5 lg:px-10">
                 {slide.bullets.map((bullet, bulletIndex) => (
-                  <li key={`${bullet}-${bulletIndex}`} className="flex gap-2 text-sm text-slate-700 lg:text-base">
-                    <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                  <li key={`${bullet}-${bulletIndex}`} className="flex gap-3 text-sm text-slate-700 lg:text-base">
+                    <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: BRAND }} />
                     <span className="min-w-0 break-words">{bullet}</span>
                   </li>
                 ))}
