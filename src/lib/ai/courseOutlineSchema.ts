@@ -30,3 +30,29 @@ export const generatedCourseOutlineSchema = z.object({
 });
 
 export type GeneratedCourseOutlineSchema = z.infer<typeof generatedCourseOutlineSchema>;
+
+/**
+ * Same shape as {@link generatedCourseOutlineSchema} but preserves the optional
+ * chapter/lesson IDs produced by mapImportedOutlineToCourse. The apply route
+ * relies on these IDs to update matched items in place instead of recreating
+ * them; without this schema zod would strip the IDs and every item would be
+ * treated as new.
+ */
+export const mappedCourseOutlineSchema = generatedCourseOutlineSchema.extend({
+  chapters: z
+    .array(
+      generatedCourseOutlineSchema.shape.chapters.element.extend({
+        id: z.string().min(1).optional(),
+        lessons: z
+          .array(
+            generatedCourseOutlineSchema.shape.chapters.element.shape.lessons.element.extend({
+              id: z.string().min(1).optional()
+            })
+          )
+          .min(1)
+      })
+    )
+    .min(3)
+});
+
+export type MappedCourseOutlineSchema = z.infer<typeof mappedCourseOutlineSchema>;

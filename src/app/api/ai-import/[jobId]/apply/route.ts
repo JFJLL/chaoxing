@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseManager } from "@/lib/permissions";
-import { generatedCourseOutlineSchema } from "@/lib/ai/courseOutlineSchema";
+import { mappedCourseOutlineSchema } from "@/lib/ai/courseOutlineSchema";
 import { CourseOutlineSyncError } from "@/lib/imports/applyOutline";
 import { ImportBatchSaveError, saveImportBatchOutline } from "@/lib/imports/saveImportBatchOutline";
 
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   } catch {
     return NextResponse.json({ error: "请求内容无效", code: "INVALID_REQUEST" }, { status: 400 });
   }
-  const parsedOutline = generatedCourseOutlineSchema.safeParse(body.outline);
+  const parsedOutline = mappedCourseOutlineSchema.safeParse(body.outline);
   if (!parsedOutline.success) {
     return NextResponse.json({ error: "课程目录内容无效", code: "COURSE_OUTLINE_INVALID" }, { status: 400 });
   }

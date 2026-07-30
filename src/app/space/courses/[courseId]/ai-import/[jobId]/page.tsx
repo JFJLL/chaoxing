@@ -5,12 +5,17 @@ import { requireCourseManager } from "@/lib/permissions";
 import { ImportProgressClient } from "@/components/ai-import/ImportProgressClient";
 import { OutlineReviewEditor } from "@/components/ai-import/OutlineReviewEditor";
 import { ImportJobManager } from "@/components/ai-import/ImportJobManager";
-import type { GeneratedCourseOutline } from "@/types/course";
+import type { CourseDirectoryNode, GeneratedCourseOutline } from "@/types/course";
+import { mapImportedOutlineToCourse } from "@/lib/imports/mapImportedOutlineToCourse";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 
 type PageProps = {
   params: Promise<{ courseId: string; jobId: string }>;
 };
+
+function splitList(value?: string | null) {
+  return (value ?? "").split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
+}
 
 export default async function AiImportReviewPage({ params }: PageProps) {
   const user = await requireUser();
@@ -41,6 +46,32 @@ export default async function AiImportReviewPage({ params }: PageProps) {
   const outline = storedOutline ? (JSON.parse(storedOutline) as GeneratedCourseOutline) : null;
   const latestMap = job.knowledgeMaps[0];
   const batchIsCombining = Boolean(job.batch && !["READY_FOR_REVIEW", "APPLIED", "FAILED"].includes(job.batch.status));
+
+  const existingChapters = await db.chapter.findMany({
+    where: { courseId },
+    orderBy: { order: "asc" },
+    include: { lessons: { orderBy: { order: "asc" } } }
+  });
+  const currentDirectory: CourseDirectoryNode[] = existingChapters.map((chapter) => ({
+    id: chapter.id,
+    title: chapter.title,
+    summary: chapter.summary ?? "",
+    order: chapter.order,
+    lessons: chapter.lessons.map((lesson) => ({
+      id: lesson.id,
+      title: lesson.title,
+      summary: lesson.summary ?? "",
+      order: lesson.order,
+      estimatedMinutes: lesson.estimatedMinutes ?? 30,
+      keyPoints: splitList(lesson.keyPoints),
+      suggestedActivities: splitList(lesson.activities),
+      assessmentPrompts: splitList(lesson.assessments)
+    }))
+  }));
+  // Bind existing chapter/lesson IDs before the teacher edits titles, so that
+  // matched items keep their real IDs (and their resource/progress links)
+  // instead of being recreated on save.
+  const mapped = outline ? mapImportedOutlineToCourse(currentDirectory, outline) : null;
 
   return (
     <FanyaCourseShell user={user} course={job.course} activeTab="ai-workbench">
@@ -84,13 +115,15 @@ export default async function AiImportReviewPage({ params }: PageProps) {
                 : null
             }
           />
-          {outline && job.batch?.status === "READY_FOR_REVIEW" ? (
+          {outline && mapped && job.batch?.status === "READY_FOR_REVIEW" ? (
             <OutlineReviewEditor
               jobId={job.id}
               courseId={courseId}
-              initialOutline={outline}
+              initialOutline={mapped.outline}
               initialOutlineVersion={job.course.outlineVersion}
               initialBatchVersion={job.batch.generatedOutlineVersion}
+              hasExistingDirectory={currentDirectory.length > 0}
+              ambiguousTitles={mapped.ambiguousTitles}
             />
           ) : null}
           {job.status === "APPLIED" || job.batch?.status === "APPLIED" ? (

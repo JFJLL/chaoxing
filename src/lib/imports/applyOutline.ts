@@ -26,10 +26,6 @@ function splitList(value?: string | null) {
   return (value ?? "").split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
 }
 
-function normalizedTitle(value: string) {
-  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("zh-CN");
-}
-
 function isTemporaryId(value: string | undefined, prefix: "chapter" | "lesson") {
   return Boolean(value?.startsWith(`${prefix}_`));
 }
@@ -117,22 +113,9 @@ async function syncCourseOutlineInTransaction(
   const usedChapterIds = new Set<string>();
 
   for (const [chapterIndex, chapterInput] of input.outline.chapters.entries()) {
-    let chapter = chapterInput.id ? existingChapterById.get(chapterInput.id) : undefined;
+    const chapter = chapterInput.id ? existingChapterById.get(chapterInput.id) : undefined;
     if (chapterInput.id && !chapter && !isTemporaryId(chapterInput.id, "chapter")) {
       throw new CourseOutlineSyncError("COURSE_OUTLINE_ITEM_INVALID", "课程目录包含不属于当前课程的章节 ID");
-    }
-    if (!chapter && !chapterInput.id) {
-      const titleMatches = existingChapters.filter((candidate) =>
-        !usedChapterIds.has(candidate.id)
-        && normalizedTitle(candidate.title) === normalizedTitle(chapterInput.title)
-      );
-      if (titleMatches.length > 1) {
-        throw new CourseOutlineSyncError("COURSE_OUTLINE_MAPPING_REQUIRED", "已有课程目录存在同名章节，不能自动判断来源，请从目录维护页使用真实 ID 保存");
-      }
-      chapter = titleMatches[0];
-      if (!chapter && existingChapters.some((candidate) => !usedChapterIds.has(candidate.id))) {
-        throw new CourseOutlineSyncError("COURSE_OUTLINE_MAPPING_REQUIRED", "课程已有不同目录，不能按顺序覆盖并错绑资料，请先在目录维护页确认替换策略");
-      }
     }
 
     let chapterId: string;
@@ -163,25 +146,12 @@ async function syncCourseOutlineInTransaction(
     const existingLessons = chapter?.lessons ?? [];
     const usedLessonIds = new Set<string>();
     for (const [lessonIndex, lessonInput] of chapterInput.lessons.entries()) {
-      let lesson = lessonInput.id ? existingLessonById.get(lessonInput.id) : undefined;
+      const lesson = lessonInput.id ? existingLessonById.get(lessonInput.id) : undefined;
       if (lessonInput.id && !lesson && !isTemporaryId(lessonInput.id, "lesson")) {
         throw new CourseOutlineSyncError("COURSE_OUTLINE_ITEM_INVALID", "课程目录包含不属于当前课程的课时 ID");
       }
       if (lesson && lesson.chapterId !== chapterId) {
         throw new CourseOutlineSyncError("COURSE_OUTLINE_ITEM_INVALID", "不能把已有课时静默移动到其他章节");
-      }
-      if (!lesson && !lessonInput.id) {
-        const titleMatches = existingLessons.filter((candidate) =>
-          !usedLessonIds.has(candidate.id)
-          && normalizedTitle(candidate.title) === normalizedTitle(lessonInput.title)
-        );
-        if (titleMatches.length > 1) {
-          throw new CourseOutlineSyncError("COURSE_OUTLINE_MAPPING_REQUIRED", "已有章节存在同名课时，不能自动判断来源，请使用真实课时 ID 保存");
-        }
-        lesson = titleMatches[0];
-        if (!lesson && existingLessons.some((candidate) => !usedLessonIds.has(candidate.id))) {
-          throw new CourseOutlineSyncError("COURSE_OUTLINE_MAPPING_REQUIRED", "已有课时与导入目录不一致，不能按顺序覆盖并错绑资料");
-        }
       }
 
       const data = {

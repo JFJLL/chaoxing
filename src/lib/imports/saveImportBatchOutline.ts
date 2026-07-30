@@ -1,6 +1,6 @@
 import type { GeneratedCourseOutline } from "@/types/course";
 import { db } from "@/lib/db";
-import { syncCourseOutline } from "@/lib/imports/applyOutline";
+import { syncCourseOutline, type CourseOutlineSyncInput } from "@/lib/imports/applyOutline";
 
 const REVIEWABLE_DOCUMENT_STATUSES = new Set(["READY_FOR_REVIEW", "APPLIED"]);
 
@@ -14,7 +14,7 @@ export class ImportBatchSaveError extends Error {
 export async function saveImportBatchOutline(input: {
   jobId: string;
   actorId: string;
-  outline: GeneratedCourseOutline;
+  outline: CourseOutlineSyncInput & Pick<GeneratedCourseOutline, "title">;
   expectedOutlineVersion: number;
   expectedBatchVersion: number;
 }) {
