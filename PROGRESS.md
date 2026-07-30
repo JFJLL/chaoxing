@@ -1,116 +1,46 @@
-# 执行进度
+# PROGRESS — codex/prep-production-chain-r6-ux-flow-fix
 
-## R5 根目录绑定权限收口计划（2026-07-29，不超过 10 行）
-1. 目标：只修复协作教师可重新绑定课程云盘根目录的权限缺口，不改既有备课生产链。
-2. 从 R5 指定提交 `2c27119bb18c00d5af17f3d0663f834ac7c12350` 创建独立修复分支，起点工作区干净。
-3. 先核对 Prisma 真实引用模型和现有课程云盘边界，再收紧服务层 owner-only 绑定。
-4. 旧根目录存在有效引用时阻止重绑；相同根目录保持幂等。
-5. Copilot 设置按字段拆分 Owner/Collaborator 权限，并保证名称和根目录更新原子。
-6. 前端仅向 Owner 展示绑定控件，Collaborator 仍可编辑名称和管理根目录内部文件。
-7. 补 API、服务层、深层后代引用测试，再做双教师现场验证和完整回执。
-8. 最大风险：重绑引用检查遗漏深层文件，或失败时发生名称部分保存。
+## 1. 起点
 
-## R5 根目录绑定权限收口进度
+- 起始 SHA: `8f792c7d7e5d0e9cffaf76ffcfc2f14ea12ebac3`
+- 分支: `codex/prep-production-chain-r6-ux-flow-fix`（从 `codex/prep-production-chain-r5-root-binding-fix` 起点新建）
+- 不修改 / 推送 / 合并 `main`。
 
-- 分支从指定 SHA `2c27119bb18c00d5af17f3d0663f834ac7c12350` 创建，起点工作区干净，未触碰 main。
-- 服务层根目录绑定改为直接要求 CourseOwner/Admin；首次创建、候选文件夹列表和 Copilot `folderId` 写入均不再向 Collaborator 放权。
-- 旧根目录按完整父链收集所有有效后代，检查现有 8 类 Prisma 引用；活动导入、AI 导出等存在时返回 `COURSE_DRIVE_REBIND_BLOCKED`，同根重复绑定在引用检查前幂等返回。
-- 根目录和 Copilot 名称在同一事务写入，并以旧根目录 ID 作为乐观条件；重绑失败不部分保存名称。
-- Copilot GET 对 Collaborator 返回当前绑定、名称和 analytics，但 `folders=[]`；课程云盘页和导入页均隐藏未绑定时的创建/绑定控件。
-- 定向结果：Copilot 路由 7/7、根目录真实数据库/API 12/12、课程云盘对抗 5/5、原协作集成 3/3、云盘 UI 8/8，typecheck 通过。
-- 最终扩充真实数据库根绑定用例为 14/14：新增 Admin API、普通未引用活动上传阻塞、软删除语义；两轮独立对抗审查最终无权限或数据丢失阻断。
-- 双教师现场：Collaborator 改名 200、提交 `folderId` 403、GET `folders=[]` 且 analytics 正常、原根内上传 201；Owner 候选目录正常，有引用课程组合重绑 409 且根目录/名称均未变化。
-- Kimi UI 证据：`artifacts/verification/r5-root-binding/collaborator-settings-no-rebind.png`、`owner-settings-rebind-control.png`；数据加载保留在原硬白名单内，Copilot page 最终无差异。
+## 2. 四个目标问题
 
-## R5 收口计划（2026-07-29，不超过 10 行）
-1. 目标：只收口课程云盘 CourseManager、旧重复入口、协作现场链和一次发布回执。
-2. 从 R4 当前提交创建 `codex/prep-production-chain-r5-release`，不再改备课生产链核心。
-3. 先把课程云盘写操作限定在绑定根目录内，并保护被导入/产物引用的文件。
-4. 再清理或重定向旧 structure、历史 HTML 重复入口。
-5. 使用李素艳、王一帆现场验证同机构协作码和课程云盘上传。
-6. 检测真实 AI Key；缺失则记录阻塞，不用 mock 冒充现场生成。
-7. 最后执行一次完整回执，提交并推送 R5；最大风险是云盘并发移动和引用数据丢失。
+1. 课程云盘文件选择默认折叠且延迟加载。
+2. 最近导入按“一次导入批次”展示，而不是按单文档任务展示，并支持批次删除。
+3. 课程目录能够安全保存（保留同名 ID、创建新项、安全删除无引用旧项、引用保护），且维护页可被找到。
+4. AI 教案、AI 课件来源默认折叠，且保存按钮移动到右上角。
 
-## R5 完成记录
+## 3. 实施顺序
 
-- 课程云盘页面和专用 API 已按 CourseManager 放权；服务端强制同机构、绑定课程根目录 ancestry，禁止访问所有者其他个人文件、跨课程移动及根目录改名/移动/删除。
-- 云盘移动/删除改为事务内重新鉴权和父链校验；导入来源、课程资料、AI 导出等仍引用的文件返回 409，避免协作教师破坏追溯链。
-- CourseManager 访问旧 structure 自动重定向统一内容工作台；历史 HTML 仅管理者可看，学生页面与 AI 知识来源只允许已发布 PPT。
-- 李素艳生成协作码、王一帆加入后课程列表立即显示“协作教师”；王一帆进入备课/课堂/云盘并真实上传文件，读取所有者协作码接口返回 403；学生普通邀请码链通过。
-- `.env` 的兼容模型配置解析为 Gemini provider、`api.im-red-magic.cn`、`gemini-3.6-flash`（未输出 Key）。真实 UI 上传两份新 TXT，完成综合目录一次保存→真实章节教案→确认 AI 课件→编辑 PPT 新版本→仅 PPT 发布。
-- 浏览器证据：`artifacts/verification/r5-browser/real-ai-outline-ready.png`、`real-ai-ppt-published.png`，以及 `r4-browser/collaborator-*.png`；目标单测 26/26、集成 4/4、typecheck、diff-check 均通过。
-- 最终一次完整回执以 `.verification/receipt.json` 为准；为保持差异指纹新鲜，回执后不再修改本文件。
+1. 任务1 云盘选择默认折叠 + 延迟加载（`CourseDocumentImportSources.tsx`）。
+2. 任务3 目录安全保存：新增 `mapImportedOutlineToCourse.ts`，改造 `applyOutline.ts` 与保存确认（`OutlineReviewEditor.tsx`）。
+3. 任务2 最近导入按批次聚合（`RecentImports.tsx` + `ImportBatchTimeline.tsx` + `getImportBatchProgress()`）+ 批次删除 API。
+4. 任务4 目录维护页入口与编辑态按钮（content 页、`ChapterTree.tsx`、错误提示入口）。
+5. 任务5/6 AI 教案资料、AI 课件来源折叠（`AiAppGenerator.tsx` + `CollapsibleSourcePanel.tsx`）。
+6. 任务7 保存按钮移到右上角（`AiAppGenerator.tsx` + `AiArtifactEditor.tsx`）。
+7. 测试补齐、全量回归、验收。
 
-## 开工计划（2026-07-29，不超过 10 行）
-1. 目标：打通“多资料→课程目录→教案→AI课件→PPT→发布”且全链路来源可追溯。
-2. 先记录 Git 状态，从最新 `origin/main` 建功能分支并实测任务 0 基线。
-3. 再按数据模型/权限、多资料导入、来源链、PPT 生成与 UI 的依赖顺序实施。
-4. 每完成一项立即补测试、验证并更新本文件，按阶段小提交。
-5. 最后最多执行 3 轮完整验收，验证 backfill 幂等，交付样例与证据后推送功能分支。
-6. 最大风险：现有脏工作区与目标分支冲突、迁移兼容性、PPT 本机渲染能力、全量测试耗时。
+## 4. 最大风险
 
-## 当前状态
+- `applyOutline.ts` 是保存目录的核心事务，改动同步/删除策略若不当会造成数据错绑或误删被引用课时；必须靠真实数据库测试守住 ID 保留、引用保护、乐观锁。
+- 批次删除需保证队列 Worker 识别 `deletedAt`，避免处理中任务把状态改回可见。
 
-- 任务 0：已完成。
-- 任务 1：实现完成；历史缺文件记录仅报告，见 `BLOCKED.md`。
-- 任务 2：实现完成，待浏览器链路验收。
-- 任务 3：白名单内实现完成；课程列表和部分课堂 UI 受白名单阻塞，见 `BLOCKED.md`。
-- 任务 4：实现并完成 PowerPoint COM 渲染验收。
+## 5. 测试基线（起点实测）
 
-## 决策与验证证据
+- 单元 `vitest list`：597 行（含 `it.each` 模板计数方式）。
+- 集成 `vitest.integration.config.ts`：18。
+- 约束：测试数不得低于 599；`.skip/.todo` 为 0；不得删除或弱化测试。
 
-- 2026-07-29：创建执行跟踪文件；尚未沿用任何历史测试结果。
-- 2026-07-29：任务 0 初始状态：`main`/HEAD `0b3d41799a8a8f64c2e74bbe3915a3f1becfe02f`，`origin/main` 同一提交；已有用户改动 `.gitignore`，本任务不覆盖。
-- 2026-07-29：`git fetch origin --prune` 退出码 0；从最新 `origin/main` 创建 `codex/prep-production-chain`。
-- 2026-07-29：`npm ci` 退出码 0，36.785 秒，安装 378 个包。
-- 2026-07-29：基线 `npm run verify` 退出码 0，95.026 秒；77 个测试文件、543 个测试通过，skip/todo 0；typecheck 与 production build 同时通过。
-- 2026-07-29：基线 `npm run smoke` 退出码 0，3.895 秒；4 个测试文件、40 个测试通过，skip/todo 0。
-- 2026-07-29：基线 `npm run test:data` 退出码 0，4.169 秒；4 个测试文件、9 个测试通过，skip/todo 0。
-- 2026-07-29：基线 `npm run eval:ai` 退出码 0，3.635 秒；5 个测试文件、74 个测试通过，skip/todo 0。
-- 2026-07-29：基线 `npm run test:integration` 退出码 0，3.263 秒；1 个测试文件、1 个测试通过，skip/todo 0。
-- 2026-07-29：基线 `git diff --check` 退出码 0，0.140 秒；仅提示既有 `.gitignore` 将发生 LF→CRLF 转换。
-- 2026-07-29：本机 PowerPoint COM 可用，版本 16.0；后续 PPT 可执行真实渲染验收。
-- 2026-07-29：任务 0 完成；完整日志保存在 `artifacts/verification/task0-baseline/`（忽略目录，不提交）。
-- 2026-07-29：任务 1 完成多资料批次、逐资料解析/图谱、综合目录一次保存与乐观锁、软删除导入记录、旧记录 backfill。成功 dry-run 与两次正式执行均退出码 0；唯一旧记录缺少 `filePath`，三次均只报告，第二次正式执行创建数为 0，未重复创建。
-- 2026-07-29：任务 2 完成逐资料/章节三态来源快照、确认教案后定向进入 AI 课件、AI 课件只从已确认教案生成、PPT 只从已确认 AI 课件生成；教案/AI 课件禁止发布，仅 PPT 可发布。
-- 2026-07-29：任务 3 完成独立 `CourseCollaborator`、同机构教师协作码、管理者/所有者权限分层、课程云盘管理者权限与目录乐观锁；白名单外页面缺口已如实记录。
-- 2026-07-29：任务 4 改为按语义占位页生成，输出封面+目录+3 个非空正文页+结束页。样例 `artifacts/verification/ppt-sample/course-production-chain-sample.pptx` 共 6 页，正文非空 3/3；PowerPoint COM 16.0 成功渲染 6 页 PDF/PNG。
-- 2026-07-29：第一轮完整单测发现 34 项回归并完成根因修复；第二轮 `npm test` 退出码 0，14.84 秒，79 个文件、552 个测试全部通过，skip/todo 0，较基线增加 9 项。
-- 2026-07-29：Kimi WebBridge 在真实浏览器完成生产链 UI 对抗验收，证据位于 `artifacts/verification/kimi-browser/`。实测发现并修复三项遗漏：课程列表 API 泄露 `passwordHash`、历史非 PPT 发布态误导用户、PPT 始终编辑导致发布按钮永久隐藏。
-- 2026-07-29：新增兼容迁移 `20260729002000_only_ppt_published`，将历史非 PPT 的 `PUBLISHED` 安全降为 `APPROVED`，不删除产物内容；迁移部署退出码 0。
-- 2026-07-29：浏览器实测多资料入口、`/ai-import` 重定向、目录保存后只读、两份已发布图谱按资料切换、教案章节三态选择、AI课件仅从已确认教案生成、PPT 来源选择/逐页编辑/唯一发布入口均成立。知识图谱发布仅用于本地验收夹具，不进入提交。
-- 2026-07-29：第三轮前静态检查 `npm run typecheck` 退出码 0；定向回归最终 3 个文件、31 项测试全部通过。最终完整验收待执行。
-- 2026-07-29：用户明确要求将开工前已有的 `.gitignore` 一并提交；核对差异仅新增 `.qoder/` 忽略项，不会隐藏本任务源码或验收证据。
-- 2026-07-29：第 3 轮最终 `npm run verify` 退出码 0；79 个文件、554 项测试通过，skip/todo 0，Vitest 12.31 秒；production build 编译 29.9 秒并完成 28 个静态页生成。测试数较任务 0 基线增加 11。
-- 2026-07-29：最终 `npm run smoke` 退出码 0，命令墙钟 4.774 秒；4 个文件、41 项测试通过，skip/todo 0。
-- 2026-07-29：最终 `npm run test:data` 退出码 0，命令墙钟 4.380 秒；4 个文件、10 项测试通过，skip/todo 0。
-- 2026-07-29：最终 `npm run eval:ai` 退出码 0，命令墙钟 4.590 秒；5 个文件、74 项测试通过，skip/todo 0。
-- 2026-07-29：最终 `npm run test:integration` 退出码 0，命令墙钟 3.791 秒；1 个文件、1 项测试通过，skip/todo 0。
-- 2026-07-29：第 3 轮项目 R3 验收脚本退出码 1。unit lane 的 `importPipeline` 初始化 hook 10 秒超时，导致 3 项未执行；agent-review 证据 lane 亦未通过。其余 static/typecheck/build/smoke/integration/data/Kimi/AI eval 通过。已达到 3 轮上限，停止修复和重跑，详见 `BLOCKED.md`。
-- 2026-07-29：交付状态为“功能实现完成，但完整回执未通过”；不得声称满足全部完成条件。后续剩余项是定位串行验收超时、补 agent-review 证据，以及受原白名单限制的协作课程列表/课堂页面接入。
+## 进度
 
-## R4 修复计划（2026-07-29，不超过 10 行）
-1. 从远端 `codex/prep-production-chain` 新建 `codex/prep-production-chain-r4-fix`，起始 SHA `b18caa878debbc75d10def89967a9acc32041509`。
-2. 先修多文档批次收口与真实数据库并发/失败/保存测试。
-3. 抽取统一目录增量同步，保留章节课时 ID 与引用。
-4. 持久化真实资料章节正文和稳定 ID，修复教案来源快照。
-5. 分离学生邀请码/教师协作码，补齐课程列表和课堂管理权限。
-6. 完善目录保存后的教案承接、文案和 PPT 保存读取链路。
-7. 最后定位 R3 超时、补 agent-review 证据，并连续两次通过完整回执。
-8. 最大风险：历史目录引用删除策略、解析切段置信度、Windows SQLite 进程成本与并发收口。
-
-## R4 完成记录
-
-- 2026-07-29：R4 任务 1/2 完成。批次仅在全部文档进入可审核态后原子抢占综合；失败批次不暴露部分目录；正式保存校验批次状态与版本且只允许一次。真实隔离 SQLite 覆盖双文档、并发末任务、单文档失败、未完成禁止保存、重复保存，`importPipeline` 8/8 通过。
-- 2026-07-29：R4 任务 3 完成。课程目录统一使用事务内增量同步，保留已有章节/课时 ID；新增节点回传真实 ID；被资料、笔记或学习进度引用的课时禁止删除且版本回滚。目录并发回归 4/4 通过。
-- 2026-07-29：R4 任务 4 完成。导入任务持久化由真实原文切分的稳定章节 ID、正文和 offset；教案 UI/API 只接受这些章节，旧 `chapter-*` 伪章节被拒绝；输入快照保存目录版本、资料更新时间、资料/章节内容哈希，AI 上下文保存实际选中原文。相关目标回归 57/57 通过。
-- 2026-07-29：R4 任务 5/6 完成。学生邀请码与教师协作码入口彻底分离；“我教的课”包含 owned/collaborated 并标注角色，协作教师无所有者专属菜单。目标回归 11/11 通过。
-- 2026-07-29：R4 任务 7 完成允许范围内课堂权限接入。14 个课堂/课后页面统一按课程管理者判定，服务端写接口维持 `requireCourseManager`，学生统计继续只查 enrollment。权限目标回归 27/27 通过；范围外残余见 `BLOCKED.md`。
-- 2026-07-29：R4 任务 8/9 完成。目录保存后显示只读成功态和“生成 AI 教案”；白名单内旧文案清理；仅 PPT 提供发布控制。PPT 标题/要点/备注/顺序/增页保存后以新 Prisma 连接回读，目标回归 31/31 通过。
-- 2026-07-29：R3 `importPipeline` 超时根因已处理：所有迁移 SQL 改由单个 sqlite3 进程执行，目标文件 8 项约 3.2 秒完成；待全量回执连续两次验证。
-- 2026-07-29：R4 对抗审查发现并修复失败批次重试、retry CAS、无 ID 目录按顺序错绑、教师兑换学生邀请码、非 PPT 发布读取绕过、PPT 软删来源与版本快照缺失；修复后目标回归通过。
-- 2026-07-29：浏览器复验发现并修复“文档建课”残留及历史资料整份选择回退；Kimi 证据保存在 `artifacts/verification/r4-browser/`。
-- 2026-07-29：PPT 样例脚本改为 CJS 可执行的 `main()`；生成样例 6 页（封面+目录+3 正文+结束），正文非空 3/3。PowerPoint COM 16.0 实际导出 6 页 PDF 与 6 张 PNG，路径 `artifacts/verification/ppt-sample/course-production-chain-r4-sample.*`。
-- 2026-07-29：完整验收第 1 轮在 `importTimeline` 旧文案断言失败（586/587）；同步精确断言后继续。后续一次完整回执虽退出 0，但并行安全审查发现查询参数覆盖 PPT-only 与批次重试边界，已继续修复，因此该陈旧回执不计入最终连续两次结果。
-- 2026-07-29：最终规定序列全部退出 0：clean 2.02s；typecheck 14.66s；test 20.57s，85 文件/589 项、skip/todo 0；build 编译 32.5s并生成 28/28 静态页；smoke 43 项；data 12 项；AI eval 74 项；integration 1 项；diff-check 0。
-- 2026-07-29：修复后 `verify-change.ps1` 连续两次退出 0；两次均执行 static、unit（85 文件/589 项）、build、smoke（43）、integration（1）、data（12）、agent-review、kimi-browser、AI eval（74），回执均显示 `Verification passed`。本条写入后仅刷新证据指纹并重复同样两次回执，不再修改文件。
+- [x] 分支与基线记录
+- [ ] 任务1 云盘折叠
+- [ ] 任务2 最近导入批次
+- [ ] 任务3 目录安全保存
+- [ ] 任务4 维护页入口
+- [ ] 任务5/6 AI 来源折叠
+- [ ] 任务7 顶部保存
+- [ ] 测试与验收

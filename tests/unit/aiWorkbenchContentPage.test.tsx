@@ -6,13 +6,17 @@ const mocks = vi.hoisted(() => ({
   requireUser: vi.fn(),
   requireCourseManager: vi.fn(),
   findImports: vi.fn(),
+  findBatches: vi.fn(),
   recoverImports: vi.fn()
 }));
 
 vi.mock("@/lib/auth", () => ({ requireUser: mocks.requireUser }));
 vi.mock("@/lib/permissions", () => ({ requireCourseManager: mocks.requireCourseManager }));
 vi.mock("@/lib/db", () => ({
-  db: { documentImportJob: { findMany: mocks.findImports } }
+  db: {
+    documentImportBatch: { findMany: mocks.findBatches },
+    documentImportJob: { findMany: mocks.findImports }
+  }
 }));
 vi.mock("@/lib/imports/importQueue", () => ({
   recoverImportJobsFromDatabase: mocks.recoverImports
@@ -42,11 +46,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireUser.mockResolvedValue({ id: "teacher-1", role: "TEACHER" });
   mocks.requireCourseManager.mockResolvedValue({ id: "course-1", title: "测试课程" });
+  mocks.findBatches.mockResolvedValue([]);
   mocks.findImports.mockResolvedValue([{
     id: "job-1",
     originalName: "课程资料.docx",
     status: "READY_FOR_REVIEW",
-    errorMessage: null
+    errorMessage: null,
+    createdAt: new Date("2026-07-13T00:00:00.000Z")
   }]);
 });
 
@@ -71,5 +77,14 @@ describe("AI workbench content page", () => {
     expect(html).toContain("课程资料.docx");
     expect(html).not.toContain("正在载入导入记录");
     expect(mocks.findImports).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes a dedicated maintenance entry to the course directory builder", async () => {
+    const html = renderToStaticMarkup(
+      await AiWorkbenchContentPage({ params: Promise.resolve({ courseId: "course-1" }) })
+    );
+
+    expect(html).toContain("维护课程目录");
+    expect(html).toContain('href="/space/courses/course-1/builder"');
   });
 });

@@ -264,30 +264,34 @@ describe("AI artifact status presentation", () => {
     expect(markup).not.toContain(">难度<");
   });
 
-  it("keeps the PPT page editor open and exposes the only student publication action", () => {
+  it("renders PPT as a read-only preview with header download and publish but no editor", () => {
     const pptApp = {
       ...app,
       key: "ai-ppt-courseware",
       appType: "ppt_courseware" as const,
       title: "PPT课件",
-      description: "生成可编辑 PPT"
+      description: "只读预览 PPT"
     };
     const markup = render({
       ...baseArtifact,
       appType: "ppt_courseware",
       status: "APPROVED",
       jobsAhead: null,
-      payload: JSON.stringify({ slides: [{ title: "正文标题", bullets: ["可见要点"], speakerNotes: "讲稿备注" }] })
+      payload: JSON.stringify({ slides: [{ title: "PPT正文标题", bullets: ["PPT可见要点"], speakerNotes: "教师讲稿隐藏内容" }] })
     }, pptApp, {
       coursewareSources: [{ id: "courseware-1", title: "第一章课件", version: 2, status: "APPROVED" }]
     });
 
-    expect(markup).toContain("正文标题");
-    expect(markup).toContain("可见要点");
-    expect(markup).toContain("讲稿备注");
-    expect(markup).toContain("新增幻灯片");
-    expect(markup).toContain(">保存<");
+    expect(markup).toContain("PPT正文标题");
+    expect(markup).toContain("PPT可见要点");
+    // Speaker notes stay collapsed and never render on the slide by default.
+    expect(markup).not.toContain("教师讲稿隐藏内容");
+    // No inline PPT editor: no add-slide, no textarea-driven save.
+    expect(markup).not.toContain("新增幻灯片");
+    expect(markup).not.toContain(">保存<");
+    expect(markup).toContain("下载PPT");
     expect(markup).toContain("发布给学生");
+    expect(markup).toContain("第 1 / 1 页");
   });
 
   it("keeps approved AI courseware internal and reserves student publication for PPT", () => {

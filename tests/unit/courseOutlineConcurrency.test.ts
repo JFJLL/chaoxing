@@ -135,7 +135,7 @@ describe("course outline optimistic locking", () => {
     expect(created.chapters.flatMap((chapter) => chapter.lessons).every((lesson) => !lesson.id.startsWith("lesson_"))).toBe(true);
   });
 
-  it("never reuses an existing referenced lesson ID merely because its order matches", async () => {
+ it("protects a referenced old lesson from deletion instead of silently rebinding by order", async () => {
     const institution = await db.institution.create({ data: { name: `目录错绑 ${randomUUID()}` } });
     institutionIds.push(institution.id);
     const owner = await db.user.create({ data: { name: "错绑教师", email: `${randomUUID()}@outline.test`, role: "TEACHER", institutionId: institution.id } });
@@ -144,13 +144,43 @@ describe("course outline optimistic locking", () => {
     const oldLessonId = initial.chapters[0]!.lessons[0]!.id;
     await db.resource.create({ data: { courseId: course.id, lessonId: oldLessonId, title: "代数资料", type: "document" } });
 
+    // A completely different outline (no matching IDs) must not silently rebind
+    // by order; the referenced old lesson becomes a delete candidate and the
+    // reference guard rejects the save without touching the persisted lesson.
     await expect(applyOutlineToCourse({
       courseId: course.id,
       outline: outline("二战史"),
       expectedOutlineVersion: 1,
       actorId: owner.id
-    })).rejects.toMatchObject({ code: "COURSE_OUTLINE_MAPPING_REQUIRED" });
+    })).rejects.toMatchObject({ code: "COURSE_OUTLINE_ITEM_REFERENCED" });
     expect((await db.lesson.findUniqueOrThrow({ where: { id: oldLessonId } })).title).toBe("课时 1");
     expect((await db.course.findUniqueOrThrow({ where: { id: course.id } })).outlineVersion).toBe(1);
+  });
+
+  it("saves a first outline onto an empty course", async () => {
+    const institution = await db.institution.create({ data: { name: `目录首次 ${randomUUID()}` } });
+    institutionIds.push(institution.id);
+    const owner = await db.user.create({ data: { name: "首次教师", email: `${randomUUID()}@outline.test`, role: "TEACHER", institutionId: institution.id } });
+    const course = await db.course.create({ data: { title: "首次课程", ownerId: owner.id, institutionId: institution.id } });
+
+    const created = await applyOutlineToCourse({ courseId: course.id, outline: outline("首次"), expectedOutlineVersion: 0, actorId: owner.id });
+    expect(created.outlineVersion).toBe(1);
+    expect(created.chapters).toHaveLength(3);
+    expect(await db.chapter.count({ where: { courseId: course.id } })).toBe(3);
+  });
+
+  it("replaces an unreferenced directory with a differently named outline instead of blocking", async () => {
+    const institution = await db.institution.create({ data: { name: `目录替换 ${randomUUID()}` } });
+    institutionIds.push(institution.id);
+    const owner = await db.user.create({ data: { name: "替换教师", email: `${randomUUID()}@outline.test`, role: "TEACHER", institutionId: institution.id } });
+    const course = await db.course.create({ data: { title: "替换课程", ownerId: owner.id, institutionId: institution.id } });
+
+    await applyOutlineToCourse({ courseId: course.id, outline: outline("旧版"), expectedOutlineVersion: 0, actorId: owner.id });
+    // A differently named outline with no references must not raise a mapping
+    // error; unreferenced old items are safely deleted and new ones created.
+    const saved = await applyOutlineToCourse({ courseId: course.id, outline: outline("新版"), expectedOutlineVersion: 1, actorId: owner.id });
+    expect(saved.chapters.map((chapter) => chapter.title)).toEqual(["新版 第1章", "新版 第2章", "新版 第3章"]);
+    expect(await db.chapter.count({ where: { courseId: course.id } })).toBe(3);
+    expect((await db.course.findUniqueOrThrow({ where: { id: course.id } })).outlineVersion).toBe(2);
   });
 });

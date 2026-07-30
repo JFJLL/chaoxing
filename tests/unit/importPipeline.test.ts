@@ -457,4 +457,23 @@ describe("import pipeline", () => {
     expect(await prisma.chapter.count({ where: { courseId } })).toBe(1);
     expect((await prisma.course.findUniqueOrThrow({ where: { id: courseId } })).outlineVersion).toBe(1);
   });
+
+  it("never resurrects a soft-deleted job when the worker runs", async () => {
+    const { jobs } = await createBatchJobs([
+      { name: "已删除.md", text: "# 已删除\n\n正文。" }
+    ]);
+    await prisma.documentImportJob.update({
+      where: { id: jobs[0]!.id },
+      data: { status: "DELETED", deletedAt: new Date() }
+    });
+
+    // The batch delete already soft-deleted the job; the worker must treat it as
+    // a no-op instead of writing a visible status back onto it.
+    await runImportJob(jobs[0]!.id);
+
+    const after = await prisma.documentImportJob.findUniqueOrThrow({ where: { id: jobs[0]!.id } });
+    expect(after.status).toBe("DELETED");
+    expect(after.deletedAt).not.toBeNull();
+    expect(mocks.generateCourseOutline).not.toHaveBeenCalled();
+  });
 });
