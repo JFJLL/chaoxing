@@ -186,53 +186,57 @@ export function ChapterTree({ courseId, initialChapters, initialOutlineVersion }
       {message ? <p className="text-sm text-slate-500">{message}</p> : null}
       <div className="space-y-4">
         {chapters.map((chapter, chapterIndex) => (
-          <section key={chapter.id} className="rounded-md border border-[var(--cx-border)] bg-slate-50 p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
-              <div className="grid flex-1 gap-3 md:grid-cols-[1fr_2fr]">
-                <Input disabled={!editing} value={chapter.title} onChange={(event) => updateChapter(chapterIndex, { title: event.target.value })} />
-                <Input disabled={!editing} value={chapter.summary} onChange={(event) => updateChapter(chapterIndex, { summary: event.target.value })} placeholder="章节简介" />
+          <section key={chapter.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+              <span className="inline-flex h-6 shrink-0 items-center rounded-full bg-rose-50 px-3 text-xs font-semibold text-[#c8102e] lg:mb-2">第 {chapter.order} 章</span>
+              <div className="grid flex-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+                <label className="space-y-1 text-sm"><span className="font-medium text-slate-600">章节名称</span><Input disabled={!editing} value={chapter.title} onChange={(event) => updateChapter(chapterIndex, { title: event.target.value })} /></label>
+                <label className="space-y-1 text-sm"><span className="font-medium text-slate-600">章节简介</span><Input disabled={!editing} value={chapter.summary} onChange={(event) => updateChapter(chapterIndex, { summary: event.target.value })} placeholder="章节简介" /></label>
               </div>
-              {editing ? <div className="flex gap-1">
+              {editing ? <div className="flex gap-1 lg:mb-1">
                 <Button type="button" variant="ghost" className="h-9 w-9 px-0" onClick={() => moveChapter(chapterIndex, -1)} aria-label="章节上移">
                   <ArrowUp className="h-4 w-4" />
                 </Button>
                 <Button type="button" variant="ghost" className="h-9 w-9 px-0" onClick={() => moveChapter(chapterIndex, 1)} aria-label="章节下移">
                   <ArrowDown className="h-4 w-4" />
                 </Button>
-                <Button type="button" variant="ghost" className="h-9 w-9 px-0" onClick={() => removeChapter(chapterIndex)} aria-label="删除章节">
+                <Button type="button" variant="ghost" className="h-9 w-9 px-0 text-red-600" onClick={() => removeChapter(chapterIndex)} aria-label="删除章节">
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div> : null}
             </div>
             <div className="mt-4 space-y-3">
               {chapter.lessons.map((lesson, lessonIndex) => (
-                <div key={lesson.id} className="rounded-md border border-white bg-white p-3">
-                  <div className="grid gap-3 lg:grid-cols-[1fr_2fr_110px_auto]">
-                    <Input disabled={!editing} value={lesson.title} onChange={(event) => updateLesson(chapterIndex, lessonIndex, { title: event.target.value })} />
-                    <Input disabled={!editing} value={lesson.summary} onChange={(event) => updateLesson(chapterIndex, lessonIndex, { summary: event.target.value })} placeholder="课时简介" />
-                    <Input
+                <div key={lesson.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="inline-flex h-5 items-center rounded-full bg-white px-2 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-200">第 {lesson.order} 课</span>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,2fr)_120px_auto]">
+                    <label className="space-y-1 text-sm"><span className="font-medium text-slate-600">课时名称</span><Input disabled={!editing} value={lesson.title} onChange={(event) => updateLesson(chapterIndex, lessonIndex, { title: event.target.value })} /></label>
+                    <label className="space-y-1 text-sm"><span className="font-medium text-slate-600">课时简介</span><Input disabled={!editing} value={lesson.summary} onChange={(event) => updateLesson(chapterIndex, lessonIndex, { summary: event.target.value })} placeholder="课时简介" /></label>
+                    <label className="space-y-1 text-sm"><span className="font-medium text-slate-600">时长（分钟）</span><Input
                       disabled={!editing}
                       type="number"
                       min={1}
                       value={lesson.estimatedMinutes}
                       onChange={(event) => updateLesson(chapterIndex, lessonIndex, { estimatedMinutes: Number(event.target.value) || 30 })}
                       aria-label="预计分钟"
-                    />
-                    {editing ? <div className="flex gap-1">
+                    /></label>
+                    {editing ? <div className="flex gap-1 lg:mt-6">
                       <Button type="button" variant="ghost" className="h-9 w-9 px-0" onClick={() => moveLesson(chapterIndex, lessonIndex, -1)} aria-label="课时上移">
                         <ArrowUp className="h-4 w-4" />
                       </Button>
                       <Button type="button" variant="ghost" className="h-9 w-9 px-0" onClick={() => moveLesson(chapterIndex, lessonIndex, 1)} aria-label="课时下移">
                         <ArrowDown className="h-4 w-4" />
                       </Button>
-                      <Button type="button" variant="ghost" className="h-9 w-9 px-0" onClick={() => removeLesson(chapterIndex, lessonIndex)} aria-label="删除课时">
+                      <Button type="button" variant="ghost" className="h-9 w-9 px-0 text-red-600" onClick={() => removeLesson(chapterIndex, lessonIndex)} aria-label="删除课时">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div> : null}
                   </div>
-                  <Textarea
+                  <label className="mt-3 block space-y-1 text-sm"><span className="font-medium text-slate-600">知识点（每行一个）</span><Textarea
                     disabled={!editing}
-                    className="mt-3 w-full"
+                    className="w-full"
                     value={lesson.keyPoints.join("\n")}
                     onChange={(event) =>
                       updateLesson(chapterIndex, lessonIndex, {
@@ -240,7 +244,7 @@ export function ChapterTree({ courseId, initialChapters, initialOutlineVersion }
                       })
                     }
                     placeholder="关键点，每行一个"
-                  />
+                  /></label>
                 </div>
               ))}
               {editing ? <Button type="button" variant="secondary" className="h-9" onClick={() => addLesson(chapterIndex)}>

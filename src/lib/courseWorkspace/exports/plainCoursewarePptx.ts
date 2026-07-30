@@ -1,6 +1,7 @@
 import { readFile } from "fs/promises";
 import { join } from "path";
 import JSZip from "jszip";
+import sharp from "sharp";
 import type { AiCoursewarePayload } from "@/types/courseWorkspace";
 
 // Builds a plain 16:9 PPTX from the courseware payload — no decorated template.
@@ -59,9 +60,9 @@ function slideRels(hasLogo: boolean) {
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>${logoRel}</Relationships>`;
 }
 
-function slideXml(slide: AiCoursewarePayload["slides"][number], hasLogo: boolean) {
-  const logoPic = hasLogo
-    ? `<p:pic><p:nvPicPr><p:cNvPr id="2" name="logo"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="457200" y="320000"/><a:ext cx="2057400" cy="535305"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`
+function slideXml(slide: AiCoursewarePayload["slides"][number], logo: { cx: number; cy: number } | null) {
+  const logoPic = logo
+    ? `<p:pic><p:nvPicPr><p:cNvPr id="2" name="logo"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="457200" y="320000"/><a:ext cx="${logo.cx}" cy="${logo.cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`
     : "";
   const title = `<p:sp><p:nvSpPr><p:cNvPr id="3" name="title"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="1000000"/><a:ext cx="11277600" cy="900000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr wrap="square" rtlCol="0"><a:normAutofit/></a:bodyPr><a:lstStyle/><a:p><a:r><a:rPr lang="zh-CN" altLang="en-US" sz="3200" b="1"><a:solidFill><a:srgbClr val="1F2937"/></a:solidFill></a:rPr><a:t>${escapeXml(slide.title)}</a:t></a:r></a:p></p:txBody></p:sp>`;
   const bullets = (slide.bullets.length ? slide.bullets : [""]).map((bullet) => `<a:p><a:pPr marL="342900" indent="-342900"><a:buFont typeface="Arial"/><a:buChar char="\u2022"/></a:pPr><a:r><a:rPr lang="zh-CN" altLang="en-US" sz="1800"><a:solidFill><a:srgbClr val="334155"/></a:solidFill></a:rPr><a:t>${escapeXml(bullet)}</a:t></a:r></a:p>`).join("");
@@ -70,11 +71,19 @@ function slideXml(slide: AiCoursewarePayload["slides"][number], hasLogo: boolean
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${logoPic}${title}${body}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
 }
 
-async function loadLogo(): Promise<Buffer | null> {
+async function loadLogo(): Promise<{ bytes: Buffer; cx: number; cy: number } | null> {
   const custom = process.env.PPT_COURSEWARE_LOGO_PATH?.trim();
   const path = custom || join(process.cwd(), "public", "ppt-template", "school-logo.png");
   try {
-    return await readFile(path);
+    const bytes = await readFile(path);
+    // Preserve the logo's real aspect ratio: fix the height and derive the
+    // width from the image dimensions so it is never stretched.
+    const meta = await sharp(bytes).metadata();
+    const width = meta.width ?? 0;
+    const height = meta.height ?? 0;
+    const cy = 520700; // ~0.57in tall
+    const cx = width && height ? Math.round(cy * (width / height)) : 1500000;
+    return { bytes, cx, cy };
   } catch {
     return null;
   }
@@ -86,6 +95,7 @@ export async function generatePlainCoursewarePptx(input: {
   const slides = input.payload.slides.length ? input.payload.slides : [{ title: "课件", bullets: [], speakerNotes: "" }];
   const logo = await loadLogo();
   const hasLogo = Boolean(logo);
+  const logoExt = logo ? { cx: logo.cx, cy: logo.cy } : null;
 
   const zip = new JSZip();
   zip.file("[Content_Types].xml", CONTENT_TYPES(slides.length));
@@ -97,9 +107,9 @@ export async function generatePlainCoursewarePptx(input: {
   zip.file("ppt/slideMasters/_rels/slideMaster1.xml.rels", SLIDE_MASTER_RELS);
   zip.file("ppt/slideLayouts/slideLayout1.xml", SLIDE_LAYOUT);
   zip.file("ppt/slideLayouts/_rels/slideLayout1.xml.rels", SLIDE_LAYOUT_RELS);
-  if (logo) zip.file("ppt/media/logo.png", logo);
+  if (logo) zip.file("ppt/media/logo.png", logo.bytes);
   slides.forEach((slide, index) => {
-    zip.file(`ppt/slides/slide${index + 1}.xml`, slideXml(slide, hasLogo));
+    zip.file(`ppt/slides/slide${index + 1}.xml`, slideXml(slide, logoExt));
     zip.file(`ppt/slides/_rels/slide${index + 1}.xml.rels`, slideRels(hasLogo));
   });
 

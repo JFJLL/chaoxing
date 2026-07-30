@@ -75,8 +75,8 @@ type Props = {
   showFooterSave?: boolean;
 };
 
-const inputClass = "h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400";
-const textareaClass = "min-h-20 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-400";
+const inputClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-default disabled:bg-slate-50/60 disabled:text-slate-600";
+const textareaClass = "min-h-20 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-default disabled:bg-slate-50/60 disabled:text-slate-600";
 
 function cloneDraft(draft: ArtifactEditorDraft) {
   return structuredClone(draft);
@@ -186,8 +186,8 @@ export function AiArtifactEditor({
       {draft.appType === "question_generation" ? (
         <div className="space-y-4">
           {draft.payload.questions.map((question, index) => (
-            <fieldset key={question.id ?? `new-${index}`} className="space-y-3 rounded-xl border border-slate-200 p-4">
-              <legend className="px-2 text-sm font-semibold text-slate-900">题目 {index + 1}{question.id ? " · 已有题目 ID" : " · 新题"}</legend>
+            <fieldset key={question.id ?? `new-${index}`} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <legend className="px-2 text-sm font-semibold text-slate-900"><span className="mr-2 inline-block h-3 w-1 translate-y-px rounded-full bg-[#c8102e]" />题目 {index + 1}{question.id ? " · 已有题目 ID" : " · 新题"}</legend>
               <div className="flex justify-end"><ItemActions index={index} length={draft.payload.questions.length} onMove={(direction) => update((next) => { if (next.appType === "question_generation") move(next.payload.questions, index, direction); })} onRemove={() => update((next) => { if (next.appType === "question_generation") next.payload.questions.splice(index, 1); })} /></div>
               <label className="block text-sm text-slate-700">题型
                 <select value={question.type} className={inputClass} onChange={(event) => update((next) => {
@@ -218,7 +218,7 @@ export function AiArtifactEditor({
           <TextList label="教学重点" items={draft.payload.keyPoints} onChange={(items) => update((next) => { if (next.appType === "lesson_plan") next.payload.keyPoints = items; })} />
           <fieldset className="space-y-3"><legend className="text-sm font-semibold text-slate-900">教学过程</legend>
             {draft.payload.teachingProcess.map((phase, index) => (
-              <div key={`${phase.phase}-${index}`} className="space-y-3 rounded-xl border border-slate-200 p-4">
+              <div key={`${phase.phase}-${index}`} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex justify-end"><ItemActions index={index} length={draft.payload.teachingProcess.length} onMove={(direction) => update((next) => { if (next.appType === "lesson_plan") move(next.payload.teachingProcess, index, direction); })} onRemove={() => update((next) => { if (next.appType === "lesson_plan") next.payload.teachingProcess.splice(index, 1); })} /></div>
                 <div className="grid gap-3 md:grid-cols-[1fr_120px]"><label className="text-sm text-slate-700">环节<input className={inputClass} value={phase.phase} onChange={(event) => update((next) => { if (next.appType === "lesson_plan") next.payload.teachingProcess[index]!.phase = event.target.value; })} /></label><label className="text-sm text-slate-700">分钟<input type="number" min={1} max={480} className={inputClass} value={phase.minutes} onChange={(event) => update((next) => { if (next.appType === "lesson_plan") next.payload.teachingProcess[index]!.minutes = Number(event.target.value); })} /></label></div>
                 <label className="block text-sm text-slate-700">教学活动<textarea className={textareaClass} value={phase.activity} onChange={(event) => update((next) => { if (next.appType === "lesson_plan") next.payload.teachingProcess[index]!.activity = event.target.value; })} /></label>
@@ -233,8 +233,8 @@ export function AiArtifactEditor({
       {draft.appType === "courseware" || draft.appType === "ppt_courseware" ? (
         <div className="space-y-4">
           {draft.payload.slides.map((slide, index) => (
-            <fieldset key={`${slide.title}-${index}`} className="space-y-3 rounded-xl border border-slate-200 p-4">
-              <legend className="px-2 text-sm font-semibold text-slate-900">幻灯片 {index + 1}</legend>
+            <fieldset key={`${slide.title}-${index}`} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <legend className="px-2 text-sm font-semibold text-slate-900"><span className="mr-2 inline-block h-3 w-1 translate-y-px rounded-full bg-[#c8102e]" />幻灯片 {index + 1}</legend>
               <div className="flex justify-end"><ItemActions index={index} length={draft.payload.slides.length} onMove={(direction) => update((next) => { if (next.appType === "courseware" || next.appType === "ppt_courseware") move(next.payload.slides, index, direction); })} onRemove={() => update((next) => { if (next.appType === "courseware" || next.appType === "ppt_courseware") next.payload.slides.splice(index, 1); })} /></div>
               <label className="block text-sm text-slate-700">标题<input className={inputClass} value={slide.title} onChange={(event) => update((next) => { if (next.appType === "courseware" || next.appType === "ppt_courseware") next.payload.slides[index]!.title = event.target.value; })} /></label>
               <TextList label="要点" items={slide.bullets} onChange={(items) => update((next) => { if (next.appType === "courseware" || next.appType === "ppt_courseware") next.payload.slides[index]!.bullets = items; })} />
@@ -249,7 +249,7 @@ export function AiArtifactEditor({
         <div className="space-y-4">
           <label className="block text-sm text-slate-700">试卷标题<input className={inputClass} value={draft.payload.title} onChange={(event) => update((next) => { if (next.appType === "paper_assembly") next.payload.title = event.target.value; })} /></label>
           {draft.payload.sections.map((section, index) => (
-            <fieldset key={`${section.name}-${index}`} className="space-y-3 rounded-xl border border-slate-200 p-4">
+            <fieldset key={`${section.name}-${index}`} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <legend className="px-2 text-sm font-semibold text-slate-900">试卷分区 {index + 1}</legend>
               <div className="flex justify-end"><ItemActions index={index} length={draft.payload.sections.length} onMove={(direction) => update((next) => { if (next.appType === "paper_assembly") move(next.payload.sections, index, direction); })} onRemove={() => update((next) => { if (next.appType === "paper_assembly") next.payload.sections.splice(index, 1); })} /></div>
               <div className="grid gap-3 md:grid-cols-[1fr_140px]"><label className="text-sm text-slate-700">分区名称<input className={inputClass} value={section.name} onChange={(event) => update((next) => { if (next.appType === "paper_assembly") next.payload.sections[index]!.name = event.target.value; })} /></label><label className="text-sm text-slate-700">分值<input type="number" min={1} max={1000} className={inputClass} value={section.score} onChange={(event) => update((next) => { if (next.appType === "paper_assembly") next.payload.sections[index]!.score = Number(event.target.value); })} /></label></div>

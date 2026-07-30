@@ -640,7 +640,7 @@ export function AiAppGenerator({
         </form>
 
         {error && app.appType === "html_courseware" ? <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-        <div className="mt-6"><h2 className="text-sm font-semibold text-slate-900">历史产物</h2><div className="mt-3 space-y-2">
+        <div className="mt-6"><h2 className="text-sm font-semibold text-slate-900">历史产物</h2><div className="mt-3 max-h-[460px] space-y-2 overflow-y-auto pr-1">
           {artifacts.map((artifact) => {
             const choices = exportChoices(artifact.appType);
             const exportable = Boolean(artifact.payload) && !isActiveAiArtifact(artifact) && artifact.status !== "FAILED" && choices.length > 0;
