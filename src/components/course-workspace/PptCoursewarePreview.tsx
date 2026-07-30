@@ -95,10 +95,6 @@ export function PptCoursewarePreview({
                     </li>
                   ))}
                 </ul>
-                <div className="hidden w-2/5 shrink-0 self-stretch sm:block">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/ppt-template/campus.jpg" alt="校园图" className="h-full w-full rounded-lg object-cover" />
-                </div>
               </div>
             </div>
           </div>

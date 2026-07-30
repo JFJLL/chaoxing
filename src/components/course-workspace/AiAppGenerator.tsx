@@ -112,6 +112,17 @@ export function mergeArtifactHistory(current: ManagerAiArtifactDto[], next: Mana
   return [next, ...remaining];
 }
 
+// Generation timestamp appended to default names, e.g. 20260705-175250 (Beijing).
+export function generationStamp(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}${get("month")}${get("day")}-${get("hour")}${get("minute")}${get("second")}`;
+}
+
 // A recommendation response is only usable when it is for the source we last
 // asked about; fast source switching must not apply a stale answer.
 export function isRecommendationForSource(responseSource: string | undefined, requestedSource: string) {
@@ -388,7 +399,7 @@ export function AiAppGenerator({
     }
     if (prompt) return `${app.title}：${prompt.slice(0, 18)}`;
     if (app.appType === "question_generation") return `${app.title}：${options.questionType}${options.questionCount}题`;
-    if (app.appType === "lesson_plan") return `${app.title}：${options.lessonMinutes}分钟${options.teachingMethod}`;
+    if (app.appType === "lesson_plan") return `${app.title}：${options.lessonMinutes}分钟${options.teachingMethod} ${generationStamp()}`;
     if (app.appType === "courseware") return `${app.title}：${options.coursewareStyle}${options.slideCount}页`;
     return `${app.title}：${options.paperScore}分${options.difficulty}卷`;
   }
@@ -609,7 +620,7 @@ export function AiAppGenerator({
             const isExpanded = expandedDocumentIds.has(document.id);
             const panelId = `lesson-source-${document.id}`;
             const summary = selected === undefined ? "未选择" : selected.length === 0 ? "已选择整份资料" : `已选择 ${selected.length} 个章节`;
-            return <div key={document.id} className="rounded-xl border border-slate-200 p-3"><div className="flex items-center justify-between gap-2"><label className="flex items-center gap-2 text-sm font-medium text-slate-800"><input type="checkbox" checked={selected !== undefined && selected.length === 0} ref={(node) => { if (node) node.indeterminate = Boolean(selected?.length); }} onChange={() => toggleDocument(document.id)} /><span>{document.title}</span></label><button type="button" onClick={() => toggleDocumentExpanded(document.id)} aria-expanded={isExpanded} aria-controls={panelId} className="flex shrink-0 items-center gap-1 text-xs font-medium text-blue-600">{isExpanded ? "收起" : "展开"}{isExpanded ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}</button></div>{isExpanded ? <div id={panelId} className="ml-6 mt-2 space-y-2">{document.sections.map((section) => <label key={section.id} className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={selected !== undefined && (selected.length === 0 || selected.includes(section.id))} onChange={() => toggleDocumentSection(document.id, section.id, allIds)} /><span>{section.title}</span></label>)}</div> : <p className="ml-6 mt-1 text-xs text-slate-500">{summary}</p>}</div>;
+            return <div key={document.id} className="rounded-xl border border-slate-200 p-3"><div className="flex items-center justify-between gap-2"><label className="flex items-center gap-2 text-sm font-medium text-slate-800"><input type="checkbox" checked={selected !== undefined && selected.length === 0} ref={(node) => { if (node) node.indeterminate = Boolean(selected?.length); }} onChange={() => toggleDocument(document.id)} /><span>{document.title}</span></label><button type="button" onClick={() => toggleDocumentExpanded(document.id)} aria-expanded={isExpanded} aria-controls={panelId} className="flex shrink-0 items-center gap-1 text-xs font-medium text-blue-600">{isExpanded ? "收起" : "展开"}{isExpanded ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}</button></div>{isExpanded ? <div id={panelId} className="ml-6 mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">{document.sections.map((section) => <label key={section.id} className="flex items-start gap-2 text-sm text-slate-600"><input type="checkbox" className="mt-0.5 shrink-0" checked={selected !== undefined && (selected.length === 0 || selected.includes(section.id))} onChange={() => toggleDocumentSection(document.id, section.id, allIds)} /><span className="min-w-0 break-words leading-5">{section.title}</span></label>)}</div> : <p className="ml-6 mt-1 text-xs text-slate-500">{summary}</p>}</div>;
           })}{!documentSources.length ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">暂无解析成功的课程资料，请先导入并保存课程目录。</p> : null}{missingLessonPlanSources && documentSources.length ? <p className="text-xs text-amber-700">请选择整份资料或资料内具体章节。</p> : null}</fieldset> : null}
 
           {app.appType === "question_generation" ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1"><label className="space-y-1 text-sm font-medium text-slate-700"><span>题型</span><select value={options.questionType} onChange={(event) => updateOption("questionType", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option>混合</option><option>单选</option><option>多选</option><option>简答</option></select></label><label className="space-y-1 text-sm font-medium text-slate-700"><span>题量</span><input type="number" min={3} max={12} value={options.questionCount} onChange={(event) => updateOption("questionCount", Number(event.target.value))} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label></div> : null}

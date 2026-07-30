@@ -15,7 +15,7 @@ import {
 } from "@/lib/modules/driveFiles";
 import { parseStoredArtifactPayload } from "@/lib/courseWorkspace/artifactPayload";
 import { generateArtifactDocx } from "@/lib/courseWorkspace/exports/generateArtifactDocx";
-import { generateArtifactPptx } from "@/lib/courseWorkspace/exports/generateArtifactPptx";
+import { generatePlainCoursewarePptx } from "@/lib/courseWorkspace/exports/plainCoursewarePptx";
 import type {
   AiCoursewarePayload,
   AiLessonPlanPayload,
@@ -105,25 +105,9 @@ async function generateBytes(input: {
   courseId: string;
 }) {
   if (input.format === "PPTX") {
-    const templatePath =
-      process.env.PPT_COURSEWARE_TEMPLATE_PATH?.trim()
-      || join(process.cwd(), "templates", "courseware-template.pptx");
-    let templateBytes: Buffer;
-    try {
-      templateBytes = await readFile(templatePath);
-    } catch (error) {
-      const withCode = error as NodeJS.ErrnoException;
-      if (withCode.code === "ENOENT") {
-        throw new CourseDriveError("PPT 课件模板暂不可用，请联系管理员", 503, "PPT_TEMPLATE_UNAVAILABLE");
-      }
-      throw error;
-    }
-    return generateArtifactPptx({
-      templateBytes,
-      title: input.title,
-      courseTitle: input.courseTitle,
-      payload: input.payload as AiCoursewarePayload
-    });
+    // Export mirrors the on-screen preview (plain title + bullets + logo) rather
+    // than nesting content into the decorated template.
+    return generatePlainCoursewarePptx({ payload: input.payload as AiCoursewarePayload });
   }
 
   const variant = input.variant.toLowerCase() as "default" | "student" | "teacher";
