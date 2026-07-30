@@ -40,7 +40,15 @@ const lessonPlanSourceSnapshotSchema = z.object({
 const derivedSourceSnapshotSchema = z.object({
   sourceArtifactId: z.string().trim().min(1).max(200),
   sourceArtifactVersion: z.number().int().min(1),
-  sourceInputSnapshot: z.string().nullable()
+  sourceInputSnapshot: z.string().nullable(),
+  // Records the teacher's final slide-count choice alongside the AI suggestion.
+  slideCountPlan: z.object({
+    requestedSlideCount: z.number().int().min(1).max(200),
+    recommendedSlideCount: z.number().int().min(1).max(200).nullable(),
+    recommendationAccepted: z.boolean(),
+    sourceArtifactId: z.string().trim().min(1).max(200),
+    sourceArtifactVersion: z.number().int().min(0).nullable()
+  }).strict().optional()
 }).strict();
 
 const generationSnapshotSchema = z.discriminatedUnion("appType", [

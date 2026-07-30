@@ -48,7 +48,14 @@ const createArtifactSchema = z.object({
   sourceSelections: z.array(z.object({
     documentId: z.string().trim().min(1).max(200),
     sectionIds: z.array(z.string().trim().min(1).max(200)).max(100)
-  }).strict()).min(1).max(20).optional()
+  }).strict()).min(1).max(20).optional(),
+  slideCountPlan: z.object({
+    requestedSlideCount: z.number().int().min(1).max(200),
+    recommendedSlideCount: z.number().int().min(1).max(200).nullable(),
+    recommendationAccepted: z.boolean(),
+    sourceArtifactId: z.string().trim().min(1).max(200),
+    sourceArtifactVersion: z.number().int().min(0).nullable()
+  }).strict().optional()
 }).strict();
 
 const MAX_GENERATION_BODY_BYTES = 16_384;
@@ -242,7 +249,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         sourceSnapshot: {
           sourceArtifactId: source.id,
           sourceArtifactVersion: source.version,
-          sourceInputSnapshot: source.inputSnapshot
+          sourceInputSnapshot: source.inputSnapshot,
+          ...(parsed.data.slideCountPlan ? { slideCountPlan: parsed.data.slideCountPlan } : {})
         }
       } as const;
     } else if (parsed.data.appType === "paper_assembly") {

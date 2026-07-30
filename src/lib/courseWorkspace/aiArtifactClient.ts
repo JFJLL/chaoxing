@@ -51,6 +51,13 @@ export type CreateAiArtifactInput = {
   scope: AiArtifactScope;
   sourceArtifactId?: string;
   sourceSelections?: Array<{ documentId: string; sectionIds: string[] }>;
+  slideCountPlan?: {
+    requestedSlideCount: number;
+    recommendedSlideCount: number | null;
+    recommendationAccepted: boolean;
+    sourceArtifactId: string;
+    sourceArtifactVersion: number | null;
+  };
 };
 
 export type RequestLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -205,7 +212,8 @@ export function createCourseAiArtifact(input: CreateAiArtifactInput, request: Re
     title: input.title,
     scope: input.scope,
     sourceArtifactId: input.sourceArtifactId,
-    sourceSelections: input.sourceSelections
+    sourceSelections: input.sourceSelections,
+    slideCountPlan: input.slideCountPlan
   }), request);
 }
 

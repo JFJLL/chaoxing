@@ -69,6 +69,10 @@ type Props = {
   onDirtyChange: (dirty: boolean) => void;
   busy: boolean;
   editable?: boolean;
+  /** Stable id so a save button rendered outside the form can submit it. */
+  formId?: string;
+  /** When false the built-in footer save button is hidden (a header save owns it). */
+  showFooterSave?: boolean;
 };
 
 const inputClass = "h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400";
@@ -137,7 +141,9 @@ export function AiArtifactEditor({
   onSave,
   onDirtyChange,
   busy,
-  editable = true
+  editable = true,
+  formId,
+  showFooterSave = true
 }: Props) {
   const [draft, setDraft] = useState(() => createArtifactEditorDraft(appType, title, payload));
 
@@ -167,7 +173,7 @@ export function AiArtifactEditor({
   }
 
   return (
-    <form onSubmit={save} className="space-y-5">
+    <form id={formId} onSubmit={save} className="space-y-5">
       <fieldset disabled={!editable || busy} className="space-y-5 disabled:opacity-90">
       <label className="block space-y-1 text-sm font-semibold text-slate-900">
         <span>产物标题</span>
@@ -255,7 +261,7 @@ export function AiArtifactEditor({
       ) : null}
 
       </fieldset>
-      {editable ? <div className="flex justify-end border-t border-slate-100 pt-4">
+      {editable && showFooterSave ? <div className="flex justify-end border-t border-slate-100 pt-4">
         <Button type="submit" disabled={busy || !draft.title.trim()}>
           <Save className="h-4 w-4" aria-hidden="true" />{busy ? "正在保存" : "保存"}
         </Button>
