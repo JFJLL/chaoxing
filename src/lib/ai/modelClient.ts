@@ -263,6 +263,124 @@ async function createGeminiTextCompletion(config: AiModelConfig, input: Completi
   return body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
 }
 
+export type GeminiUploadedFile = { uri: string; mimeType: string };
+
+type GeminiFileCompletionInput = CompletionInput & { file: GeminiUploadedFile };
+
+function geminiHostRoot(config: AiModelConfig) {
+  // Strip any /v1beta(.. ) suffix so we can address the File API at
+  // <host>/upload/v1beta/files while keeping every request on the configured
+  // relay host (never a hard-coded generativelanguage.googleapis.com).
+  return config.baseURL.replace(/\/+$/, "").replace(/\/v\d+(?:beta|alpha)?$/i, "");
+}
+
+/**
+ * Uploads a file to Gemini's File API through the configured relay and returns
+ * an ACTIVE file reference. The resumable upload URL that Gemini returns points
+ * at Google's raw host, which is unreachable from a relay-only deployment, so
+ * we rewrite it back onto the relay host (and re-attach the key) before pushing
+ * the bytes. Only supported for the gemini provider.
+ */
+export async function uploadFileToGemini(
+  config: AiModelConfig,
+  input: { bytes: Buffer; mimeType: string; displayName?: string }
+): Promise<GeminiUploadedFile> {
+  if (config.provider !== "gemini") {
+    throw new Error("当前模型不支持直接上传文件");
+  }
+  const host = geminiHostRoot(config);
+  const start = await fetch(`${host}/upload/v1beta/files?key=${encodeURIComponent(config.apiKey)}`, {
+    method: "POST",
+    headers: {
+      "X-Goog-Upload-Protocol": "resumable",
+      "X-Goog-Upload-Command": "start",
+      "X-Goog-Upload-Header-Content-Length": String(input.bytes.length),
+      "X-Goog-Upload-Header-Content-Type": input.mimeType,
+      "Content-Type": "application/json",
+      "x-goog-api-key": config.apiKey
+    },
+    body: JSON.stringify({ file: { display_name: input.displayName ?? "import-source" } })
+  });
+  if (!start.ok) throw new Error(`文件上传初始化失败：${start.status}`);
+  const rawUploadUrl = start.headers.get("x-goog-upload-url") || start.headers.get("location");
+  if (!rawUploadUrl) throw new Error("文件上传地址缺失");
+
+  const uploadUrl = new URL(rawUploadUrl);
+  const relay = new URL(host);
+  uploadUrl.protocol = relay.protocol;
+  uploadUrl.host = relay.host;
+  if (!uploadUrl.searchParams.has("key")) uploadUrl.searchParams.set("key", config.apiKey);
+
+  const put = await fetch(uploadUrl.toString(), {
+    method: "POST",
+    headers: {
+      "x-goog-api-key": config.apiKey,
+      "Content-Length": String(input.bytes.length),
+      "X-Goog-Upload-Offset": "0",
+      "X-Goog-Upload-Command": "upload, finalize"
+    },
+    body: new Uint8Array(input.bytes)
+  });
+  if (!put.ok) throw new Error(`文件上传失败：${put.status}`);
+  const uploaded = (await put.json().catch(() => null)) as {
+    file?: { uri?: string; name?: string; state?: string; mimeType?: string };
+  } | null;
+  const uri = uploaded?.file?.uri;
+  if (!uri) throw new Error("文件上传未返回引用地址");
+
+  let state = uploaded?.file?.state;
+  const name = uploaded?.file?.name;
+  for (let attempt = 0; attempt < 15 && name && state && state !== "ACTIVE"; attempt += 1) {
+    if (state === "FAILED") throw new Error("文件处理失败");
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const poll = await fetch(`${host}/v1beta/${name}?key=${encodeURIComponent(config.apiKey)}`, {
+      headers: { "x-goog-api-key": config.apiKey }
+    });
+    const polled = (await poll.json().catch(() => null)) as { state?: string } | null;
+    state = polled?.state ?? state;
+  }
+  if (state && state !== "ACTIVE") throw new Error("文件尚未就绪，请稍后重试");
+
+  return { uri, mimeType: input.mimeType };
+}
+
+async function createGeminiFileTextCompletion(config: AiModelConfig, input: GeminiFileCompletionInput) {
+  const response = await fetch(buildGeminiGenerateContentUrl(config), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": config.apiKey },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { file_data: { mime_type: input.file.mimeType, file_uri: input.file.uri } },
+            { text: `${input.system}\n\n${input.user}` }
+          ]
+        }
+      ]
+    })
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Gemini API failed: ${response.status} ${message.slice(0, 300)}`);
+  }
+  const body = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  return body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+}
+
+/**
+ * Sends an already-uploaded file plus a text instruction to the model and
+ * returns the text response. Gemini only; other providers do not support the
+ * file-reference contract used here.
+ */
+export async function createFileTextCompletion(input: GeminiFileCompletionInput) {
+  const config = resolveAiModelConfig(input.model);
+  if (!config || config.provider !== "gemini") return null;
+  return createGeminiFileTextCompletion(config, input);
+}
+
 export async function createJsonCompletion(input: JsonCompletionInput) {
   const config = resolveAiModelConfig(input.model);
   if (!config) return null;
