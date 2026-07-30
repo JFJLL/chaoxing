@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Save, Trash2, X } from "lucide-react";
 import type { CourseDirectoryNode, CourseLessonNode } from "@/types/course";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
@@ -41,8 +41,24 @@ export function ChapterTree({ courseId, initialChapters, initialOutlineVersion }
   const [chapters, setChapters] = useState<CourseDirectoryNode[]>(initialChapters);
   const [outlineVersion, setOutlineVersion] = useState(initialOutlineVersion);
   const [editing, setEditing] = useState(false);
+  const [editSnapshot, setEditSnapshot] = useState<CourseDirectoryNode[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  function startEditing() {
+    // Keep an immutable snapshot so “取消” can restore exactly what was on screen
+    // before editing began, without issuing any save request.
+    setEditSnapshot(structuredClone(chapters));
+    setMessage("");
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    if (editSnapshot) setChapters(editSnapshot);
+    setEditSnapshot(null);
+    setMessage("");
+    setEditing(false);
+  }
 
   function updateChapter(chapterIndex: number, patch: Partial<CourseDirectoryNode>) {
     setChapters((current) => current.map((chapter, index) => (index === chapterIndex ? { ...chapter, ...patch } : chapter)));
@@ -147,6 +163,7 @@ export function ChapterTree({ courseId, initialChapters, initialOutlineVersion }
     }
     if (typeof body?.outlineVersion === "number") setOutlineVersion(body.outlineVersion);
     if (Array.isArray(body?.chapters)) setChapters(body.chapters);
+    setEditSnapshot(null);
     setEditing(false);
     setMessage("已保存修改");
   }
@@ -160,10 +177,11 @@ export function ChapterTree({ courseId, initialChapters, initialOutlineVersion }
         </div>
         {editing ? (
           <div className="flex gap-2">
+            <Button type="button" variant="secondary" onClick={cancelEditing} disabled={saving}><X className="h-4 w-4" />取消</Button>
             <Button type="button" variant="secondary" onClick={addChapter}><Plus className="h-4 w-4" />新增章节</Button>
             <Button type="button" onClick={save} disabled={saving}><Save className="h-4 w-4" />{saving ? "保存中" : "保存修改"}</Button>
           </div>
-        ) : <Button type="button" onClick={() => setEditing(true)}>编辑</Button>}
+        ) : <Button type="button" onClick={startEditing}>编辑</Button>}
       </div>
       {message ? <p className="text-sm text-slate-500">{message}</p> : null}
       <div className="space-y-4">

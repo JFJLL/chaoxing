@@ -3,6 +3,8 @@ import { requireCourseManager } from "@/lib/permissions";
 import { CourseDocumentImportSources } from "@/components/ai-import/CourseDocumentImportSources";
 import { RecentImports } from "@/components/ai-import/RecentImports";
 import { PrepWorkflowNavigation } from "@/components/course-workspace/PrepWorkflowNavigation";
+import { LinkButton } from "@/components/ui/Button";
+import { ListTree } from "lucide-react";
 
 type PageProps = {
   params: Promise<{ courseId: string }>;
@@ -20,6 +22,13 @@ export default async function AiWorkbenchContentPage({ params }: PageProps) {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">课程内容与知识</h1>
             <p className="mt-1 text-sm text-slate-500">导入文档后生成课程结构与知识关系，并作为后续 AI 备课的依据。</p>
+            <LinkButton
+              href={`/space/courses/${course.id}/builder`}
+              variant="secondary"
+              className="mt-3 h-9"
+            >
+              <ListTree className="h-4 w-4" aria-hidden="true" />维护课程目录
+            </LinkButton>
           </div>
           <PrepWorkflowNavigation courseId={course.id} workflow="content" active="import" />
         </header>

@@ -59,7 +59,7 @@ export default async function CourseBuilderPage({ params, searchParams }: PagePr
         <div className="space-y-5">
           <header className="flex flex-col gap-3 border-b border-[var(--cx-border)] pb-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-sm text-slate-500">课程建设</p>
+              <p className="text-sm text-slate-500">课程目录</p>
               <h1 className="mt-1 text-2xl font-semibold text-slate-900">{course.title}</h1>
             </div>
           </header>
