@@ -7,17 +7,33 @@ import { withDriveFilePath } from "@/lib/modules/driveFiles";
 import { finalizeImportBatch } from "@/lib/imports/importBatch";
 import { buildDocumentSections } from "@/lib/imports/documentSections";
 
+class ImportJobDeletedError extends Error {
+  constructor() {
+    super("导入任务已被删除");
+    this.name = "ImportJobDeletedError";
+  }
+}
+
 export async function runImportJob(jobId: string) {
   const job = await db.documentImportJob.findUnique({ where: { id: jobId }, include: { driveFile: true } });
   if (!job || !job.filePath) {
     throw new Error("导入任务不存在或缺少文件");
   }
+  // A batch delete can soft-delete jobs while they are queued or in flight.
+  // deletedAt is the source of truth for visibility, so a deleted job must not
+  // be resurfaced by the worker writing a visible status back onto it.
+  if (job.deletedAt) return;
+
+  // Only update while the job is still visible; if it was deleted mid-flight the
+  // guarded write matches zero rows and we abort the remaining pipeline.
+  const advance = async (data: Parameters<typeof db.documentImportJob.updateMany>[0]["data"]) => {
+    const updated = await db.documentImportJob.updateMany({ where: { id: jobId, deletedAt: null }, data });
+    if (updated.count !== 1) throw new ImportJobDeletedError();
+    return updated;
+  };
 
   try {
-    await db.documentImportJob.update({
-      where: { id: jobId },
-      data: { status: "EXTRACTING", currentStage: "文档解析", errorMessage: null, startedAt: new Date(), finishedAt: null }
-    });
+    await advance({ status: "EXTRACTING", currentStage: "文档解析", errorMessage: null, startedAt: new Date(), finishedAt: null });
     const extract = (localPath: string) => extractText(localPath, job.mimeType);
     const extracted = job.driveFile
       ? await withDriveFilePath(job.driveFile, extract)
@@ -27,14 +43,11 @@ export async function runImportJob(jobId: string) {
       text: extracted.text,
       chunks: extracted.chunks
     });
-    await db.documentImportJob.update({
-      where: { id: jobId },
-      data: {
-        extractedText: extracted.text,
-        parsedSections: JSON.stringify(parsedSections),
-        status: "STRUCTURING",
-        currentStage: "课程结构生成"
-      }
+    await advance({
+      extractedText: extracted.text,
+      parsedSections: JSON.stringify(parsedSections),
+      status: "STRUCTURING",
+      currentStage: "课程结构生成"
     });
     const course = await db.course.findUnique({
       where: { id: job.courseId },
@@ -45,34 +58,29 @@ export async function runImportJob(jobId: string) {
       documentText: extracted.text,
       chunks: extracted.chunks
     });
-    await db.documentImportJob.update({
-      where: { id: jobId },
-      data: {
-        generatedOutline: JSON.stringify(generated.outline),
-        warning: null,
-        status: "MAPPING",
-        currentStage: "知识图谱生成"
-      }
+    await advance({
+      generatedOutline: JSON.stringify(generated.outline),
+      warning: null,
+      status: "MAPPING",
+      currentStage: "知识图谱生成"
     });
     await createKnowledgeMapDraft({
       courseId: job.courseId,
       sourceJobId: job.id,
       outline: generated.outline
     });
-    await db.documentImportJob.update({
-      where: { id: jobId },
-      data: {
-        generatedOutline: JSON.stringify(generated.outline),
-        status: "READY_FOR_REVIEW",
-        currentStage: "等待教师审核",
-        warning: null,
-        finishedAt: new Date()
-      }
+    await advance({
+      generatedOutline: JSON.stringify(generated.outline),
+      status: "READY_FOR_REVIEW",
+      currentStage: "等待教师审核",
+      warning: null,
+      finishedAt: new Date()
     });
     if (job.batchId) await finalizeImportBatch(job.batchId);
   } catch (error) {
-    await db.documentImportJob.update({
-      where: { id: jobId },
+    if (error instanceof ImportJobDeletedError) return;
+    await db.documentImportJob.updateMany({
+      where: { id: jobId, deletedAt: null },
       data: {
         status: "FAILED",
         currentStage: "导入失败",
