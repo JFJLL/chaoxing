@@ -137,18 +137,31 @@ export async function generateCourseOutline(input: GenerateCourseOutlineInput): 
     throw new AiServiceError("MODEL_NOT_CONFIGURED", "AI 模型未配置，请联系管理员检查模型设置");
   }
 
-  try {
-    const raw = await createJsonCompletion({
-      model: config.model,
-      system: "你只输出符合约束的 JSON 对象。",
-      user: buildCourseOutlinePrompt({
-        courseTitle: input.courseTitle,
-        documentText: input.chunks[0] || input.documentText
-      })
-    });
+  const basePrompt = buildCourseOutlinePrompt({
+    courseTitle: input.courseTitle,
+    documentText: input.chunks[0] || input.documentText
+  });
+  const retryHint = "\n上一次输出未通过课程目录 JSON 校验。请重新生成完整 JSON：至少 3 个章节，每个章节至少 1 个课时，learningObjectives 至少 3 条；逐项核对必填字段、字段类型和结尾括号，只输出 JSON 对象，不要输出解释或代码围栏。";
 
-    return { outline: parseGeneratedOutline(raw || "", input) };
-  } catch (error) {
-    throw toSafeAiError(error);
+  let lastError: unknown;
+  // Retry once on invalid model output: the outline JSON occasionally comes back
+  // malformed or empty, and a single failure otherwise fails the whole import.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const raw = await createJsonCompletion({
+        model: config.model,
+        system: "你只输出符合约束的 JSON 对象。",
+        user: attempt === 0 ? basePrompt : `${basePrompt}${retryHint}`
+      });
+      return { outline: parseGeneratedOutline(raw || "", input) };
+    } catch (error) {
+      const safe = toSafeAiError(error);
+      lastError = safe;
+      // Only a malformed/empty outline is worth retrying; config/network errors
+      // are surfaced immediately.
+      if (safe.code !== "MODEL_INVALID_OUTPUT" || attempt === 1) throw safe;
+    }
   }
+
+  throw toSafeAiError(lastError);
 }

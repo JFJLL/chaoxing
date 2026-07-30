@@ -144,6 +144,39 @@ describe("course outline generation schema", () => {
     }
   });
 
+  it("retries once when the first model output is invalid and then succeeds", async () => {
+    const previous = snapshotAiEnv();
+    const gemini = (raw: string) => ({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: raw }] } }] }) });
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(gemini("not-json") as unknown as Response)
+      .mockResolvedValueOnce(gemini(JSON.stringify(validOutline)) as unknown as Response);
+    try {
+      clearAiEnv();
+      process.env.GEMINI_API_KEY = "gemini-key";
+      const result = await generateCourseOutline(outlineInput);
+      expect(result.outline.title).toBe("数字阅读服务培训");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      fetchMock.mockRestore();
+      restoreAiEnv(previous);
+    }
+  });
+
+  it("fails after retrying when the model keeps returning invalid output", async () => {
+    const previous = snapshotAiEnv();
+    const bad = { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: "still-not-json" }] } }] }) };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(bad as unknown as Response);
+    try {
+      clearAiEnv();
+      process.env.GEMINI_API_KEY = "gemini-key";
+      await expect(generateCourseOutline(outlineInput)).rejects.toMatchObject({ code: "MODEL_INVALID_OUTPUT" });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      fetchMock.mockRestore();
+      restoreAiEnv(previous);
+    }
+  });
+
   it("normalizes Chinese-key model output into the course outline schema", () => {
     const input = {
       courseTitle: "测试课程",
