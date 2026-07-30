@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckSquare2, Cloud, FileText, Loader2 } from "lucide-react";
+import { CheckSquare2, ChevronDown, ChevronUp, Cloud, FileText, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { UploadPanel } from "@/components/ai-import/UploadPanel";
 import { CourseDriveRootSetup } from "@/components/course-workspace/CourseDriveRootSetup";
@@ -24,6 +24,15 @@ function isPickerItem(value: unknown): value is PickerItem {
   return typeof item.id === "string" && typeof item.name === "string" && typeof item.path === "string";
 }
 
+/**
+ * The course drive document list is only requested after the picker is expanded
+ * for the first time, and never re-requested once loaded. This keeps the page
+ * from calling /drive-picker on initial render and on every collapse/expand.
+ */
+export function shouldLoadDrivePickerDocuments(hasRoot: boolean, expanded: boolean, loaded: boolean) {
+  return hasRoot && expanded && !loaded;
+}
+
 export function CourseDocumentImportSources({ courseId }: { courseId: string }) {
   const router = useRouter();
   const [root, setRoot] = useState<DriveRoot | null>();
@@ -32,6 +41,8 @@ export function CourseDocumentImportSources({ courseId }: { courseId: string }) 
   const [items, setItems] = useState<PickerItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [drivePickerExpanded, setDrivePickerExpanded] = useState(false);
+  const [documentsLoaded, setDocumentsLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
 
@@ -68,10 +79,9 @@ export function CourseDocumentImportSources({ courseId }: { courseId: string }) 
   }, [courseId]);
 
   useEffect(() => {
-    if (!root) {
-      setItems([]);
-      return;
-    }
+    // Only fetch the full document list after the picker is expanded for the
+    // first time; the initial page load must not request /drive-picker.
+    if (!shouldLoadDrivePickerDocuments(Boolean(root), drivePickerExpanded, documentsLoaded)) return;
     let cancelled = false;
 
     async function loadDocuments() {
@@ -82,6 +92,7 @@ export function CourseDocumentImportSources({ courseId }: { courseId: string }) 
         if (!response.ok) throw new Error(body?.error || "云盘文档加载失败");
         if (!cancelled) {
           setItems(Array.isArray(body?.items) ? body.items.filter(isPickerItem) : []);
+          setDocumentsLoaded(true);
           setMessage(null);
         }
       } catch (error) {
@@ -95,7 +106,7 @@ export function CourseDocumentImportSources({ courseId }: { courseId: string }) 
     return () => {
       cancelled = true;
     };
-  }, [courseId, root]);
+  }, [courseId, root, drivePickerExpanded, documentsLoaded]);
 
   function toggleItem(id: string) {
     setSelectedIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
@@ -168,53 +179,71 @@ export function CourseDocumentImportSources({ courseId }: { courseId: string }) 
       </div>
 
       <section className="rounded-2xl border border-[var(--cx-border)] bg-white p-5">
-        <div className="flex items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-            <CheckSquare2 className="h-5 w-5" aria-hidden="true" />
+        <button
+          type="button"
+          onClick={() => setDrivePickerExpanded((current) => !current)}
+          aria-expanded={drivePickerExpanded}
+          aria-controls="course-drive-picker-panel"
+          className="flex w-full items-start justify-between gap-3 text-left"
+        >
+          <span className="flex items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <CheckSquare2 className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <span className="block">
+              <span className="block font-semibold text-slate-900">从课程云盘选择</span>
+              <span className="mt-1 block text-sm text-slate-500">
+                {selectedIds.length ? `已选择 ${selectedIds.length} 个文档` : "可多选课程云盘内的文档"}
+              </span>
+            </span>
           </span>
-          <div>
-            <h2 className="font-semibold text-slate-900">从课程云盘选择</h2>
-            <p className="mt-1 text-sm text-slate-500">可多选当前课程根文件夹及其子文件夹中的可解析文档；文件不会被复制。</p>
+          <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-blue-600">
+            {drivePickerExpanded ? "收起" : "展开"}
+            {drivePickerExpanded ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+          </span>
+        </button>
+        {drivePickerExpanded ? (
+          <div id="course-drive-picker-panel">
+            {loadingItems ? (
+              <p role="status" className="mt-4 flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-5 text-sm text-slate-600">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                正在读取云盘文档
+              </p>
+            ) : items.length ? (
+              <div className="mt-4 max-h-80 space-y-2 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-2">
+                {items.map((item) => {
+                  const selected = selectedIds.includes(item.id);
+                  return (
+                    <label key={item.id} className="flex cursor-pointer items-center gap-3 rounded-lg bg-white px-3 py-3 transition hover:bg-blue-50">
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleItem(item.id)}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                      />
+                      <FileText className="h-4 w-4 shrink-0 text-blue-500" aria-hidden="true" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-slate-800">{item.name}</span>
+                        <span className="block truncate text-xs text-slate-500">{item.path}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                课程云盘中还没有可导入的文档
+              </p>
+            )}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button type="button" disabled={!selectedIds.length || submitting} onClick={() => void importSelected()}>
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+                {submitting ? "正在创建任务" : `导入所选文档${selectedIds.length ? `（${selectedIds.length}）` : ""}`}
+              </Button>
+              {selectedIds.length ? <span className="text-xs text-slate-500">已选择 {selectedIds.length} 个文档</span> : null}
+            </div>
           </div>
-        </div>
-        {loadingItems ? (
-          <p role="status" className="mt-4 flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-5 text-sm text-slate-600">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            正在读取云盘文档
-          </p>
-        ) : items.length ? (
-          <div className="mt-4 max-h-80 space-y-2 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-2">
-            {items.map((item) => {
-              const selected = selectedIds.includes(item.id);
-              return (
-                <label key={item.id} className="flex cursor-pointer items-center gap-3 rounded-lg bg-white px-3 py-3 transition hover:bg-blue-50">
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    onChange={() => toggleItem(item.id)}
-                    className="h-4 w-4 rounded border-slate-300 text-blue-600"
-                  />
-                  <FileText className="h-4 w-4 shrink-0 text-blue-500" aria-hidden="true" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-slate-800">{item.name}</span>
-                    <span className="block truncate text-xs text-slate-500">{item.path}</span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-            课程云盘中还没有可导入的文档
-          </p>
-        )}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button type="button" disabled={!selectedIds.length || submitting} onClick={() => void importSelected()}>
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-            {submitting ? "正在创建任务" : `导入所选文档${selectedIds.length ? `（${selectedIds.length}）` : ""}`}
-          </Button>
-          {selectedIds.length ? <span className="text-xs text-slate-500">已选择 {selectedIds.length} 个文档</span> : null}
-        </div>
+        ) : null}
       </section>
 
       <UploadPanel courseId={courseId} />
