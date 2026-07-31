@@ -621,7 +621,7 @@ export function AiAppGenerator({
 
   return (
     <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-stretch">
-      <aside className="flex flex-col rounded-2xl border border-slate-100 bg-white p-5 shadow-sm xl:h-[calc(100vh-150px)]">
+      <aside className="flex flex-col rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
         {app.appType === "html_courseware" ? (
           <p className="rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-900">
             HTML 互动课件已停止生成。这里仅保留历史内容查看，请改用 PPT 课件。
@@ -678,7 +678,7 @@ export function AiAppGenerator({
         </form>
 
         {error && app.appType === "html_courseware" ? <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-        <div className="mt-6 flex min-h-0 flex-1 flex-col"><h2 className="shrink-0 text-sm font-semibold text-slate-900">历史产物</h2><div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+        <div className="mt-6 flex flex-col"><h2 className="shrink-0 text-sm font-semibold text-slate-900">历史产物</h2><div className="mt-3 max-h-[420px] space-y-2 overflow-y-auto pr-1">
           {artifacts.map((artifact) => {
             const choices = exportChoices(artifact.appType);
             const exportable = Boolean(artifact.payload) && !isActiveAiArtifact(artifact) && artifact.status !== "FAILED" && choices.length > 0;
@@ -742,7 +742,7 @@ export function AiAppGenerator({
         </div></div>
       </aside>
 
-      <section className="flex flex-col rounded-2xl border border-slate-100 bg-white p-5 shadow-sm xl:h-[calc(100vh-150px)]">
+      <section className="flex flex-col rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
         {!selected ? <div className="flex min-h-[360px] items-center justify-center"><div className="max-w-md text-center"><Sparkles className="mx-auto h-9 w-9 text-blue-500" aria-hidden="true" /><h2 className="mt-4 text-lg font-semibold text-slate-900">{app.appType === "html_courseware" ? "暂无历史 HTML 课件" : app.appType === "ppt_courseware" ? "选择已有 AI课件制作 PPT" : `准备开始${app.title}`}</h2><p className="mt-2 text-sm leading-6 text-slate-500">{app.appType === "html_courseware" ? "HTML 互动课件已停止生成。这里仅保留已有内容查看，请使用 PPT 课件。" : app.appType === "ppt_courseware" ? "选择一份已确认或已发布的 AI课件，系统会生成可逐页预览的 PPT 版本，可下载并发布给学生；如需修改内容请回到 AI课件调整后重新生成。" : <>填写生成要求 → AI 生成草稿 → 编辑确认{publishableAppTypes.has(app.appType) ? " → 发布给学生" : ""}。生成完成后可在这里逐项编辑，不会直接发布。</>}</p></div></div> : (
           <>
             <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
@@ -776,7 +776,7 @@ export function AiAppGenerator({
 
             {selected.status === "DRAFT" ? <div className="mb-5"><ArtifactConfirmationNotice dirty={editorDirty} /></div> : null}
 
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="max-h-[70vh] overflow-y-auto pr-1">
               {selected.appType === "ppt_courseware" ? (
                 <PptCoursewarePreview key={selected.id} title={selected.title} version={selected.version} slides={pptSlides} sourceLabel={pptSourceLabel} />
               ) : payload ? <AiArtifactEditor key={`${selected.id}-${isEditing ? "edit" : "read"}`} appType={selected.appType} title={selected.title} payload={payload} approvedQuestions={approvedQuestions} busy={busyAction === "save"} editable={isEditing} formId={artifactFormId} showFooterSave={!usesTopSave} onDirtyChange={setEditorDirty} onSave={async (body) => {
