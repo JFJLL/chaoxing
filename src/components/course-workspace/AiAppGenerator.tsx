@@ -216,7 +216,8 @@ export function AiAppGenerator({
   );
   const [sourceSelections, setSourceSelections] = useState<Record<string, string[]>>({});
   const [expandedDocumentIds, setExpandedDocumentIds] = useState<Set<string>>(new Set());
-  // Selected chapter ids for question/paper scope. Empty = whole course (全选).
+  // Scope for question/paper generation: whole course, or a set of chapters.
+  const [scopeMode, setScopeMode] = useState<"course" | "chapters">("course");
   const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
   const [savedNotice, setSavedNotice] = useState(false);
   const [recommendedSlideCount, setRecommendedSlideCount] = useState<number | null>(null);
@@ -239,7 +240,7 @@ export function AiAppGenerator({
   );
   const payload = selected ? parsePayload(selected) : null;
   const chapterTitle = (() => {
-    if (!selectedChapterIds.length) return "全课程";
+    if (scopeMode === "course" || !selectedChapterIds.length) return "全课程";
     const titles = chapters.filter((chapter) => selectedChapterIds.includes(chapter.id)).map((chapter) => chapter.title);
     return titles.length ? titles.join("、") : "全课程";
   })();
@@ -250,8 +251,9 @@ export function AiAppGenerator({
     );
   }
 
+  const allChaptersSelected = chapters.length > 0 && selectedChapterIds.length === chapters.length;
   function toggleAllChapters() {
-    setSelectedChapterIds((current) => (current.length === chapters.length ? [] : chapters.map((chapter) => chapter.id)));
+    setSelectedChapterIds(allChaptersSelected ? [] : chapters.map((chapter) => chapter.id));
   }
 
   useEffect(() => {
@@ -419,8 +421,8 @@ export function AiAppGenerator({
   }
 
   function buildScope(): { kind: "course" } | { kind: "chapter"; chapterId: string } | { kind: "chapters"; chapterIds: string[] } {
-    // No selection (or every chapter selected) means the whole course.
-    if (!selectedChapterIds.length || selectedChapterIds.length === chapters.length) return { kind: "course" };
+    // “全课程” mode, no chapters, or every chapter selected all mean the whole course.
+    if (scopeMode === "course" || !selectedChapterIds.length || selectedChapterIds.length === chapters.length) return { kind: "course" };
     if (selectedChapterIds.length === 1) return { kind: "chapter", chapterId: selectedChapterIds[0]! };
     return { kind: "chapters", chapterIds: selectedChapterIds };
   }
@@ -585,7 +587,11 @@ export function AiAppGenerator({
   const missingApprovedQuestions = prerequisites.includes("approved_questions") && approvedQuestions.length < 3;
   const missingApprovedCourseware = (app.appType === "courseware" || prerequisites.includes("approved_courseware")) && !sourceArtifactId;
   const missingLessonPlanSources = app.appType === "lesson_plan" && Object.keys(sourceSelections).length === 0;
-  const generationBlocked = missingCourseContent || missingApprovedQuestions || missingApprovedCourseware || missingLessonPlanSources;
+  // “指定章节” mode requires at least one chapter (question/paper apps only).
+  const missingScopeChapters = scopeMode === "chapters"
+    && !(["lesson_plan", "courseware", "ppt_courseware"] as CourseAiAppType[]).includes(app.appType)
+    && selectedChapterIds.length === 0;
+  const generationBlocked = missingCourseContent || missingApprovedQuestions || missingApprovedCourseware || missingLessonPlanSources || missingScopeChapters;
   const isEditing = Boolean(selected && editingId === selected.id);
   const hasPendingPublishedUpdate = Boolean(
     selected
@@ -626,25 +632,28 @@ export function AiAppGenerator({
         <form onSubmit={submit} className={app.appType === "html_courseware" ? "hidden" : "space-y-4"}>
           {!(["lesson_plan", "courseware", "ppt_courseware"] as CourseAiAppType[]).includes(app.appType) ? <div className="space-y-3">
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-700">内容范围</span>
-                {chapters.length ? <button type="button" onClick={toggleAllChapters} className="text-xs font-medium text-blue-600 hover:text-blue-700">{selectedChapterIds.length === chapters.length ? "取消全选" : "全选"}</button> : null}
+              <span className="text-sm font-medium text-slate-700">内容范围</span>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setScopeMode("course")} className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${scopeMode === "course" ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}>全课程</button>
+                <button type="button" disabled={!chapters.length} onClick={() => setScopeMode("chapters")} className={`rounded-xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${scopeMode === "chapters" ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}>指定章节</button>
               </div>
-              {chapters.length ? (
-                <div className="max-h-60 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
-                  <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
-                    <input type="checkbox" className="shrink-0" checked={selectedChapterIds.length === 0} onChange={() => setSelectedChapterIds([])} />
-                    <span className="font-medium">全课程</span>
-                  </label>
-                  {chapters.map((chapter) => (
-                    <label key={chapter.id} className="flex items-start gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
-                      <input type="checkbox" className="mt-0.5 shrink-0" checked={selectedChapterIds.includes(chapter.id)} onChange={() => toggleChapter(chapter.id)} />
-                      <span className="min-w-0 break-words leading-5">{chapter.title}</span>
-                    </label>
-                  ))}
+              {scopeMode === "chapters" && chapters.length ? (
+                <div className="space-y-2 rounded-xl border border-slate-200 p-2">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs text-slate-500">{selectedChapterIds.length ? `已选 ${selectedChapterIds.length} 章` : "请选择章节"}</span>
+                    <button type="button" onClick={toggleAllChapters} className="text-xs font-medium text-blue-600 hover:text-blue-700">{allChaptersSelected ? "清空" : "全选"}</button>
+                  </div>
+                  <div className="max-h-56 space-y-1 overflow-y-auto">
+                    {chapters.map((chapter) => (
+                      <label key={chapter.id} className="flex items-start gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+                        <input type="checkbox" className="mt-0.5 shrink-0" checked={selectedChapterIds.includes(chapter.id)} onChange={() => toggleChapter(chapter.id)} />
+                        <span className="min-w-0 break-words leading-5">{chapter.title}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              ) : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">暂无章节，将基于全课程生成。</p>}
-              <p className="text-xs text-slate-400">不选或全选则使用全课程；可单选、多选章节。</p>
+              ) : null}
+              {scopeMode === "chapters" && !selectedChapterIds.length ? <p className="text-xs text-amber-600">请至少选择一个章节，或切回“全课程”。</p> : null}
             </div>
             <label className="space-y-1 text-sm font-medium text-slate-700"><span>难度</span><select value={options.difficulty} onChange={(event) => updateOption("difficulty", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option>基础</option><option>提高</option><option>综合</option><option>挑战</option></select></label>
           </div> : null}
