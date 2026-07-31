@@ -76,7 +76,9 @@ const publishableAppTypes = new Set<CourseAiAppType>([
 
 const topSaveAppTypes = new Set<CourseAiAppType>([
   "lesson_plan",
-  "courseware"
+  "courseware",
+  "question_generation",
+  "paper_assembly"
 ]);
 
 const statusLabels: Record<Exclude<AiArtifactStatus, "QUEUED">, string> = {
@@ -216,9 +218,9 @@ export function AiAppGenerator({
   );
   const [sourceSelections, setSourceSelections] = useState<Record<string, string[]>>({});
   const [expandedDocumentIds, setExpandedDocumentIds] = useState<Set<string>>(new Set());
-  // Scope for question/paper generation: whole course, or a set of chapters.
-  const [scopeMode, setScopeMode] = useState<"course" | "chapters">("course");
-  const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
+  // Chapter scope for question/paper generation. Defaults to all chapters (全选 =
+  // whole course); uncheck to narrow. Empty is treated as whole course too.
+  const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>(() => chapters.map((chapter) => chapter.id));
   const [savedNotice, setSavedNotice] = useState(false);
   const [recommendedSlideCount, setRecommendedSlideCount] = useState<number | null>(null);
   const [recommendationReason, setRecommendationReason] = useState("");
@@ -240,7 +242,7 @@ export function AiAppGenerator({
   );
   const payload = selected ? parsePayload(selected) : null;
   const chapterTitle = (() => {
-    if (scopeMode === "course" || !selectedChapterIds.length) return "全课程";
+    if (!selectedChapterIds.length || selectedChapterIds.length === chapters.length) return "全课程";
     const titles = chapters.filter((chapter) => selectedChapterIds.includes(chapter.id)).map((chapter) => chapter.title);
     return titles.length ? titles.join("、") : "全课程";
   })();
@@ -421,8 +423,8 @@ export function AiAppGenerator({
   }
 
   function buildScope(): { kind: "course" } | { kind: "chapter"; chapterId: string } | { kind: "chapters"; chapterIds: string[] } {
-    // “全课程” mode, no chapters, or every chapter selected all mean the whole course.
-    if (scopeMode === "course" || !selectedChapterIds.length || selectedChapterIds.length === chapters.length) return { kind: "course" };
+    // No selection or every chapter selected both mean the whole course.
+    if (!selectedChapterIds.length || selectedChapterIds.length === chapters.length) return { kind: "course" };
     if (selectedChapterIds.length === 1) return { kind: "chapter", chapterId: selectedChapterIds[0]! };
     return { kind: "chapters", chapterIds: selectedChapterIds };
   }
@@ -587,11 +589,7 @@ export function AiAppGenerator({
   const missingApprovedQuestions = prerequisites.includes("approved_questions") && approvedQuestions.length < 3;
   const missingApprovedCourseware = (app.appType === "courseware" || prerequisites.includes("approved_courseware")) && !sourceArtifactId;
   const missingLessonPlanSources = app.appType === "lesson_plan" && Object.keys(sourceSelections).length === 0;
-  // “指定章节” mode requires at least one chapter (question/paper apps only).
-  const missingScopeChapters = scopeMode === "chapters"
-    && !(["lesson_plan", "courseware", "ppt_courseware"] as CourseAiAppType[]).includes(app.appType)
-    && selectedChapterIds.length === 0;
-  const generationBlocked = missingCourseContent || missingApprovedQuestions || missingApprovedCourseware || missingLessonPlanSources || missingScopeChapters;
+  const generationBlocked = missingCourseContent || missingApprovedQuestions || missingApprovedCourseware || missingLessonPlanSources;
   const isEditing = Boolean(selected && editingId === selected.id);
   const hasPendingPublishedUpdate = Boolean(
     selected
@@ -622,8 +620,8 @@ export function AiAppGenerator({
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-      <aside className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-stretch">
+      <aside className="flex flex-col rounded-2xl border border-slate-100 bg-white p-5 shadow-sm xl:h-[calc(100vh-150px)]">
         {app.appType === "html_courseware" ? (
           <p className="rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-900">
             HTML 互动课件已停止生成。这里仅保留历史内容查看，请改用 PPT 课件。
@@ -633,17 +631,13 @@ export function AiAppGenerator({
           {!(["lesson_plan", "courseware", "ppt_courseware"] as CourseAiAppType[]).includes(app.appType) ? <div className="space-y-3">
             <div className="space-y-2">
               <span className="text-sm font-medium text-slate-700">内容范围</span>
-              <div className="grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => setScopeMode("course")} className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${scopeMode === "course" ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}>全课程</button>
-                <button type="button" disabled={!chapters.length} onClick={() => setScopeMode("chapters")} className={`rounded-xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${scopeMode === "chapters" ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}>指定章节</button>
-              </div>
-              {scopeMode === "chapters" && chapters.length ? (
-                <div className="space-y-2 rounded-xl border border-slate-200 p-2">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-xs text-slate-500">{selectedChapterIds.length ? `已选 ${selectedChapterIds.length} 章` : "请选择章节"}</span>
-                    <button type="button" onClick={toggleAllChapters} className="text-xs font-medium text-blue-600 hover:text-blue-700">{allChaptersSelected ? "清空" : "全选"}</button>
-                  </div>
-                  <div className="max-h-56 space-y-1 overflow-y-auto">
+              {chapters.length ? (
+                <div className="rounded-xl border border-slate-200">
+                  <label className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 text-sm font-medium text-slate-700">
+                    <input type="checkbox" className="shrink-0" checked={allChaptersSelected} ref={(node) => { if (node) node.indeterminate = selectedChapterIds.length > 0 && !allChaptersSelected; }} onChange={toggleAllChapters} />
+                    <span>全选（全课程）</span>
+                  </label>
+                  <div className="max-h-56 space-y-1 overflow-y-auto p-2">
                     {chapters.map((chapter) => (
                       <label key={chapter.id} className="flex items-start gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
                         <input type="checkbox" className="mt-0.5 shrink-0" checked={selectedChapterIds.includes(chapter.id)} onChange={() => toggleChapter(chapter.id)} />
@@ -652,8 +646,8 @@ export function AiAppGenerator({
                     ))}
                   </div>
                 </div>
-              ) : null}
-              {scopeMode === "chapters" && !selectedChapterIds.length ? <p className="text-xs text-amber-600">请至少选择一个章节，或切回“全课程”。</p> : null}
+              ) : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">暂无章节，将基于全课程生成。</p>}
+              <p className="text-xs text-slate-400">当前范围：{chapterTitle}</p>
             </div>
             <label className="space-y-1 text-sm font-medium text-slate-700"><span>难度</span><select value={options.difficulty} onChange={(event) => updateOption("difficulty", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option>基础</option><option>提高</option><option>综合</option><option>挑战</option></select></label>
           </div> : null}
@@ -684,7 +678,7 @@ export function AiAppGenerator({
         </form>
 
         {error && app.appType === "html_courseware" ? <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-        <div className="mt-6"><h2 className="text-sm font-semibold text-slate-900">历史产物</h2><div className="mt-3 max-h-[460px] space-y-2 overflow-y-auto pr-1">
+        <div className="mt-6 flex min-h-0 flex-1 flex-col"><h2 className="shrink-0 text-sm font-semibold text-slate-900">历史产物</h2><div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
           {artifacts.map((artifact) => {
             const choices = exportChoices(artifact.appType);
             const exportable = Boolean(artifact.payload) && !isActiveAiArtifact(artifact) && artifact.status !== "FAILED" && choices.length > 0;
@@ -748,7 +742,7 @@ export function AiAppGenerator({
         </div></div>
       </aside>
 
-      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <section className="flex flex-col rounded-2xl border border-slate-100 bg-white p-5 shadow-sm xl:h-[calc(100vh-150px)]">
         {!selected ? <div className="flex min-h-[360px] items-center justify-center"><div className="max-w-md text-center"><Sparkles className="mx-auto h-9 w-9 text-blue-500" aria-hidden="true" /><h2 className="mt-4 text-lg font-semibold text-slate-900">{app.appType === "html_courseware" ? "暂无历史 HTML 课件" : app.appType === "ppt_courseware" ? "选择已有 AI课件制作 PPT" : `准备开始${app.title}`}</h2><p className="mt-2 text-sm leading-6 text-slate-500">{app.appType === "html_courseware" ? "HTML 互动课件已停止生成。这里仅保留已有内容查看，请使用 PPT 课件。" : app.appType === "ppt_courseware" ? "选择一份已确认或已发布的 AI课件，系统会生成可逐页预览的 PPT 版本，可下载并发布给学生；如需修改内容请回到 AI课件调整后重新生成。" : <>填写生成要求 → AI 生成草稿 → 编辑确认{publishableAppTypes.has(app.appType) ? " → 发布给学生" : ""}。生成完成后可在这里逐项编辑，不会直接发布。</>}</p></div></div> : (
           <>
             <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
@@ -782,7 +776,7 @@ export function AiAppGenerator({
 
             {selected.status === "DRAFT" ? <div className="mb-5"><ArtifactConfirmationNotice dirty={editorDirty} /></div> : null}
 
-            <div className="max-h-[720px] overflow-y-auto pr-1">
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               {selected.appType === "ppt_courseware" ? (
                 <PptCoursewarePreview key={selected.id} title={selected.title} version={selected.version} slides={pptSlides} sourceLabel={pptSourceLabel} />
               ) : payload ? <AiArtifactEditor key={`${selected.id}-${isEditing ? "edit" : "read"}`} appType={selected.appType} title={selected.title} payload={payload} approvedQuestions={approvedQuestions} busy={busyAction === "save"} editable={isEditing} formId={artifactFormId} showFooterSave={!usesTopSave} onDirtyChange={setEditorDirty} onSave={async (body) => {
