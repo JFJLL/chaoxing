@@ -776,7 +776,7 @@ export function AiAppGenerator({
 
             {selected.status === "DRAFT" ? <div className="mb-5"><ArtifactConfirmationNotice dirty={editorDirty} /></div> : null}
 
-            <div className="max-h-[70vh] overflow-y-auto pr-1">
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               {selected.appType === "ppt_courseware" ? (
                 <PptCoursewarePreview key={selected.id} title={selected.title} version={selected.version} slides={pptSlides} sourceLabel={pptSourceLabel} />
               ) : payload ? <AiArtifactEditor key={`${selected.id}-${isEditing ? "edit" : "read"}`} appType={selected.appType} title={selected.title} payload={payload} approvedQuestions={approvedQuestions} busy={busyAction === "save"} editable={isEditing} formId={artifactFormId} showFooterSave={!usesTopSave} onDirtyChange={setEditorDirty} onSave={async (body) => {
