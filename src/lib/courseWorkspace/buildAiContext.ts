@@ -17,7 +17,12 @@ const MAX_EDGES = 120;
 
 export const aiContextScopeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("course") }).strict(),
-  z.object({ kind: z.literal("chapter"), chapterId: z.string().trim().min(1).max(200) }).strict()
+  z.object({ kind: z.literal("chapter"), chapterId: z.string().trim().min(1).max(200) }).strict(),
+  // Multiple selected chapters (多选/全选 short of the whole course).
+  z.object({
+    kind: z.literal("chapters"),
+    chapterIds: z.array(z.string().trim().min(1).max(200)).min(1).max(MAX_CHAPTERS)
+  }).strict()
 ]);
 
 export type AiContextScope = z.infer<typeof aiContextScopeSchema>;
@@ -89,7 +94,7 @@ type ContextItemBase = { kind: string; id: string; label: string; truncated: boo
 
 export type CourseAiContext = {
   course: ContextItemBase & { kind: "course"; title: string; description: string | null };
-  scope: { kind: "course" | "chapter"; id: string; label: string; truncated: boolean };
+  scope: { kind: "course" | "chapter" | "chapters"; id: string; label: string; truncated: boolean };
   outline: {
     kind: "outline";
     id: "course-outline";
@@ -202,7 +207,7 @@ export const courseAiContextSchema = z.object({
     description: contextTextSchema.nullable()
   }).strict(),
   scope: z.object({
-    kind: z.enum(["course", "chapter"]),
+    kind: z.enum(["course", "chapter", "chapters"]),
     id: contextIdSchema,
     label: contextLabelSchema,
     truncated: z.boolean()
@@ -274,18 +279,31 @@ export function composeCourseAiContext(
   scope: AiContextScope,
   prompt?: string
 ): CourseAiContext {
-  const selectedChapter = scope.kind === "chapter"
-    ? data.chapters.find((chapter) => chapter.id === scope.chapterId)
-    : undefined;
-  if (scope.kind === "chapter" && !selectedChapter) throw new InvalidAiScopeError();
+  const selectedChapters = scope.kind === "chapter"
+    ? data.chapters.filter((chapter) => chapter.id === scope.chapterId)
+    : scope.kind === "chapters"
+      ? data.chapters.filter((chapter) => scope.chapterIds.includes(chapter.id))
+      : data.chapters;
+  if (scope.kind === "chapter" && selectedChapters.length !== 1) throw new InvalidAiScopeError();
+  if (scope.kind === "chapters" && selectedChapters.length !== new Set(scope.chapterIds).size) {
+    throw new InvalidAiScopeError();
+  }
 
-  const chapters = (selectedChapter ? [selectedChapter] : data.chapters)
+  const chapters = selectedChapters
     .slice()
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
   const selectedLessonIds = new Set(chapters.flatMap((chapter) => chapter.lessons.map((lesson) => lesson.id)));
   const resources = scope.kind === "course"
     ? data.resources
     : data.resources.filter((resource) => resource.lessonId !== null && selectedLessonIds.has(resource.lessonId));
+
+  const chaptersLabel = () => {
+    const titles = chapters.map((chapter) => chapter.title).join("、");
+    const label = `章节：${titles}`;
+    return label.length > MAX_FIELD_CHARS
+      ? { label: `${label.slice(0, MAX_FIELD_CHARS)}…（共 ${chapters.length} 章）`, truncated: true }
+      : { label, truncated: false };
+  };
 
   return {
     course: {
@@ -298,7 +316,9 @@ export function composeCourseAiContext(
     },
     scope: scope.kind === "course"
       ? { kind: "course", id: data.course.id, label: "全课程", truncated: false }
-      : { kind: "chapter", id: selectedChapter!.id, label: `章节：${selectedChapter!.title}`, truncated: false },
+      : scope.kind === "chapter"
+        ? { kind: "chapter", id: chapters[0]!.id, label: `章节：${chapters[0]!.title}`, truncated: false }
+        : { kind: "chapters", id: "selected-chapters", ...chaptersLabel() },
     outline: {
       kind: "outline",
       id: "course-outline",
@@ -327,10 +347,10 @@ export function composeCourseAiContext(
     imports: {
       kind: "import_collection",
       id: "course-imports",
-      label: scope.kind === "chapter" ? "课程导入原文（缺少章节归属，已排除）" : "课程导入原文",
+      label: scope.kind !== "course" ? "课程导入原文（缺少章节归属，已排除）" : "课程导入原文",
       truncated: false,
-      scopeExcluded: scope.kind === "chapter",
-      items: (scope.kind === "chapter" ? [] : data.imports)
+      scopeExcluded: scope.kind !== "course",
+      items: (scope.kind !== "course" ? [] : data.imports)
         .filter((source) => source.status === "READY_FOR_REVIEW" || source.status === "APPLIED")
         .slice()
         .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || a.id.localeCompare(b.id)).map((source) => ({
@@ -372,13 +392,13 @@ export function composeCourseAiContext(
         truncated: false
       }))
     } : null,
-    knowledgeMapScopeExcluded: scope.kind === "chapter" && data.knowledgeMap !== null,
+    knowledgeMapScopeExcluded: scope.kind !== "course" && data.knowledgeMap !== null,
     resources: {
       kind: "resource_collection",
       id: "course-resources",
-      label: scope.kind === "chapter" ? "课程资料（仅保留所选课时归属）" : "课程资料",
+      label: scope.kind !== "course" ? "课程资料（仅保留所选课时归属）" : "课程资料",
       truncated: false,
-      scopeExcluded: scope.kind === "chapter" && resources.length !== data.resources.length,
+      scopeExcluded: scope.kind !== "course" && resources.length !== data.resources.length,
       items: resources.slice().sort((a, b) => Number(a.lessonId !== null) - Number(b.lessonId !== null) || a.id.localeCompare(b.id)).map((resource) => ({
         kind: "resource",
         id: resource.id,

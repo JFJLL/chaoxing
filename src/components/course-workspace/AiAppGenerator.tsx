@@ -43,7 +43,6 @@ import { SLIDE_COUNT_MAX, SLIDE_COUNT_MIN } from "@/lib/courseWorkspace/recommen
 import { Button } from "@/components/ui/Button";
 
 type GeneratorOptions = {
-  chapterId: string;
   difficulty: string;
   questionType: string;
   questionCount: number;
@@ -61,7 +60,6 @@ type ArtifactExportChoice = {
 };
 
 const defaultOptions: GeneratorOptions = {
-  chapterId: "",
   difficulty: "基础",
   questionType: "混合",
   questionCount: 5,
@@ -218,6 +216,8 @@ export function AiAppGenerator({
   );
   const [sourceSelections, setSourceSelections] = useState<Record<string, string[]>>({});
   const [expandedDocumentIds, setExpandedDocumentIds] = useState<Set<string>>(new Set());
+  // Selected chapter ids for question/paper scope. Empty = whole course (全选).
+  const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
   const [savedNotice, setSavedNotice] = useState(false);
   const [recommendedSlideCount, setRecommendedSlideCount] = useState<number | null>(null);
   const [recommendationReason, setRecommendationReason] = useState("");
@@ -238,7 +238,21 @@ export function AiAppGenerator({
     [artifacts, selectedId]
   );
   const payload = selected ? parsePayload(selected) : null;
-  const chapterTitle = chapters.find((chapter) => chapter.id === options.chapterId)?.title ?? "全课程";
+  const chapterTitle = (() => {
+    if (!selectedChapterIds.length) return "全课程";
+    const titles = chapters.filter((chapter) => selectedChapterIds.includes(chapter.id)).map((chapter) => chapter.title);
+    return titles.length ? titles.join("、") : "全课程";
+  })();
+
+  function toggleChapter(chapterId: string) {
+    setSelectedChapterIds((current) =>
+      current.includes(chapterId) ? current.filter((id) => id !== chapterId) : [...current, chapterId]
+    );
+  }
+
+  function toggleAllChapters() {
+    setSelectedChapterIds((current) => (current.length === chapters.length ? [] : chapters.map((chapter) => chapter.id)));
+  }
 
   useEffect(() => {
     if (!selected || !isActiveAiArtifact(selected)) return;
@@ -404,6 +418,13 @@ export function AiAppGenerator({
     return `${app.title}：${options.paperScore}分${options.difficulty}卷`;
   }
 
+  function buildScope(): { kind: "course" } | { kind: "chapter"; chapterId: string } | { kind: "chapters"; chapterIds: string[] } {
+    // No selection (or every chapter selected) means the whole course.
+    if (!selectedChapterIds.length || selectedChapterIds.length === chapters.length) return { kind: "course" };
+    if (selectedChapterIds.length === 1) return { kind: "chapter", chapterId: selectedChapterIds[0]! };
+    return { kind: "chapters", chapterIds: selectedChapterIds };
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (actionLock.current || generationBlocked) return;
@@ -416,7 +437,7 @@ export function AiAppGenerator({
         appType: app.appType,
         prompt: structuredPrompt(),
         title: defaultTitle(),
-        scope: options.chapterId ? { kind: "chapter", chapterId: options.chapterId } : { kind: "course" },
+        scope: buildScope(),
         ...(app.appType === "courseware" || app.appType === "ppt_courseware" ? { sourceArtifactId } : {}),
         ...(app.appType === "courseware" ? {
           slideCountPlan: {
@@ -603,14 +624,28 @@ export function AiAppGenerator({
           </p>
         ) : null}
         <form onSubmit={submit} className={app.appType === "html_courseware" ? "hidden" : "space-y-4"}>
-          {!(["lesson_plan", "courseware", "ppt_courseware"] as CourseAiAppType[]).includes(app.appType) ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            <label className="space-y-1 text-sm font-medium text-slate-700">
-              <span>内容范围</span>
-              <select value={options.chapterId} onChange={(event) => updateOption("chapterId", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400">
-                <option value="">全课程</option>
-                {chapters.map((chapter) => <option key={chapter.id} value={chapter.id}>{chapter.title}</option>)}
-              </select>
-            </label>
+          {!(["lesson_plan", "courseware", "ppt_courseware"] as CourseAiAppType[]).includes(app.appType) ? <div className="space-y-3">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-700">内容范围</span>
+                {chapters.length ? <button type="button" onClick={toggleAllChapters} className="text-xs font-medium text-blue-600 hover:text-blue-700">{selectedChapterIds.length === chapters.length ? "取消全选" : "全选"}</button> : null}
+              </div>
+              {chapters.length ? (
+                <div className="max-h-60 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
+                  <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+                    <input type="checkbox" className="shrink-0" checked={selectedChapterIds.length === 0} onChange={() => setSelectedChapterIds([])} />
+                    <span className="font-medium">全课程</span>
+                  </label>
+                  {chapters.map((chapter) => (
+                    <label key={chapter.id} className="flex items-start gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+                      <input type="checkbox" className="mt-0.5 shrink-0" checked={selectedChapterIds.includes(chapter.id)} onChange={() => toggleChapter(chapter.id)} />
+                      <span className="min-w-0 break-words leading-5">{chapter.title}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">暂无章节，将基于全课程生成。</p>}
+              <p className="text-xs text-slate-400">不选或全选则使用全课程；可单选、多选章节。</p>
+            </div>
             <label className="space-y-1 text-sm font-medium text-slate-700"><span>难度</span><select value={options.difficulty} onChange={(event) => updateOption("difficulty", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option>基础</option><option>提高</option><option>综合</option><option>挑战</option></select></label>
           </div> : null}
 

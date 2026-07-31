@@ -41,7 +41,8 @@ export type ManagerAiArtifactDto = {
 
 export type AiArtifactScope =
   | { kind: "course" }
-  | { kind: "chapter"; chapterId: string };
+  | { kind: "chapter"; chapterId: string }
+  | { kind: "chapters"; chapterIds: string[] };
 
 export type CreateAiArtifactInput = {
   courseId: string;

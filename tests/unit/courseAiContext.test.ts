@@ -93,6 +93,22 @@ describe("course AI context composition", () => {
     expect(() => composeCourseAiContext(contextData, { kind: "chapter", chapterId: "other-course-chapter" })).toThrow(InvalidAiScopeError);
   });
 
+  it("limits outline and resources to a validated multi-chapter scope", () => {
+    const context = composeCourseAiContext(contextData, { kind: "chapters", chapterIds: ["chapter-1", "chapter-2"] }, "处理前两章");
+    expect(context.scope.kind).toBe("chapters");
+    expect(context.outline.items.map((chapter) => chapter.id)).toEqual(["chapter-1", "chapter-2"]);
+    // Both chapters' lesson resources are kept, but the course-level resource is excluded.
+    expect(context.resources.items.map((resource) => resource.id)).toEqual(["resource-1", "resource-2"]);
+    expect(context.resources.scopeExcluded).toBe(true);
+    expect(context.imports).toMatchObject({ items: [], scopeExcluded: true });
+    expect(context.scope.label).toContain("第一章");
+    expect(context.scope.label).toContain("第二章（范围外）");
+  });
+
+  it("rejects a multi-chapter scope containing an unknown chapter id", () => {
+    expect(() => composeCourseAiContext(contextData, { kind: "chapters", chapterIds: ["chapter-1", "ghost"] })).toThrow(InvalidAiScopeError);
+  });
+
   it("preserves traceable labels and IDs for imports, graph entries, and resources", () => {
     const context = composeCourseAiContext(contextData, { kind: "course" });
 
