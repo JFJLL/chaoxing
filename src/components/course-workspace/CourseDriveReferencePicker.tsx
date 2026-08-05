@@ -136,6 +136,7 @@ export function CourseDriveReferencePicker({
                   {busy === "upload" ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
                   上传到“对话上传”
                 </Button>
+                <p className="basis-full text-xs text-slate-400">支持文档与图片，单个文件最大 255MB</p>
               </form>
             ) : null}
             <div className="max-h-[55vh] space-y-2 overflow-y-auto p-4">

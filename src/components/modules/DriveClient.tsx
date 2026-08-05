@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ChevronRight, Download, Eye, EyeOff, File as FileIcon, Folder, FolderPlus, LoaderCircle, MoreHorizontal, Move, Pencil, Share2, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { FilePicker } from "@/components/ui/FilePicker";
 import { Input, Select } from "@/components/ui/Input";
 
 type DriveClientFile = {
@@ -22,7 +21,10 @@ type DriveClientFile = {
 };
 
 type DriveFolder = { id: string; name: string; parentId: string | null };
-type UploadState = { fileName: string; percent: number; phase: "uploading" | "processing" };
+type UploadState = { label: string; percent: number; phase: "uploading" | "processing" };
+type UploadSelection =
+  | { kind: "files"; files: File[] }
+  | { kind: "folder"; files: File[]; folderName: string };
 
 export function driveMutationBasePath(courseId?: string) {
   return courseId ? `/api/courses/${courseId}/drive` : "/api/drive";
@@ -160,7 +162,13 @@ function uploadDriveFile(url: string, formData: FormData, onProgress: (percent: 
     xhr.addEventListener("load", () => {
       const body = xhr.response && typeof xhr.response === "object" ? xhr.response : {};
       if (xhr.status >= 200 && xhr.status < 300) resolve(body);
-      else reject(new Error(typeof body.error === "string" ? body.error : "上传失败"));
+      else {
+        const message = typeof body.error === "string" ? body.error : "上传失败";
+        const failedNames = Array.isArray(body.failed)
+          ? body.failed.slice(0, 3).map((item: { name?: string }) => item.name).filter(Boolean).join("、")
+          : "";
+        reject(new Error(failedNames ? `${message}：${failedNames}${body.failed.length > 3 ? "…" : ""}` : message));
+      }
     });
     xhr.addEventListener("error", () => reject(new Error("网络连接中断，请重试上传")));
     xhr.addEventListener("abort", () => reject(new Error("上传已取消")));
@@ -313,12 +321,11 @@ export function DriveClient({
   rootLabel = "我的云盘"
 }: DriveClientProps) {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [visibleFiles, setVisibleFiles] = useState(files);
-  const [selectedFileName, setSelectedFileName] = useState("");
   const [status, setStatus] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [uploadState, setUploadState] = useState<UploadState | null>(null);
+  const [uploadSelection, setUploadSelection] = useState<UploadSelection | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [attachTarget, setAttachTarget] = useState<DriveClientFile | null>(null);
@@ -403,11 +410,49 @@ export function DriveClient({
     if (succeeded) setCreateDialogOpen(false);
   }
 
-  async function upload(formData: FormData) {
-    const file = formData.get("file");
-    if (!(file instanceof File) || file.size === 0) return;
+  function handleFilesChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    setUploadSelection(files.length ? { kind: "files", files } : null);
+    event.target.value = "";
+  }
+
+  function handleFolderChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!files.length) {
+      setUploadSelection(null);
+      setStatus({ tone: "error", text: "所选文件夹为空，请重新选择" });
+      return;
+    }
+    const firstPath = files[0]?.webkitRelativePath ?? "";
+    if (!firstPath) {
+      setUploadSelection(null);
+      setStatus({ tone: "error", text: "当前浏览器不支持选择文件夹，请改用“选择文件”多选上传" });
+      return;
+    }
+    const folderName = firstPath.split("/")[0] ?? "";
+    setUploadSelection(files.length ? { kind: "folder", files, folderName } : null);
+  }
+
+  async function upload() {
+    if (!uploadSelection || !uploadSelection.files.length) return;
+    const count = uploadSelection.files.length;
+    const label = uploadSelection.kind === "folder"
+      ? `文件夹“${uploadSelection.folderName}”（${count} 个文件）`
+      : `${count} 个文件`;
+    const formData = new FormData();
+    formData.set("parentId", parentId ?? "");
+    if (uploadSelection.kind === "folder") {
+      formData.set("folderName", uploadSelection.folderName);
+      for (const file of uploadSelection.files) {
+        formData.append("files", file);
+        formData.append("paths", file.webkitRelativePath?.split("/").slice(1).join("/") || file.name);
+      }
+    } else {
+      for (const file of uploadSelection.files) formData.append("files", file);
+    }
     setStatus(null);
-    setUploadState({ fileName: file.name, percent: 0, phase: "uploading" });
+    setUploadState({ label: `正在上传“${label}”`, percent: 0, phase: "uploading" });
     const succeeded = await run("upload", async () => {
       const body = await uploadDriveFile(
         mutationBasePath,
@@ -415,14 +460,23 @@ export function DriveClient({
         (percent) => setUploadState((current) => current ? { ...current, percent } : current),
         () => setUploadState((current) => current ? { ...current, percent: 100, phase: "processing" } : current)
       );
-      if (body?.file) setVisibleFiles((current) => [body.file, ...current]);
+      const files = Array.isArray(body?.files) ? body.files : [];
+      const folder = body?.folder;
+      if (folder) setVisibleFiles((current) => [folder, ...current.filter((item) => item.id !== folder.id)]);
+      if (files.length) {
+        const knownIds = new Set(files.map((item: DriveClientFile) => item.id));
+        setVisibleFiles((current) => [...files, ...current.filter((item) => !knownIds.has(item.id))]);
+      }
+      const failed = Array.isArray(body?.failed) ? body.failed : [];
+      const failedText = failed.length
+        ? `，${failed.length} 个上传失败：${failed.slice(0, 3).map((item: { name: string }) => item.name).join("、")}${failed.length > 3 ? "…" : ""}`
+        : "";
       setStatus(
         body?.storage === "oss"
-          ? { tone: "success", text: `“${file.name}”已上传完成` }
+          ? { tone: failed.length ? "error" : "success", text: `“${label}”已上传${failedText}` }
           : { tone: "error", text: "文件已上传到本地存储，未写入 OSS。请检查服务器存储配置。" }
       );
-      setSelectedFileName("");
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setUploadSelection(null);
     });
     setUploadState(null);
     if (succeeded) setUploadDialogOpen(false);
@@ -571,21 +625,44 @@ export function DriveClient({
       </Dialog>
 
       <Dialog open={uploadDialogOpen} title="上传文件" onClose={() => { if (!pendingAction) setUploadDialogOpen(false); }}>
-        <form action={upload} className="space-y-4">
-          <p className="text-sm leading-6 text-slate-600">文件将上传到当前路径。上传完成前请保持页面打开。</p>
-          <input type="hidden" name="parentId" value={parentId ?? ""} />
-          <FilePicker ref={fileInputRef} id="drive-upload-file" name="file" label="选择要上传的文件" hint="支持当前课程允许的文件格式" selectedFileName={selectedFileName} onChange={(event) => setSelectedFileName(event.target.files?.[0]?.name ?? "")} />
+        <form onSubmit={(event) => { event.preventDefault(); void upload(); }} className="space-y-4">
+          <p className="text-sm leading-6 text-slate-600">可一次选择多个文件，或选择整个文件夹（保留子文件夹结构，同名文件夹会自动重命名）。上传完成前请保持页面打开。</p>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <label className="cx-tactile flex min-h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-[var(--cx-blue-soft)]">
+              <input type="file" multiple className="sr-only" onChange={handleFilesChange} disabled={pendingAction !== null} />
+              <UploadCloud className="h-4 w-4" aria-hidden="true" />
+              选择文件（可多选）
+            </label>
+            <label className="cx-tactile flex min-h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-[var(--cx-blue-soft)]">
+              <input type="file" {...({ webkitdirectory: "" } as any)} className="sr-only" onChange={handleFolderChange} disabled={pendingAction !== null} />
+              <Folder className="h-4 w-4" aria-hidden="true" />
+              选择文件夹
+            </label>
+          </div>
+          {uploadSelection ? (
+            <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-900">
+              <p className="font-medium">
+                {uploadSelection.kind === "folder"
+                  ? `已选择文件夹“${uploadSelection.folderName}”，共 ${uploadSelection.files.length} 个文件`
+                  : `已选择 ${uploadSelection.files.length} 个文件`}
+              </p>
+              <p className="mt-1 line-clamp-2 break-all text-xs text-blue-700">
+                {uploadSelection.files.slice(0, 8).map((file) => file.name).join("、")}
+                {uploadSelection.files.length > 8 ? ` 等 ${uploadSelection.files.length} 个文件` : ""}
+              </p>
+            </div>
+          ) : null}
           {uploadState ? (
             <div role="status" aria-live="polite" className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-800">
-              <div className="flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /><span className="min-w-0 truncate font-medium">{uploadState.phase === "uploading" ? `正在上传“${uploadState.fileName}”` : `已传输完成，正在保存并解析“${uploadState.fileName}”`}</span><span className="ml-auto shrink-0 text-xs">{uploadState.percent}%</span></div>
+              <div className="flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /><span className="min-w-0 truncate font-medium">{uploadState.phase === "uploading" ? uploadState.label : "已传输完成，正在保存文件"}</span><span className="ml-auto shrink-0 text-xs">{uploadState.percent}%</span></div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-[var(--cx-blue)] transition-[width]" style={{ width: `${uploadState.percent}%` }} /></div>
             </div>
           ) : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => setUploadDialogOpen(false)}>取消</Button>
-            <Button type="submit" disabled={pendingAction !== null || !selectedFileName}>
+            <Button type="submit" disabled={pendingAction !== null || !uploadSelection}>
               <UploadCloud className="h-4 w-4" aria-hidden="true" />
-              {pendingAction === "upload" ? "正在上传" : "上传文件"}
+              {pendingAction === "upload" ? "正在上传" : "开始上传"}
             </Button>
           </div>
         </form>

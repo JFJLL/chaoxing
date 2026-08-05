@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isTeacher, requireCourseOwner, requireTeacher } from "@/lib/permissions";
 import { requireDriveFileOwner } from "@/lib/modules/drivePermissions";
-import { storeDriveUpload } from "@/lib/copilot/files";
+import { MAX_DRIVE_BATCH_FILES, storeDriveBatchUpload, storeDriveUpload } from "@/lib/copilot/files";
 import { publishExistingDriveFileToCourse } from "@/lib/courseWorkspace/courseResources";
 
 export const runtime = "nodejs";
@@ -39,16 +39,41 @@ export async function POST(request: NextRequest) {
   if (contentType.includes("multipart/form-data")) {
     try {
       const form = await request.formData();
-      const file = form.get("file");
       const parentId = form.get("parentId");
-      if (!(file instanceof File) || file.size === 0) return NextResponse.json({ error: "请先选择要上传的文件" }, { status: 400 });
+      let resolvedParentId: string | null = null;
       if (typeof parentId === "string" && parentId) {
         const parent = await requireDriveFileOwner(user, parentId);
         if (parent.kind !== "folder") return NextResponse.json({ error: "目标位置不是文件夹" }, { status: 400 });
+        resolvedParentId = parentId;
       }
+      const batchFiles = form.getAll("files").filter((item): item is File => item instanceof File);
+      if (batchFiles.length) {
+        if (batchFiles.length > MAX_DRIVE_BATCH_FILES) {
+          return NextResponse.json({ error: `一次最多上传 ${MAX_DRIVE_BATCH_FILES} 个文件` }, { status: 400 });
+        }
+        const paths = form.getAll("paths").map(String);
+        if (paths.length && paths.length !== batchFiles.length) {
+          return NextResponse.json({ error: "上传文件与路径数量不一致" }, { status: 400 });
+        }
+        const rawFolderName = form.get("folderName");
+        const folderName = typeof rawFolderName === "string" ? rawFolderName : "";
+        const result = await storeDriveBatchUpload({
+          ownerId: user.id,
+          parentId: resolvedParentId,
+          folderName: folderName.trim() || undefined,
+          items: batchFiles.map((file, index) => ({ file, path: paths[index] ?? "" }))
+        });
+        if (!result.files.length && result.failed.length) {
+          return NextResponse.json({ error: "全部文件上传失败", failed: result.failed }, { status: 400 });
+        }
+        const storage = result.files.some((record) => !record.path?.startsWith("oss://")) ? "local" : "oss";
+        return NextResponse.json({ folder: result.folder, files: result.files, failed: result.failed, storage }, { status: 201 });
+      }
+      const file = form.get("file");
+      if (!(file instanceof File) || file.size === 0) return NextResponse.json({ error: "请先选择要上传的文件" }, { status: 400 });
       const record = await storeDriveUpload({
         ownerId: user.id,
-        parentId: typeof parentId === "string" && parentId ? parentId : null,
+        parentId: resolvedParentId,
         file
       });
       return NextResponse.json({ file: record, storage: record.path?.startsWith("oss://") ? "oss" : "local" }, { status: 201 });

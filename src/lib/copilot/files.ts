@@ -5,15 +5,22 @@ import type { SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { extractText } from "@/lib/document/extractText";
 import { requireCourseAccess } from "@/lib/permissions";
-import { readDriveFileBytes, storeDriveFile, withDriveFilePath, type DriveFileStorageRecord } from "@/lib/modules/driveFiles";
+import {
+  createDriveFolderWithUniqueName,
+  readDriveFileBytes,
+  storeDriveFile,
+  withDriveFilePath,
+  type DriveFileStorageRecord
+} from "@/lib/modules/driveFiles";
 import {
   ensureCoursePurposeFolder,
   listCourseDrivePicker
 } from "@/lib/courseDrive/service";
 
-export const COPILOT_MAX_DOCUMENT_CHARACTERS = 100_000;
+export const COPILOT_MAX_UPLOAD_BYTES = 255 * 1024 * 1024;
 export const COPILOT_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const COPILOT_MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
+export const MAX_DRIVE_BATCH_FILES = 200;
 
 const documentExtensions = new Set([".pdf", ".docx", ".pptx", ".txt", ".md"]);
 const imageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".bmp", ".heic", ".heif"]);
@@ -37,11 +44,11 @@ export function driveContentHash(bytes: Buffer) {
 }
 
 export function copilotExtractionCanBeSelected(status: string) {
-  return status === "READY" || status === "PENDING" || status === "FAILED";
+  return status === "READY" || status === "PENDING" || status === "FAILED" || status === "TOO_LARGE";
 }
 
 export function copilotExtractionNeedsIndexing(status: string) {
-  return status === "PENDING" || status === "FAILED";
+  return status === "PENDING" || status === "FAILED" || status === "TOO_LARGE";
 }
 
 export function copilotExtractionErrorMessage(error: unknown) {
@@ -56,6 +63,15 @@ export async function storeDriveUpload(input: {
   ownerId: string;
   parentId: string | null;
   file: File;
+}) {
+  return storeDriveUploadRecord({ ...input, indexImmediately: true });
+}
+
+async function storeDriveUploadRecord(input: {
+  ownerId: string;
+  parentId: string | null;
+  file: File;
+  indexImmediately: boolean;
 }) {
   const bytes = Buffer.from(await input.file.arrayBuffer());
   const path = await storeDriveFile({
@@ -77,8 +93,83 @@ export async function storeDriveUpload(input: {
       extractionStatus: "PENDING"
     }
   });
-  await indexDriveFile(record.id);
+  if (input.indexImmediately) await indexDriveFile(record.id);
   return db.driveFile.findUniqueOrThrow({ where: { id: record.id } });
+}
+
+export type DriveBatchUploadItem = { file: File; path?: string };
+
+function relativePathSegments(path: string) {
+  return path
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment && segment !== "." && segment !== "..");
+}
+
+/**
+ * Batch-uploads files in one request. When `folderName` is given the files are
+ * placed inside a newly created folder (auto-renamed when the name is taken)
+ * and `item.path` preserves the sub-folder hierarchy relative to that folder.
+ * Extraction is deferred (records stay PENDING and are indexed lazily when a
+ * conversation first references them) so a large batch does not block the
+ * upload request on document parsing.
+ */
+export async function storeDriveBatchUpload(input: {
+  ownerId: string;
+  parentId: string | null;
+  folderName?: string;
+  items: DriveBatchUploadItem[];
+}) {
+  if (!input.items.length) throw new Error("请选择要上传的文件");
+  if (input.items.length > MAX_DRIVE_BATCH_FILES) {
+    throw new Error(`一次最多上传 ${MAX_DRIVE_BATCH_FILES} 个文件`);
+  }
+
+  const folderName = input.folderName?.trim();
+  const rootFolder = folderName
+    ? await createDriveFolderWithUniqueName(input.ownerId, input.parentId, folderName)
+    : null;
+
+  const folderIdByDirectory = new Map<string, string | null>();
+  folderIdByDirectory.set("", rootFolder ? rootFolder.id : input.parentId);
+
+  async function parentFor(item: DriveBatchUploadItem) {
+    // The relative path ends with the file name; only the leading segments are
+    // directories. A file directly inside the uploaded folder has no directory
+    // segments and lands in the folder itself.
+    const segments = relativePathSegments(item.path ?? "").slice(0, -1);
+    if (!segments.length) return folderIdByDirectory.get("")!;
+    let parentId = folderIdByDirectory.get("")!;
+    let directory = "";
+    for (const segment of segments) {
+      directory = directory ? `${directory}/${segment}` : segment;
+      let folderId = folderIdByDirectory.get(directory);
+      if (!folderId) {
+        const created = await createDriveFolderWithUniqueName(input.ownerId, parentId, segment);
+        folderId = created.id;
+        folderIdByDirectory.set(directory, folderId);
+      }
+      parentId = folderId;
+    }
+    return parentId;
+  }
+
+  const files: Array<Awaited<ReturnType<typeof storeDriveUpload>>> = [];
+  const failed: Array<{ name: string; error: string }> = [];
+  for (const item of input.items) {
+    try {
+      const record = await storeDriveUploadRecord({
+        ownerId: input.ownerId,
+        parentId: await parentFor(item),
+        file: item.file,
+        indexImmediately: false
+      });
+      files.push(record);
+    } catch (error) {
+      failed.push({ name: item.file.name, error: error instanceof Error ? error.message : "上传失败" });
+    }
+  }
+  return { folder: rootFolder, files, failed };
 }
 
 export async function storeCourseConversationUpload(user: SessionUser, courseId: string, file: File) {
@@ -221,13 +312,12 @@ export async function indexDriveFile(fileId: string) {
   });
   try {
     const extracted = await withDriveFilePath(file, (localPath) => extractText(localPath, file.mimeType));
-    const tooLarge = extracted.text.length > COPILOT_MAX_DOCUMENT_CHARACTERS;
     await db.driveFile.update({
       where: { id: file.id },
       data: {
-        extractionStatus: tooLarge ? "TOO_LARGE" : "READY",
-        extractedText: tooLarge ? extracted.text.slice(0, COPILOT_MAX_DOCUMENT_CHARACTERS + 1) : extracted.text,
-        extractionError: tooLarge ? "文档正文超过 100,000 字符，暂不支持添加到对话" : null,
+        extractionStatus: "READY",
+        extractedText: extracted.text,
+        extractionError: null,
         extractedAt: new Date()
       }
     });
@@ -279,6 +369,7 @@ export async function listCourseCopilotFiles(user: SessionUser, courseId: string
       const contextKind = copilotFileKind(row.name, row.mimeType);
       const imageTooLarge = contextKind === "image" && row.size > COPILOT_MAX_IMAGE_BYTES;
       const supported = contextKind !== "unsupported" && !imageTooLarge;
+      const legacyTooLarge = row.extractionStatus === "TOO_LARGE";
       return {
         ...row,
         parentId: item.parentId,
@@ -286,7 +377,11 @@ export async function listCourseCopilotFiles(user: SessionUser, courseId: string
         contextKind,
         contextReady: row.extractionStatus === "READY" && supported,
         contextSelectable: supported && copilotExtractionCanBeSelected(row.extractionStatus),
-        extractionError: imageTooLarge ? "图片超过单张 10MB 限制" : row.extractionError,
+        extractionError: imageTooLarge
+          ? "图片超过单张 10MB 限制"
+          : legacyTooLarge
+            ? "文档较大，首次加入对话时会自动重新解析"
+            : row.extractionError,
         referenceType: "FILE" as const
       };
     })
@@ -397,15 +492,12 @@ export async function resolveCourseConversationFiles(input: {
     }))
     .sort((left, right) => Number(right.direct) - Number(left.direct) || right.score - left.score || left.record.name.localeCompare(right.record.name, "zh-CN"));
 
-  let documentCharacters = 0;
   let imageBytes = 0;
   const selected = [];
   for (const { record } of ranked) {
     const kind = copilotFileKind(record.name, record.mimeType);
     if (kind === "document") {
       if (record.extractionStatus !== "READY" || !record.extractedText) continue;
-      if (documentCharacters + record.extractedText.length > COPILOT_MAX_DOCUMENT_CHARACTERS) continue;
-      documentCharacters += record.extractedText.length;
     } else {
       if (record.extractionStatus !== "READY" || record.size > COPILOT_MAX_IMAGE_BYTES) continue;
       if (imageBytes + record.size > COPILOT_MAX_TOTAL_IMAGE_BYTES) continue;
@@ -419,7 +511,6 @@ export async function resolveCourseConversationFiles(input: {
 export async function buildCopilotFileContext(fileIds: string[]) {
   const files = await db.driveFile.findMany({ where: { id: { in: fileIds }, deletedAt: null } });
   const ordered = fileIds.map((id) => files.find((file) => file.id === id)).filter(Boolean) as typeof files;
-  let documentCharacters = 0;
   let imageBytes = 0;
   const documents: Array<{ name: string; text: string }> = [];
   const images: Array<{ name: string; mimeType: string; data: string }> = [];
@@ -428,8 +519,6 @@ export async function buildCopilotFileContext(fileIds: string[]) {
     const kind = copilotFileKind(file.name, file.mimeType);
     if (kind === "document") {
       if (file.extractionStatus !== "READY" || !file.extractedText) throw new Error(`${file.name} 尚未完成解析`);
-      documentCharacters += file.extractedText.length;
-      if (documentCharacters > COPILOT_MAX_DOCUMENT_CHARACTERS) throw new Error("文档正文合计不能超过 100,000 字符");
       documents.push({ name: file.name, text: file.extractedText });
       continue;
     }
@@ -443,7 +532,7 @@ export async function buildCopilotFileContext(fileIds: string[]) {
     }
     throw new Error(`${file.name} 当前格式暂不支持 AI 读取`);
   }
-  return { documents, images, documentCharacters, imageBytes };
+  return { documents, images, imageBytes };
 }
 
 async function prepareImageForModel(file: DriveFileStorageRecord) {

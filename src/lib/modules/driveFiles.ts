@@ -164,6 +164,34 @@ export type DriveFileStorageRecord = {
   path: string | null;
 };
 
+/**
+ * Creates a folder under `parentId` with a name that never collides with an
+ * existing sibling folder: the requested name wins when free, otherwise the
+ * upload is renamed to "name (2)", "name (3)", and so on.
+ */
+export async function createDriveFolderWithUniqueName(
+  ownerId: string,
+  parentId: string | null,
+  name: string
+) {
+  const normalizedName = name.trim();
+  if (!normalizedName) throw new Error("文件夹名称不能为空");
+  const siblings = await db.driveFile.findMany({
+    where: { ownerId, parentId, kind: "folder", deletedAt: null },
+    select: { name: true }
+  });
+  const taken = new Set(siblings.map((folder) => folder.name));
+  let candidate = normalizedName;
+  let counter = 2;
+  while (taken.has(candidate)) {
+    candidate = `${normalizedName} (${counter})`;
+    counter += 1;
+  }
+  return db.driveFile.create({
+    data: { ownerId, parentId, name: candidate, kind: "folder" }
+  });
+}
+
 export async function readDriveFileBytes(file: DriveFileStorageRecord) {
   if (file.kind !== "file" || !file.path) throw new Error("文件不存在");
   return file.path.startsWith("oss://")

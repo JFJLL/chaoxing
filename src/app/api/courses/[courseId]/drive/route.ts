@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { storeDriveUpload } from "@/lib/copilot/files";
+import { MAX_DRIVE_BATCH_FILES, storeDriveBatchUpload, storeDriveUpload } from "@/lib/copilot/files";
 import { courseDriveErrorResponse } from "@/lib/courseDrive/http";
 import {
   createCourseDriveFolder,
@@ -19,15 +19,38 @@ export async function POST(request: NextRequest, context: RouteContext) {
   try {
     if (contentType.includes("multipart/form-data")) {
       const form = await request.formData();
-      const file = form.get("file");
       const parentId = form.get("parentId");
-      if (!(file instanceof File) || file.size === 0) {
-        return NextResponse.json({ error: "请先选择要上传的文件" }, { status: 400 });
-      }
       if (typeof parentId !== "string" || !parentId) {
         return NextResponse.json({ error: "上传位置无效" }, { status: 400 });
       }
       const parent = await requireCourseDriveMutationFolder(user, courseId, parentId);
+      const batchFiles = form.getAll("files").filter((item): item is File => item instanceof File);
+      if (batchFiles.length) {
+        if (batchFiles.length > MAX_DRIVE_BATCH_FILES) {
+          return NextResponse.json({ error: `一次最多上传 ${MAX_DRIVE_BATCH_FILES} 个文件` }, { status: 400 });
+        }
+        const paths = form.getAll("paths").map(String);
+        if (paths.length && paths.length !== batchFiles.length) {
+          return NextResponse.json({ error: "上传文件与路径数量不一致" }, { status: 400 });
+        }
+        const rawFolderName = form.get("folderName");
+        const folderName = typeof rawFolderName === "string" ? rawFolderName : "";
+        const result = await storeDriveBatchUpload({
+          ownerId: parent.course.ownerId,
+          parentId: parent.target.id,
+          folderName: folderName.trim() || undefined,
+          items: batchFiles.map((file, index) => ({ file, path: paths[index] ?? "" }))
+        });
+        if (!result.files.length && result.failed.length) {
+          return NextResponse.json({ error: "全部文件上传失败", failed: result.failed }, { status: 400 });
+        }
+        const storage = result.files.some((record) => !record.path?.startsWith("oss://")) ? "local" : "oss";
+        return NextResponse.json({ folder: result.folder, files: result.files, failed: result.failed, storage }, { status: 201 });
+      }
+      const file = form.get("file");
+      if (!(file instanceof File) || file.size === 0) {
+        return NextResponse.json({ error: "请先选择要上传的文件" }, { status: 400 });
+      }
       const record = await storeDriveUpload({
         ownerId: parent.course.ownerId,
         parentId: parent.target.id,

@@ -14,9 +14,10 @@ describe("Copilot course-file extraction state", () => {
     expect(copilotExtractionNeedsIndexing("READY")).toBe(false);
   });
 
-  it("keeps unsupported and oversized documents unavailable", () => {
+  it("keeps unsupported files unavailable and lets legacy oversized documents be retried", () => {
     expect(copilotExtractionCanBeSelected("UNSUPPORTED")).toBe(false);
-    expect(copilotExtractionCanBeSelected("TOO_LARGE")).toBe(false);
+    expect(copilotExtractionCanBeSelected("TOO_LARGE")).toBe(true);
+    expect(copilotExtractionNeedsIndexing("TOO_LARGE")).toBe(true);
   });
 
   it("turns the OSS signature XML into an actionable retry message", () => {
