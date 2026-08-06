@@ -427,7 +427,7 @@ export function DriveClient({
     const firstPath = files[0]?.webkitRelativePath ?? "";
     if (!firstPath) {
       setUploadSelection(null);
-      setStatus({ tone: "error", text: "当前浏览器不支持选择文件夹，请改用“选择文件”多选上传" });
+      setStatus({ tone: "error", text: "当前浏览器不支持上传文件夹，请改用“上传文件”多选上传" });
       return;
     }
     const folderName = firstPath.split("/")[0] ?? "";
@@ -480,6 +480,12 @@ export function DriveClient({
     });
     setUploadState(null);
     if (succeeded) setUploadDialogOpen(false);
+  }
+
+  function closeUploadDialog() {
+    if (pendingAction) return;
+    setUploadDialogOpen(false);
+    setUploadSelection(null);
   }
 
   async function share(id: string) {
@@ -624,19 +630,19 @@ export function DriveClient({
         </form>
       </Dialog>
 
-      <Dialog open={uploadDialogOpen} title="上传文件" onClose={() => { if (!pendingAction) setUploadDialogOpen(false); }}>
+      <Dialog open={uploadDialogOpen} title="上传文件" onClose={closeUploadDialog}>
         <form onSubmit={(event) => { event.preventDefault(); void upload(); }} className="space-y-4">
           <p className="text-sm leading-6 text-slate-600">可一次选择多个文件，或选择整个文件夹（保留子文件夹结构，同名文件夹会自动重命名）。上传完成前请保持页面打开。</p>
           <div className="flex flex-col gap-3 sm:flex-row">
             <label className="cx-tactile flex min-h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-[var(--cx-blue-soft)]">
               <input type="file" multiple className="sr-only" onChange={handleFilesChange} disabled={pendingAction !== null} />
               <UploadCloud className="h-4 w-4" aria-hidden="true" />
-              选择文件（可多选）
+              上传文件
             </label>
             <label className="cx-tactile flex min-h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-[var(--cx-blue-soft)]">
               <input type="file" {...({ webkitdirectory: "" } as any)} className="sr-only" onChange={handleFolderChange} disabled={pendingAction !== null} />
               <Folder className="h-4 w-4" aria-hidden="true" />
-              选择文件夹
+              上传文件夹
             </label>
           </div>
           {uploadSelection ? (
@@ -659,7 +665,7 @@ export function DriveClient({
             </div>
           ) : null}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={() => setUploadDialogOpen(false)}>取消</Button>
+            <Button type="button" variant="secondary" disabled={pendingAction !== null} onClick={closeUploadDialog}>取消</Button>
             <Button type="submit" disabled={pendingAction !== null || !uploadSelection}>
               <UploadCloud className="h-4 w-4" aria-hidden="true" />
               {pendingAction === "upload" ? "正在上传" : "开始上传"}
