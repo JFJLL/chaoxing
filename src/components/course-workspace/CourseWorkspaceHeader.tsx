@@ -13,7 +13,6 @@ export function CourseWorkspaceHeader({ user }: { user: SessionUser }) {
           <ArrowLeft className="h-4 w-4" />
           <span><span className="hidden sm:inline">返回</span>课程列表</span>
         </Link>
-        <span className="truncate text-lg font-semibold tracking-wide text-slate-950 sm:text-xl">易美</span>
       </div>
       <UserMenu user={user} />
     </header>

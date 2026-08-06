@@ -407,7 +407,7 @@ export async function generateArtifactDocx(input: GenerateArtifactDocxInput) {
                 alignment: AlignmentType.RIGHT,
                 children: [
                   new TextRun({
-                    text: "易美课程平台　",
+                    text: "课程平台　",
                     color: COLORS.muted,
                     size: 18,
                     font: "Microsoft YaHei"
