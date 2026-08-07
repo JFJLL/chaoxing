@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildCourseKnowledgeSources,
+  searchDriveKnowledgeSources,
   type CourseKnowledgeSourceDependencies
 } from "@/lib/courseWorkspace/courseKnowledgeSources";
 
@@ -207,5 +208,64 @@ describe("interactive AI persistence schema", () => {
     expect(migration).toContain("DELETE FROM \"CourseAiConversation\" WHERE \"kind\" = 'COACH'");
     expect(migration).toContain("DROP TRIGGER IF EXISTS \"CourseAiConversation_coach_course_insert\"");
     expect(migration).toContain("DROP TABLE IF EXISTS \"AiCoachTask\"");
+  });
+});
+
+describe("searchDriveKnowledgeSources (FTS5 full-file retrieval)", () => {
+  it("translates the query and maps FTS hits to page-annotated sources", async () => {
+    const complete = vi.fn().mockResolvedValue("photosynthesis chlorophyll");
+    const search = vi.fn().mockReturnValue([
+      { fileId: "drive-1", page: 42, content: "Photosynthesis converts light into chemical energy." },
+      { fileId: "drive-1", page: 43, content: "Chlorophyll absorbs red and blue light." }
+    ]);
+
+    const sources = await searchDriveKnowledgeSources({
+      files: [{ id: "drive-1", name: "植物学教材.pdf" }],
+      query: "光合作用在哪里发生？",
+      complete,
+      search
+    });
+
+    expect(complete).toHaveBeenCalledWith(expect.objectContaining({
+      user: expect.stringContaining("光合作用在哪里发生")
+    }));
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({
+      fileIds: ["drive-1"],
+      match: expect.stringContaining("photosynthesis"),
+      substrings: expect.arrayContaining(["光合"])
+    }));
+    expect(sources).toHaveLength(2);
+    expect(sources[0]).toMatchObject({
+      id: "drive:drive-1:42:1",
+      type: "drive",
+      label: "植物学教材.pdf（第 42 页）",
+      href: "/api/drive/drive-1?preview=1",
+      snippet: expect.stringContaining("Photosynthesis")
+    });
+    expect(sources[1]?.label).toBe("植物学教材.pdf（第 43 页）");
+  });
+
+  it("falls back to the query's own Latin terms when the translator is unavailable", async () => {
+    const complete = vi.fn().mockResolvedValue(null);
+    const search = vi.fn().mockReturnValue([{ fileId: "drive-1", page: 0, content: "Photosynthesis basics" }]);
+
+    const sources = await searchDriveKnowledgeSources({
+      files: [{ id: "drive-1", name: "教材.pdf" }],
+      query: "Where does photosynthesis happen?",
+      complete,
+      search
+    });
+
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({
+      match: expect.stringContaining("photosynthesis")
+    }));
+    expect(sources[0]?.label).toBe("教材.pdf");
+  });
+
+  it("returns no sources when no files are attached", async () => {
+    const search = vi.fn();
+    const sources = await searchDriveKnowledgeSources({ files: [], query: "任何问题", search });
+    expect(search).not.toHaveBeenCalled();
+    expect(sources).toEqual([]);
   });
 });

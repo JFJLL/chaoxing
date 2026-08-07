@@ -224,7 +224,7 @@ export function AiTutor({
 
   return (
     <section className="overflow-hidden rounded-3xl border border-white/80 bg-white shadow-panel">
-      <div className="grid min-h-[520px] lg:min-h-[560px] lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid h-[calc(100dvh-320px)] min-h-[520px] max-h-[800px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden lg:grid-cols-[220px_minmax(0,1fr)] lg:grid-rows-1">
         <aside className="border-b border-slate-100 bg-slate-50/80 p-3 sm:p-4 lg:border-b-0 lg:border-r">
           <button type="button" onClick={newConversation} disabled={streaming} className="cx-focus-ring cx-tactile flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[var(--cx-blue)] text-sm font-medium text-white shadow-sm hover:bg-[var(--cx-blue-dark)] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50">
             <Plus className="h-4 w-4" />新对话
@@ -244,7 +244,7 @@ export function AiTutor({
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-col">
           <header className="border-b border-slate-100 bg-white/80 px-4 py-4 sm:px-5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]" aria-hidden="true" />

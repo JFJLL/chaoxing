@@ -1,6 +1,5 @@
-import { readFile } from "fs/promises";
-import pdf from "pdf-parse";
-import { buildExtractedDocument } from "@/lib/document/normalizeText";
+import mupdf from "mupdf";
+import { buildPageExtractedDocument } from "@/lib/document/normalizeText";
 
 /**
  * Raised when a PDF has no extractable text layer (scanned / image-only). The
@@ -15,10 +14,31 @@ export class PdfHasNoTextLayerError extends Error {
 }
 
 export async function extractPdf(filePath: string) {
-  const buffer = await readFile(filePath);
-  const result = await pdf(buffer);
-  if (!result.text || !result.text.trim()) {
-    throw new PdfHasNoTextLayerError(result.numpages ?? 0);
+  // MuPDF's WASM binding reads the file page by page from disk instead of
+  // materialising the whole PDF in a JS Buffer, which keeps the memory peak
+  // bounded even for very large textbooks.
+  const document = mupdf.Document.openDocument(filePath);
+  try {
+    const pageCount = document.countPages();
+    const pages: Array<{ page: number; text: string }> = [];
+    for (let index = 0; index < pageCount; index += 1) {
+      const page = document.loadPage(index);
+      try {
+        const structured = page.toStructuredText("preserve-whitespace");
+        try {
+          pages.push({ page: index + 1, text: structured.asText() });
+        } finally {
+          structured.destroy();
+        }
+      } finally {
+        page.destroy();
+      }
+    }
+    if (!pages.some(({ text }) => text && text.trim())) {
+      throw new PdfHasNoTextLayerError(pageCount);
+    }
+    return buildPageExtractedDocument(pages, pageCount);
+  } finally {
+    document.destroy();
   }
-  return buildExtractedDocument(result.text, result.numpages);
 }

@@ -23,4 +23,5 @@ outputs/
 product-audit/
 .verification/
 artifacts/verification/
+.data/
 .qoder/

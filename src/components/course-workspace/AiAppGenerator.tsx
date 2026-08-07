@@ -452,7 +452,7 @@ export function AiAppGenerator({
             sourceArtifactVersion: selectedCoursewareSource?.version ?? null
           }
         } : {}),
-        ...(app.appType === "lesson_plan" ? {
+        ...(app.appType === "lesson_plan" || app.appType === "question_generation" ? {
           sourceSelections: Object.entries(sourceSelections).map(([documentId, sectionIds]) => ({ documentId, sectionIds }))
         } : {})
       });
@@ -588,7 +588,7 @@ export function AiAppGenerator({
   const missingCourseContent = prerequisites.includes("course_content") && !hasCourseContent;
   const missingApprovedQuestions = prerequisites.includes("approved_questions") && approvedQuestions.length < 3;
   const missingApprovedCourseware = (app.appType === "courseware" || prerequisites.includes("approved_courseware")) && !sourceArtifactId;
-  const missingLessonPlanSources = app.appType === "lesson_plan" && Object.keys(sourceSelections).length === 0;
+  const missingLessonPlanSources = (app.appType === "lesson_plan" || app.appType === "question_generation") && Object.keys(sourceSelections).length === 0;
   const generationBlocked = missingCourseContent || missingApprovedQuestions || missingApprovedCourseware || missingLessonPlanSources;
   const isEditing = Boolean(selected && editingId === selected.id);
   const hasPendingPublishedUpdate = Boolean(
@@ -655,7 +655,7 @@ export function AiAppGenerator({
             <label className="space-y-1 text-sm font-medium text-slate-700"><span>难度</span><select value={options.difficulty} onChange={(event) => updateOption("difficulty", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option>基础</option><option>提高</option><option>综合</option><option>挑战</option></select></label>
           </div> : null}
 
-          {app.appType === "lesson_plan" ? <fieldset className="space-y-3"><legend className="text-sm font-medium text-slate-700">资料与章节来源</legend>{documentSources.map((document) => {
+          {(app.appType === "lesson_plan" || app.appType === "question_generation") ? <fieldset className="space-y-3"><legend className="text-sm font-medium text-slate-700">资料与章节来源</legend>{documentSources.map((document) => {
             const selected = sourceSelections[document.id];
             const allIds = document.sections.map((section) => section.id);
             const isExpanded = expandedDocumentIds.has(document.id);

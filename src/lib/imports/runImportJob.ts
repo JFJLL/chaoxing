@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { extractText, type ExtractedDocument } from "@/lib/document/extractText";
 import { PdfHasNoTextLayerError } from "@/lib/document/extractPdf";
+import { indexKnowledgeDocument } from "@/lib/document/knowledgeDb";
 import { generateCourseOutline, generateCourseOutlineFromPdf } from "@/lib/ai/generateCourseOutline";
 import type { GeneratedCourseOutline } from "@/types/course";
 import { createKnowledgeMapDraft } from "@/lib/knowledgeMap/generateKnowledgeMap";
@@ -60,6 +61,16 @@ export async function runImportJob(jobId: string) {
       ? await withDriveFilePath(job.driveFile, process)
       : await withImportFilePath(job.filePath, process);
 
+    // Index every chunk of the parsed document into the local FTS5 knowledge
+    // database (PDF chunks keep their page number). Keyed by the drive file id
+    // when the import came from the cloud drive so AI tutor attachments can
+    // find the same rows. A search-index failure must never fail the import.
+    let knowledgeIndexWarning: string | null = null;
+    try {
+      indexKnowledgeDocument(job.driveFileId ?? job.id, extracted);
+    } catch (indexError) {
+      knowledgeIndexWarning = `知识库索引失败：${indexError instanceof Error ? indexError.message : "未知错误"}`;
+    }
     await advance({
       extractedText: extracted.text,
       status: "STRUCTURING",
@@ -100,7 +111,7 @@ export async function runImportJob(jobId: string) {
       generatedOutline: JSON.stringify(generated.outline),
       status: "READY_FOR_REVIEW",
       currentStage: "等待教师审核",
-      warning: null,
+      ...(knowledgeIndexWarning ? { warning: knowledgeIndexWarning } : { warning: null }),
       finishedAt: new Date()
     });
     if (job.batchId) await finalizeImportBatch(job.batchId);

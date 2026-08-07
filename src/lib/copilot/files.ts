@@ -4,6 +4,7 @@ import sharp from "sharp";
 import type { SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { extractText } from "@/lib/document/extractText";
+import { hasKnowledgeDocument, indexKnowledgeDocument, removeKnowledgeDocument } from "@/lib/document/knowledgeDb";
 import { requireCourseAccess } from "@/lib/permissions";
 import {
   createDriveFolderWithUniqueName,
@@ -292,6 +293,7 @@ export async function indexDriveFile(fileId: string) {
   const kind = copilotFileKind(file.name, file.mimeType);
 
   if (kind === "image") {
+    removeKnowledgeDocument(file.id);
     await db.driveFile.update({
       where: { id: file.id },
       data: { extractionStatus: "READY", extractedText: null, extractionError: null, extractedAt: new Date() }
@@ -299,6 +301,7 @@ export async function indexDriveFile(fileId: string) {
     return;
   }
   if (kind === "unsupported") {
+    removeKnowledgeDocument(file.id);
     await db.driveFile.update({
       where: { id: file.id },
       data: { extractionStatus: "UNSUPPORTED", extractedText: null, extractionError: "当前格式暂不支持 AI 读取", extractedAt: new Date() }
@@ -312,6 +315,14 @@ export async function indexDriveFile(fileId: string) {
   });
   try {
     const extracted = await withDriveFilePath(file, (localPath) => extractText(localPath, file.mimeType));
+    try {
+      // Keep the local FTS5 knowledge index in sync with every successful
+      // extraction so AI tutor retrieval can find full-file chunks (with page
+      // numbers for PDFs). A search-index failure must not fail extraction.
+      indexKnowledgeDocument(file.id, extracted);
+    } catch (indexError) {
+      console.error(`知识库索引失败（${file.id}）`, indexError);
+    }
     await db.driveFile.update({
       where: { id: file.id },
       data: {
@@ -483,6 +494,19 @@ export async function resolveCourseConversationFiles(input: {
       extractedText: true
     }
   });
+  // Backfill the FTS index for files extracted before the knowledge database
+  // existed: re-extract once so PDFs regain page numbers, then the ranked
+  // selection below can use full-file chunks instead of head truncation.
+  const missingKnowledgeIndexIds = records
+    .filter((record) =>
+      copilotFileKind(record.name, record.mimeType) === "document"
+      && record.extractionStatus === "READY"
+      && !hasKnowledgeDocument(record.id)
+    )
+    .map((record) => record.id);
+  for (let offset = 0; offset < missingKnowledgeIndexIds.length; offset += 3) {
+    await Promise.allSettled(missingKnowledgeIndexIds.slice(offset, offset + 3).map(indexDriveFile));
+  }
   const ranked = records
     .filter((record) => copilotFileKind(record.name, record.mimeType) !== "unsupported")
     .map((record) => ({

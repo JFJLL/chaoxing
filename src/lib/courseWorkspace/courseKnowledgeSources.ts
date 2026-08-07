@@ -1,6 +1,11 @@
 import type { SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isCourseManagerRecord, requireCourseAccess } from "@/lib/permissions";
+import { createTextCompletion } from "@/lib/ai/modelClient";
+import {
+  searchKnowledgeChunks,
+  toFtsMatchQuery
+} from "@/lib/document/knowledgeDb";
 
 export type CourseKnowledgeSourceType =
   | "course"
@@ -73,7 +78,7 @@ export class CourseKnowledgeAccessError extends Error {
 
 const MAX_SOURCES = 40;
 const MAX_SNIPPET_LENGTH = 1_200;
-const TYPE_LIMITS: Record<CourseKnowledgeSourceType, number> = {
+const TYPE_LIMITS: Partial<Record<CourseKnowledgeSourceType, number>> = {
   course: 1,
   chapter: 6,
   lesson: 8,
@@ -81,9 +86,11 @@ const TYPE_LIMITS: Record<CourseKnowledgeSourceType, number> = {
   announcement: 4,
   ai_artifact: 6,
   import: 6,
-  question: 4,
-  drive: 20
+  question: 4
 };
+
+const DRIVE_FTS_LIMIT = 30;
+const DRIVE_SNIPPET_LABEL_PAGE_LIMIT = 240;
 
 const defaultDependencies: CourseKnowledgeSourceDependencies = {
   requireAccess: requireCourseAccess,
@@ -169,9 +176,10 @@ function appendChunks(
   const text = input.text;
   if (!text || !text.trim()) return;
   let typeCount = sources.filter((source) => source.type === input.type).length;
+  const typeLimit = TYPE_LIMITS[input.type] ?? MAX_SOURCES;
   for (
     let offset = 0, index = 1;
-    offset < text.length && sources.length < MAX_SOURCES && typeCount < TYPE_LIMITS[input.type];
+    offset < text.length && sources.length < MAX_SOURCES && typeCount < typeLimit;
     offset += MAX_SNIPPET_LENGTH, index += 1, typeCount += 1
   ) {
     sources.push({
@@ -184,20 +192,97 @@ function appendChunks(
   }
 }
 
-export function buildCourseDriveKnowledgeSources(
-  files: Array<{ id: string; name: string; extractedText: string | null }>
-) {
-  const sources: CourseKnowledgeSource[] = [];
-  for (const file of files) {
-    appendChunks(sources, {
-      baseId: `drive:${file.id}`,
-      type: "drive",
-      label: file.name,
-      text: file.extractedText,
-      href: `/api/drive/${file.id}?preview=1`
-    });
+export type DriveKnowledgeFile = { id: string; name: string };
+
+type TextCompletion = (input: { system: string; user: string; model?: string }) => Promise<string | null>;
+
+function parseEnglishTerms(output: string) {
+  return output
+    .split(/\s+/)
+    .map((term) => term.replace(/[^\p{L}\p{N}'-]/gu, ""))
+    .filter((term) => term.length >= 2 && term.length <= 60)
+    .slice(0, 6);
+}
+
+function queryLatinTerms(query: string) {
+  return [...query.matchAll(/[a-zA-Z][a-zA-Z'-]{1,59}/g)]
+    .map((match) => match[0].toLocaleLowerCase())
+    .filter((term) => term.length >= 2);
+}
+
+function queryChineseBigrams(query: string) {
+  const chinese = query.replace(/[^\u3400-\u9fff]/g, "");
+  const terms: string[] = [];
+  for (let index = 0; index < chinese.length - 1; index += 1) {
+    const bigram = chinese.slice(index, index + 2);
+    if (!terms.includes(bigram)) terms.push(bigram);
   }
-  return sources;
+  return terms.slice(0, 12);
+}
+
+/**
+ * Translates a (typically Chinese) question into English textbook terms so an
+ * English-only PDF can be found through FTS5. The call is intentionally tiny;
+ * when the model is unavailable the query's own Latin words and CJK bigrams
+ * are used instead.
+ */
+async function translateQueryToEnglishTerms(query: string, complete: TextCompletion) {
+  try {
+    const output = await complete({
+      system: "你是教科书检索翻译器。只输出英文核心术语，用空格分隔，不要输出任何解释、编号或标点。",
+      user: `提取以下中文问题的3个英文核心教科书术语，用空格分隔：${query}`
+    });
+    return parseEnglishTerms(output ?? "");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Full-file retrieval for cloud-drive documents: the query is translated to
+ * English keywords, matched against the local FTS5 chunk index (every chunk of
+ * every file, not just the head), and the top hits become knowledge sources
+ * whose snippet keeps the exact page for citations. Callers still run the
+ * existing searchCourseKnowledge LLM re-ranking on the result.
+ */
+export async function searchDriveKnowledgeSources(input: {
+  files: DriveKnowledgeFile[];
+  query: string;
+  complete?: TextCompletion;
+  search?: typeof searchKnowledgeChunks;
+  limit?: number;
+}): Promise<CourseKnowledgeSource[]> {
+  const fileIds = [...new Set(input.files.map((file) => file.id))];
+  if (!fileIds.length || !input.query.trim()) return [];
+
+  const complete = input.complete ?? createTextCompletion;
+  const translated = await translateQueryToEnglishTerms(input.query, complete);
+  const match = toFtsMatchQuery([
+    ...translated,
+    ...queryLatinTerms(input.query),
+    ...queryChineseBigrams(input.query)
+  ]);
+  if (!match) return [];
+
+  const hits = (input.search ?? searchKnowledgeChunks)({
+    fileIds,
+    match,
+    substrings: queryChineseBigrams(input.query),
+    limit: input.limit ?? DRIVE_FTS_LIMIT
+  });
+  const nameById = new Map(input.files.map((file) => [file.id, file.name]));
+  return hits.map((hit, index) => {
+    const name = nameById.get(hit.fileId) ?? "云盘资料";
+    const pageLabel = hit.page > 0 ? `（第 ${hit.page} 页）` : "";
+    const label = `${name}${pageLabel}`.slice(0, DRIVE_SNIPPET_LABEL_PAGE_LIMIT);
+    return {
+      id: `drive:${hit.fileId}:${hit.page}:${index + 1}`,
+      type: "drive",
+      label,
+      snippet: hit.content,
+      href: `/api/drive/${hit.fileId}?preview=1`
+    };
+  });
 }
 
 export async function buildCourseKnowledgeSources(input: {

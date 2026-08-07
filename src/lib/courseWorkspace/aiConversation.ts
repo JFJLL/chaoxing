@@ -5,10 +5,11 @@ import { db } from "@/lib/db";
 import { requireCourseAccess } from "@/lib/permissions";
 import { aiCitationSchema, type AiCitation } from "@/lib/ai/streamProtocol";
 import {
-  buildCourseDriveKnowledgeSources,
   buildCourseKnowledgeSources,
+  searchDriveKnowledgeSources,
   type CourseKnowledgeSource
 } from "@/lib/courseWorkspace/courseKnowledgeSources";
+import { searchCourseKnowledge } from "@/lib/courseWorkspace/searchCourseKnowledge";
 import {
   assertCourseCopilotReferences,
   listCourseCopilotFiles,
@@ -104,6 +105,18 @@ export function selectTutorSources(query: string, sources: CourseKnowledgeSource
     .sort((left, right) => right.score - left.score || left.index - right.index)
     .slice(0, Math.max(0, Math.min(12, limit)))
     .map((item) => item.source);
+}
+
+async function rankTutorSources(query: string, sources: CourseKnowledgeSource[], needsAiRanking: boolean) {
+  if (!needsAiRanking) return selectTutorSources(query, sources);
+  try {
+    const ranked = await searchCourseKnowledge({ query, sources });
+    if (ranked.length) return ranked;
+  } catch {
+    // Deterministic local scoring keeps the tutor usable when the ranking
+    // model is unavailable or misconfigured.
+  }
+  return selectTutorSources(query, sources);
 }
 
 export function buildTutorSystemPrompt(sources: CourseKnowledgeSource[]) {
@@ -384,8 +397,15 @@ export async function prepareTutorTurn(input: {
         query: userMessage.content
       })
     ]);
-    const driveSources = buildCourseDriveKnowledgeSources(driveFiles);
-    const selectedSources = selectTutorSources(userMessage.content, [...driveSources, ...sources]);
+    const driveSources = await searchDriveKnowledgeSources({
+      files: driveFiles,
+      query: userMessage.content
+    });
+    const selectedSources = await rankTutorSources(
+      userMessage.content,
+      [...driveSources, ...sources],
+      driveSources.length > 0
+    );
     if (isNewMessage) {
       userMessage = await db.courseAiMessage.create({
         data: { id: userMessage.id, conversationId: conversation.id, role: "USER", content: userMessage.content },

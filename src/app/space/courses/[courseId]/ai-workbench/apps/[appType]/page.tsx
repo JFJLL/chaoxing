@@ -139,7 +139,7 @@ async function AiAppGeneratorContent({
           select: { id: true, title: true, version: true, status: true }
         })
       : Promise.resolve([]),
-    appType === "lesson_plan"
+    appType === "lesson_plan" || appType === "question_generation"
       ? db.documentImportJob.findMany({
           where: {
             courseId,

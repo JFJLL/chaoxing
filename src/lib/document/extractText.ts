@@ -10,6 +10,12 @@ export type ExtractedDocument = {
   pages?: number;
   wordCount: number;
   chunks: string[];
+  /**
+   * Page-aligned chunks (text + 1-based page) for knowledge indexing. Only
+   * formats that carry page information (PDF) populate this; other formats
+   * leave it undefined so the knowledge indexer falls back to plain chunks.
+   */
+  pageChunks?: Array<{ text: string; page: number }>;
 };
 
 export async function extractText(filePath: string, mimeType?: string | null): Promise<ExtractedDocument> {

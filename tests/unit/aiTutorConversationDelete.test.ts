@@ -24,8 +24,8 @@ vi.mock("@/lib/copilot/files", () => ({
 }));
 
 vi.mock("@/lib/courseWorkspace/courseKnowledgeSources", () => ({
-  buildCourseDriveKnowledgeSources: vi.fn(),
-  buildCourseKnowledgeSources: vi.fn()
+  buildCourseKnowledgeSources: vi.fn(),
+  searchDriveKnowledgeSources: vi.fn()
 }));
 
 import { deleteTutorConversation } from "@/lib/courseWorkspace/aiConversation";
