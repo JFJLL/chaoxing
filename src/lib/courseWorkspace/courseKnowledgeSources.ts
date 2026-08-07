@@ -1,7 +1,7 @@
 import type { SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isCourseManagerRecord, requireCourseAccess } from "@/lib/permissions";
-import { createTextCompletion } from "@/lib/ai/modelClient";
+import { createTranslationCompletion } from "@/lib/ai/modelClient";
 import {
   searchKnowledgeChunks,
   toFtsMatchQuery
@@ -284,7 +284,7 @@ export async function searchDriveKnowledgeSources(input: {
   const fileIds = [...new Set(input.files.map((file) => file.id))];
   if (!fileIds.length || !input.query.trim()) return [];
 
-  const complete = input.complete ?? createTextCompletion;
+  const complete = input.complete ?? createTranslationCompletion;
   const translated = await translateQueryToEnglishTerms(input.query, complete);
   const match = toFtsMatchQuery([
     ...translated,

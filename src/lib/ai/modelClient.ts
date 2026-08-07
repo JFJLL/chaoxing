@@ -124,6 +124,32 @@ export function resolveAiModelConfig(model?: string): AiModelConfig | null {
   };
 }
 
+/**
+ * Resolves the configuration for the dedicated query-translation model. Only
+ * the fields explicitly provided via AI_TRANSLATE_* override the main model
+ * config; when nothing is set, callers fall back to the main model.
+ */
+export function resolveTranslationModelConfig(): AiModelConfig | null {
+  const translateModel = firstNonEmpty(process.env.AI_TRANSLATE_MODEL);
+  const translateBaseURL = firstNonEmpty(process.env.AI_TRANSLATE_BASE_URL);
+  const translateApiKey = firstNonEmpty(process.env.AI_TRANSLATE_API_KEY);
+  const translateProvider = firstNonEmpty(process.env.AI_TRANSLATE_PROVIDER);
+  if (!translateModel && !translateBaseURL && !translateApiKey && !translateProvider) {
+    return null;
+  }
+  const main = resolveAiModelConfig(translateModel ?? undefined);
+  const apiKey = translateApiKey ?? main?.apiKey;
+  const baseURL = translateBaseURL ?? main?.baseURL;
+  const model = translateModel ?? main?.model;
+  if (!apiKey || !baseURL || !model) return null;
+  return {
+    provider: normalizeProvider(translateProvider ?? main?.provider, baseURL, model),
+    apiKey,
+    baseURL,
+    model
+  };
+}
+
 function appendApiKey(url: URL, apiKey: string) {
   if (!url.searchParams.has("key")) {
     url.searchParams.set("key", apiKey);
@@ -438,6 +464,19 @@ export async function createTextCompletion(input: CompletionInput) {
     return createGeminiTextCompletion(config, input);
   }
 
+  return createOpenAiCompatibleTextCompletion(config, input);
+}
+
+/**
+ * Small completion call for query translation, routed to the dedicated
+ * AI_TRANSLATE_* model when configured (same providers as the main model).
+ */
+export async function createTranslationCompletion(input: CompletionInput) {
+  const config = resolveTranslationModelConfig();
+  if (!config) return null;
+  if (config.provider === "gemini") {
+    return createGeminiTextCompletion(config, input);
+  }
   return createOpenAiCompatibleTextCompletion(config, input);
 }
 
