@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   prepareTutorTurn: vi.fn(),
   completeTutorTurn: vi.fn(),
   failTutorTurn: vi.fn(),
+  isTutorTurnResend: vi.fn(),
   createTextCompletionStream: vi.fn()
 }));
 
@@ -19,7 +20,8 @@ vi.mock("@/lib/courseWorkspace/aiConversation", async (importOriginal) => {
     ...actual,
     prepareTutorTurn: mocks.prepareTutorTurn,
     completeTutorTurn: mocks.completeTutorTurn,
-    failTutorTurn: mocks.failTutorTurn
+    failTutorTurn: mocks.failTutorTurn,
+    isTutorTurnResend: mocks.isTutorTurnResend
   };
 });
 
@@ -64,6 +66,7 @@ beforeEach(() => {
     createdAt: "2026-07-13T00:00:00.000Z"
   });
   mocks.failTutorTurn.mockResolvedValue(undefined);
+  mocks.isTutorTurnResend.mockResolvedValue(false);
 });
 
 describe("AI tutor message route", () => {
@@ -149,6 +152,47 @@ describe("AI tutor message route", () => {
 
     expect(response.status).toBe(429);
     expect(mocks.prepareTutorTurn).not.toHaveBeenCalled();
+  });
+
+  it("lets an idempotent message resend through the concurrency guard", async () => {
+    mocks.isTutorTurnResend.mockResolvedValue(true);
+    tutorRequestGuard.acquire("user-1:course-1");
+    mocks.createTextCompletionStream.mockResolvedValue(chunks("重发", "回答"));
+
+    const response = await POST(new Request("http://localhost", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "问题", requestId: "123e4567-e89b-12d3-a456-426614174000" })
+    }), context);
+
+    expect(response.status).toBe(200);
+    const events: AiStreamEvent[] = [];
+    await readAiStream(response, (event) => events.push(event));
+    expect(events.map((event) => event.type)).toEqual(["meta", "delta", "delta", "done"]);
+    expect(mocks.isTutorTurnResend).toHaveBeenCalledWith("conversation-1", expect.objectContaining({ message: "问题" }));
+  });
+
+  it("releases the generation lock when the meta event cannot be serialized", async () => {
+    mocks.prepareTutorTurn.mockResolvedValue({
+      conversationId: "conversation-1",
+      generationToken: "generation-1",
+      userMessageId: "user-message-1",
+      citations: [{ id: "x", type: "drive", label: "x".repeat(300), snippet: "s", href: "/api/drive/x" }],
+      system: "system",
+      messages: [{ role: "user", content: "问题" }]
+    });
+
+    const response = await POST(new Request("http://localhost", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "问题" })
+    }), context);
+    const events: AiStreamEvent[] = [];
+    await readAiStream(response, (event) => events.push(event));
+
+    expect(events.at(-1)?.type).toBe("error");
+    expect(mocks.failTutorTurn).toHaveBeenCalledWith("user-1", "conversation-1", "generation-1");
+    expect(mocks.completeTutorTurn).not.toHaveBeenCalled();
   });
 
   it("rejects inaccessible conversation IDs before opening a stream", async () => {

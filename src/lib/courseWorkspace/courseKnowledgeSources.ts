@@ -228,10 +228,15 @@ function queryChineseBigrams(query: string) {
  */
 async function translateQueryToEnglishTerms(query: string, complete: TextCompletion) {
   try {
-    const output = await complete({
-      system: "你是教科书检索翻译器。只输出英文核心术语，用空格分隔，不要输出任何解释、编号或标点。",
-      user: `提取以下中文问题的3个英文核心教科书术语，用空格分隔：${query}`
-    });
+    // Bound the translation so source preparation stays fast: the FTS fallback
+    // terms (query Latin words + CJK bigrams) are used when the model is slow.
+    const output = await Promise.race([
+      complete({
+        system: "你是教科书检索翻译器。只输出英文核心术语，用空格分隔，不要输出任何解释、编号或标点。",
+        user: `提取以下中文问题的3个英文核心教科书术语，用空格分隔：${query}`
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3_000))
+    ]);
     return parseEnglishTerms(output ?? "");
   } catch {
     return [];

@@ -22,7 +22,7 @@ vi.mock("@/lib/db", () => {
   return {
     db: {
       courseAiConversation: { findUnique: mocks.findConversation, updateMany: mocks.updateMany },
-      courseAiMessage: { findMany: mocks.findMessages },
+      courseAiMessage: { findMany: mocks.findMessages, create: mocks.createMessage },
       $transaction: vi.fn(async (run: (client: typeof tx) => unknown) => run(tx))
     }
   };
@@ -143,6 +143,54 @@ describe("AI tutor generation lease", () => {
       data: { status: "ACTIVE", generationToken: null }
     });
     expect(calls[1]?.data).toMatchObject({ status: "GENERATING" });
+  });
+
+  it("preempts a still-generating conversation for an idempotent resend of the last message", async () => {
+    mocks.findMessages.mockResolvedValue([{
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      role: "USER",
+      content: "问题",
+      createdAt: new Date()
+    }]);
+    const calls: Array<{ where?: object; data?: object }> = [];
+    mocks.updateMany.mockImplementation(async (args: { where?: object; data?: object }) => {
+      calls.push(args);
+      return { count: 1 };
+    });
+
+    await expect(prepareTutorTurn({
+      user,
+      courseId: "course-1",
+      conversationId: "conversation-1",
+      body: { message: "问题", requestId: "123e4567-e89b-12d3-a456-426614174000" }
+    })).resolves.toMatchObject({ conversationId: "conversation-1" });
+
+    expect(calls[0]).toMatchObject({
+      where: { id: "conversation-1", status: "GENERATING" },
+      data: { status: "ACTIVE", generationToken: null }
+    });
+  });
+
+  it("bounds citation fields so an over-long source cannot break the meta event", async () => {
+    mocks.searchDriveKnowledgeSources.mockResolvedValue([
+      {
+        id: "drive:file-1:1:1",
+        type: "drive",
+        label: `问题${"x".repeat(300)}`,
+        snippet: `问题${"s".repeat(2_100)}`,
+        href: "/api/drive/file-1?preview=1"
+      }
+    ]);
+
+    const turn = await prepareTutorTurn({
+      user,
+      courseId: "course-1",
+      conversationId: "conversation-1",
+      body: { message: "问题", requestId: "123e4567-e89b-12d3-a456-426614174000" }
+    });
+
+    expect(turn.citations[0]?.label.length).toBe(240);
+    expect(turn.citations[0]?.snippet.length).toBe(2_000);
   });
 
   it("aborts the previous in-flight generation when a retry registers", () => {

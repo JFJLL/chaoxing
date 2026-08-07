@@ -504,8 +504,11 @@ export async function resolveCourseConversationFiles(input: {
       && !hasKnowledgeDocument(record.id)
     )
     .map((record) => record.id);
+  // A legacy backfill can mean downloading and re-parsing very large files
+  // (e.g. a 160MB textbook). Never block the tutor turn on it: the index is
+  // populated in the background and later turns will use it.
   for (let offset = 0; offset < missingKnowledgeIndexIds.length; offset += 3) {
-    await Promise.allSettled(missingKnowledgeIndexIds.slice(offset, offset + 3).map(indexDriveFile));
+    void Promise.allSettled(missingKnowledgeIndexIds.slice(offset, offset + 3).map(indexDriveFile));
   }
   const ranked = records
     .filter((record) => copilotFileKind(record.name, record.mimeType) !== "unsupported")

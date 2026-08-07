@@ -193,6 +193,9 @@ export function AiTutor({
         } else {
           setStreamText("");
           setError(event.error);
+          // An error event can arrive before meta (e.g. a serialization or
+          // preparation failure): keep the original body so 重试 still works.
+          setRetryBody((current) => current ?? body);
         }
       });
     } catch (cause) {

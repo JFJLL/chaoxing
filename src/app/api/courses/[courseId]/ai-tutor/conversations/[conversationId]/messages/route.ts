@@ -12,6 +12,7 @@ import {
   AiConversationError,
   completeTutorTurn,
   failTutorTurn,
+  isTutorTurnResend,
   prepareTutorTurn,
   registerTutorGeneration,
   unregisterTutorGeneration
@@ -65,9 +66,10 @@ export async function POST(request: Request, context: RouteContext) {
   const isRetryBody = typeof body === "object" && body !== null
     && "retryMessageId" in body
     && typeof (body as { retryMessageId?: unknown }).retryMessageId === "string";
+  const isResend = isRetryBody ? false : await isTutorTurnResend(conversationId, body);
   const requestLease = tutorRequestGuard.acquire(`${user.id}:${courseId}`);
   const preemptsConcurrentTurn = !requestLease.allowed
-    && isRetryBody
+    && (isRetryBody || isResend)
     && "reason" in requestLease
     && requestLease.reason === "concurrency";
   if (!requestLease.allowed && !preemptsConcurrentTurn) {
@@ -130,14 +132,16 @@ export async function POST(request: Request, context: RouteContext) {
       const send = (event: Parameters<typeof encodeAiStreamEvent>[0]) => {
         if (!closed) controller.enqueue(encoder.encode(encodeAiStreamEvent(event)));
       };
-      send({
-        type: "meta",
-        conversationId: turn.conversationId,
-        userMessageId: turn.userMessageId,
-        citations: turn.citations
-      });
 
       try {
+        // Meta is inside the try on purpose: a serialization failure must run
+        // failTutorTurn (releasing the generation lock), never leak it.
+        send({
+          type: "meta",
+          conversationId: turn.conversationId,
+          userMessageId: turn.userMessageId,
+          citations: turn.citations
+        });
         startWatchdog();
         const modelStream = await createTextCompletionStream({
           system: turn.system,

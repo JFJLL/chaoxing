@@ -129,10 +129,22 @@ export function selectTutorSources(query: string, sources: CourseKnowledgeSource
     .map((item) => item.source);
 }
 
+const TUTOR_RANK_TIMEOUT_MS = 5_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: () => T | Promise<T>) {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new DOMException("Timeout", "TimeoutError")), ms))
+  ]).catch(() => fallback());
+}
+
 async function rankTutorSources(query: string, sources: CourseKnowledgeSource[], needsAiRanking: boolean) {
   if (!needsAiRanking) return selectTutorSources(query, sources);
   try {
-    const ranked = await searchCourseKnowledge({ query, sources });
+    // Bound the LLM re-ranking: preparation must stay fast so the stream's
+    // meta event reaches the client quickly (a slow model must never cause a
+    // proxy timeout before any bytes are sent).
+    const ranked = await withTimeout(searchCourseKnowledge({ query, sources }), TUTOR_RANK_TIMEOUT_MS, () => []);
     if (ranked.length) return ranked;
   } catch {
     // Deterministic local scoring keeps the tutor usable when the ranking
@@ -207,7 +219,33 @@ export function resolveTutorUserTurn(existingMessages: StoredUserTurn[], body: T
 }
 
 function toCitation(source: CourseKnowledgeSource): AiCitation {
-  return aiCitationSchema.parse(source);
+  // Defensive bounds: a malformed source (e.g. an over-long import filename)
+  // must never break the stream or leak the generation lock via a failed meta.
+  return aiCitationSchema.parse({
+    ...source,
+    id: source.id.slice(0, 160),
+    type: source.type.slice(0, 40),
+    label: source.label.slice(0, 240),
+    snippet: source.snippet.slice(0, 2_000),
+    href: source.href.slice(0, 1_000)
+  });
+}
+
+/**
+ * True when the body is a plain message whose requestId already exists as a
+ * user message in this conversation (an idempotent resend of a turn whose
+ * stream the client never received). The route uses this to let such requests
+ * through the concurrency guard so they can preempt the previous turn.
+ */
+export async function isTutorTurnResend(conversationId: string, body: unknown) {
+  if (typeof body !== "object" || body === null || !("requestId" in body)) return false;
+  const requestId = (body as { requestId?: unknown }).requestId;
+  if (typeof requestId !== "string" || !requestId) return false;
+  const existing = await db.courseAiMessage.findFirst({
+    where: { id: requestId, conversationId, role: "USER" },
+    select: { id: true }
+  });
+  return existing !== null;
 }
 
 export async function createTutorConversation(user: SessionUser, courseId: string) {
@@ -377,13 +415,26 @@ export async function prepareTutorTurn(input: {
     }
   }), { courseId: input.courseId, userId: input.user.id });
 
+  // Load messages before acquiring the lease so we can tell whether this
+  // request is a retry / idempotent resend (same requestId as an existing user
+  // message) and preempt a still-running previous turn instead of failing with
+  // AI_CONVERSATION_BUSY. The route already aborts the previous in-flight
+  // stream when it registers this turn (see registerTutorGeneration).
+  const existingMessages = await db.courseAiMessage.findMany({
+    where: { conversationId: conversation.id },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: 101,
+    select: { id: true, role: true, content: true, createdAt: true }
+  });
   const generationToken = randomUUID();
   const isRetry = "retryMessageId" in parsed.data;
-  if (isRetry) {
-    // An explicit retry always takes over the previous turn: release the DB
-    // lease so the retry is never blocked by a stale "上一条回答仍在生成中"
-    // state. The route already aborts the previous in-flight stream when it
-    // registers this turn (see registerTutorGeneration).
+  const isIdempotentResend = !isRetry
+    && "requestId" in parsed.data
+    && existingMessages.some((message) => message.id === parsed.data.requestId && message.role === "USER");
+  if (isRetry || isIdempotentResend) {
+    // Release the DB lease so the retry is never blocked by a stale
+    // "上一条回答仍在生成中" state (e.g. after the client connection was cut
+    // while the server kept generating).
     await db.courseAiConversation.updateMany({
       where: { id: conversation.id, status: "GENERATING" },
       data: { status: "ACTIVE", generationToken: null }
@@ -404,12 +455,6 @@ export async function prepareTutorTurn(input: {
   }
 
   try {
-    const existingMessages = await db.courseAiMessage.findMany({
-      where: { conversationId: conversation.id },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take: 101,
-      select: { id: true, role: true, content: true, createdAt: true }
-    });
     if (input.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     if (existingMessages.length > 100) {
       throw new AiConversationError("AI_CONVERSATION_LIMIT_REACHED", "当前对话已达到消息上限，请新建对话", 409);
