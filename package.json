@@ -19,12 +19,12 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "backfill:knowledge": "tsx scripts/backfillKnowledgeIndex.ts"
+    "backfill:knowledge": "vitest run --config vitest.backfill.config.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3": "^12.4.1",
     "clsx": "^2.1.1",
     "docx": "^9.7.1",
     "jszip": "^3.10.1",

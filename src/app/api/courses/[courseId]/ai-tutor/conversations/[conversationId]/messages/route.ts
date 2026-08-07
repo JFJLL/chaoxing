@@ -34,9 +34,11 @@ const STREAM_WATCHDOG_INTERVAL_MS = 5_000;
 
 function jsonError(error: unknown) {
   if (error instanceof AiConversationError) {
+    console.error(`[ai-tutor] 回合准备失败 ${error.code}`, error.message);
     return Response.json({ code: error.code, error: error.message }, { status: error.status });
   }
   const safe = toSafeAiError(error);
+  console.error(`[ai-tutor] 回合准备异常 ${safe.code}`, safe.message);
   const status = safe.code === "MODEL_RATE_LIMITED" ? 429
     : safe.code === "MODEL_TIMEOUT" ? 504
       : safe.code === "MODEL_NOT_CONFIGURED" ? 503
@@ -96,6 +98,7 @@ export async function POST(request: Request, context: RouteContext) {
   } catch (error) {
     unregisterTutorGeneration(conversationId, abortController);
     release();
+    console.error(`[ai-tutor] 消息路由异常 ${conversationId}`, error);
     return jsonError(error);
   }
 
@@ -173,12 +176,16 @@ export async function POST(request: Request, context: RouteContext) {
       } catch (error) {
         await failTutorTurn(user.id, turn.conversationId, turn.generationToken);
         if (timedOut) {
+          console.error(`[ai-tutor] 流式响应超时 ${turn.conversationId}`);
           send({ type: "error", code: "MODEL_TIMEOUT", error: "AI 服务响应超时，请重试" });
         } else if (!abortController.signal.aborted) {
           const safe = error instanceof AiConversationError
             ? { code: error.code, message: error.message }
             : toSafeAiError(error);
+          console.error(`[ai-tutor] 流式响应失败 ${turn.conversationId} ${safe.code}`, safe.message);
           send({ type: "error", code: safe.code, error: safe.message });
+        } else {
+          console.error(`[ai-tutor] 流被中止 ${turn.conversationId}`, error instanceof Error ? error.message : error);
         }
       } finally {
         stopWatchdog();
