@@ -80,6 +80,7 @@ export function AiTutor({
   async function newConversation() {
     if (streaming) return;
     setError(null);
+    setDraft("");
     try {
       await createConversation();
     } catch (cause) {
@@ -170,7 +171,6 @@ export function AiTutor({
           retryForTurn = { retryMessageId: event.userMessageId };
           setStreamCitations(event.citations);
           setRetryBody(retryForTurn);
-          if ("message" in body) setDraft("");
           if (optimisticId) {
             updateConversation(conversationId, (item) => ({
               ...item,
@@ -217,7 +217,12 @@ export function AiTutor({
 
   const submit = () => {
     const message = draft.trim();
-    if (message) void send({ message, requestId: crypto.randomUUID() });
+    if (message) {
+      // Clear the input as soon as the message is handed to the server so sent
+      // text never lingers in the box; failures surface a retry button instead.
+      setDraft("");
+      void send({ message, requestId: crypto.randomUUID() });
+    }
   };
 
   const displayedMessages = selected?.messages ?? [];
@@ -232,7 +237,7 @@ export function AiTutor({
           <div role="group" aria-label="历史对话" className="cx-hide-scrollbar mt-3 flex gap-2 overflow-x-auto lg:mt-4 lg:block lg:space-y-2 lg:overflow-visible">
             {conversations.map((conversation) => (
               <div key={conversation.id} className={`flex w-48 shrink-0 items-center rounded-xl border lg:w-full ${selectedId === conversation.id ? "border-indigo-100 bg-white shadow-sm" : "border-transparent hover:border-slate-200 hover:bg-white/70"}`}>
-                <button type="button" aria-pressed={selectedId === conversation.id} onClick={() => !streaming && setSelectedId(conversation.id)} className={`cx-focus-ring min-w-0 flex-1 rounded-xl px-3 py-3 text-left text-sm ${selectedId === conversation.id ? "font-medium text-[var(--cx-blue)]" : "text-slate-600"}`}>
+                <button type="button" aria-pressed={selectedId === conversation.id} onClick={() => { if (!streaming) { setSelectedId(conversation.id); setDraft(""); } }} className={`cx-focus-ring min-w-0 flex-1 rounded-xl px-3 py-3 text-left text-sm ${selectedId === conversation.id ? "font-medium text-[var(--cx-blue)]" : "text-slate-600"}`}>
                   <span className="line-clamp-1">{conversation.title || "课程问答"}</span>
                   <span className="mt-1 block text-xs font-normal text-slate-400">{conversation.messages.length} 条消息</span>
                 </button>

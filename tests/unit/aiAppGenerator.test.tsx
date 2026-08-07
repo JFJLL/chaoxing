@@ -189,6 +189,26 @@ describe("AI artifact status presentation", () => {
     expect(markup).not.toContain("模板");
   });
 
+  it("removes the legacy content scope and leads with 资料与章节来源 for question generation", () => {
+    const markup = render(baseArtifact);
+    expect(markup).not.toContain("内容范围");
+    expect(markup).not.toContain(">难度<");
+    expect(markup).toContain("资料与章节来源");
+    expect(markup.indexOf("资料与章节来源")).toBeLessThan(markup.indexOf(">题型<"));
+  });
+
+  it("keeps the content scope for paper assembly", () => {
+    const markup = render({ ...baseArtifact, appType: "paper_assembly" }, {
+      ...app,
+      key: "ai-paper-assembly",
+      appType: "paper_assembly",
+      title: "AI 组卷",
+      description: "组卷"
+    });
+    expect(markup).toContain("内容范围");
+    expect(markup).toContain(">难度<");
+  });
+
   it("keeps legacy HTML courseware read-only and stops new generation", () => {
     const htmlApp = {
       ...app,
