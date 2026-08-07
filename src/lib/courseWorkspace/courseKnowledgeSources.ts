@@ -196,12 +196,30 @@ export type DriveKnowledgeFile = { id: string; name: string };
 
 type TextCompletion = (input: { system: string; user: string; model?: string }) => Promise<string | null>;
 
+// In-memory translation cache: the same Chinese question is translated once
+// per process; repeated questions skip the model call entirely (bounded, so a
+// transient model hiccup cannot poison the cache permanently).
+const translationCache = new Map<string, string[]>();
+const TRANSLATION_CACHE_MAX = 200;
+
+function cacheTranslatedTerms(query: string, terms: string[]) {
+  if (!terms.length) return;
+  translationCache.set(query, terms);
+  if (translationCache.size > TRANSLATION_CACHE_MAX) {
+    const oldest = translationCache.keys().next().value;
+    if (oldest !== undefined) translationCache.delete(oldest);
+  }
+}
+
 function parseEnglishTerms(output: string) {
-  return output
-    .split(/\s+/)
-    .map((term) => term.replace(/[^\p{L}\p{N}'-]/gu, ""))
+  const terms = output
+    .split(/[,，;；、]+/)
+    .map((term) => term.replace(/[^\p{L}\p{N}'-]/gu, " ").trim().replace(/\s+/g, " "))
     .filter((term) => term.length >= 2 && term.length <= 60)
-    .slice(0, 6);
+    // Keep short multi-word phrases (e.g. "marketing orientations") together:
+    // they are far more precise than single generic words like "marketing".
+    .map((term) => term.split(/\s+/).filter(Boolean).slice(0, 4).join(" "));
+  return [...new Set(terms.filter((term) => term.length >= 2 && term.length <= 60))].slice(0, 6);
 }
 
 function queryLatinTerms(query: string) {
@@ -227,17 +245,23 @@ function queryChineseBigrams(query: string) {
  * are used instead.
  */
 async function translateQueryToEnglishTerms(query: string, complete: TextCompletion) {
+  const cached = translationCache.get(query);
+  if (cached) return cached;
   try {
     // Bound the translation so source preparation stays fast: the FTS fallback
     // terms (query Latin words + CJK bigrams) are used when the model is slow.
+    const value = Number(process.env.AI_TUTOR_TRANSLATE_TIMEOUT_MS);
+    const translateTimeoutMs = Number.isFinite(value) && value > 0 ? value : 20_000;
     const output = await Promise.race([
       complete({
-        system: "你是教科书检索翻译器。只输出英文核心术语，用空格分隔，不要输出任何解释、编号或标点。",
-        user: `提取以下中文问题的3个英文核心教科书术语，用空格分隔：${query}`
+        system: "你是教科书检索翻译器。只输出英文核心教科书术语，不要输出任何解释、编号或标点。",
+        user: `提取以下中文问题的3个英文核心教科书术语（每个术语1-3个单词，直接输出术语本身，用逗号分隔）：${query}`
       }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3_000))
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), translateTimeoutMs))
     ]);
-    return parseEnglishTerms(output ?? "");
+    const terms = parseEnglishTerms(output ?? "");
+    cacheTranslatedTerms(query, terms);
+    return terms;
   } catch {
     return [];
   }

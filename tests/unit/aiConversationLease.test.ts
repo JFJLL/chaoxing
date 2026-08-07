@@ -8,7 +8,8 @@ const mocks = vi.hoisted(() => ({
   updateMany: vi.fn(),
   buildCourseKnowledgeSources: vi.fn(),
   searchDriveKnowledgeSources: vi.fn(),
-  resolveCourseConversationFiles: vi.fn()
+  resolveCourseConversationFiles: vi.fn(),
+  searchCourseKnowledge: vi.fn()
 }));
 
 vi.mock("@/lib/db", () => {
@@ -36,6 +37,9 @@ vi.mock("@/lib/copilot/files", () => ({
   assertCourseCopilotReferences: vi.fn(),
   listCourseCopilotFiles: vi.fn(),
   resolveCourseConversationFiles: mocks.resolveCourseConversationFiles
+}));
+vi.mock("@/lib/courseWorkspace/searchCourseKnowledge", () => ({
+  searchCourseKnowledge: mocks.searchCourseKnowledge
 }));
 
 import {
@@ -73,6 +77,7 @@ beforeEach(() => {
   mocks.buildCourseKnowledgeSources.mockResolvedValue([]);
   mocks.searchDriveKnowledgeSources.mockResolvedValue([]);
   mocks.resolveCourseConversationFiles.mockResolvedValue([]);
+  mocks.searchCourseKnowledge.mockResolvedValue([]);
 });
 
 describe("AI tutor generation lease", () => {
@@ -191,6 +196,68 @@ describe("AI tutor generation lease", () => {
 
     expect(turn.citations[0]?.label.length).toBe(240);
     expect(turn.citations[0]?.snippet.length).toBe(2_000);
+  });
+
+  it("keeps FTS drive hits when the LLM ranking is unavailable and the query cannot score English snippets", async () => {
+    mocks.searchDriveKnowledgeSources.mockResolvedValue([
+      {
+        id: "drive:file-1:34:1",
+        type: "drive",
+        label: "Principles of Marketing（第 34 页）",
+        snippet: "Marketing orientations guide marketing strategy.",
+        href: "/api/drive/file-1?preview=1"
+      }
+    ]);
+
+    const turn = await prepareTutorTurn({
+      user,
+      courseId: "course-1",
+      conversationId: "conversation-1",
+      body: { message: "请梳理市场营销的营销理念", requestId: "123e4567-e89b-12d3-a456-426614174000" }
+    });
+
+    expect(turn.citations.some((citation) => citation.id === "drive:file-1:34:1")).toBe(true);
+  });
+
+  it("merges top FTS drive hits even when the LLM ranking vetoes them in favor of course materials", async () => {
+    mocks.searchDriveKnowledgeSources.mockResolvedValue([
+      {
+        id: "drive:file-1:34:1",
+        type: "drive",
+        label: "Principles of Marketing（第 34 页）",
+        snippet: "Marketing orientations guide marketing strategy.",
+        href: "/api/drive/file-1?preview=1"
+      }
+    ]);
+    mocks.buildCourseKnowledgeSources.mockResolvedValue([
+      {
+        id: "chapter:1:1",
+        type: "chapter",
+        label: "第一章 营销理念",
+        snippet: "中文课程资料里的营销理念内容",
+        href: "/space/courses/course-1/structure"
+      }
+    ]);
+    mocks.searchCourseKnowledge.mockResolvedValue([
+      {
+        id: "chapter:1:1",
+        type: "chapter",
+        label: "第一章 营销理念",
+        snippet: "中文课程资料里的营销理念内容",
+        href: "/space/courses/course-1/structure"
+      }
+    ]);
+
+    const turn = await prepareTutorTurn({
+      user,
+      courseId: "course-1",
+      conversationId: "conversation-1",
+      body: { message: "请梳理市场营销的营销理念", requestId: "123e4567-e89b-12d3-a456-426614174000" }
+    });
+
+    const ids = turn.citations.map((citation) => citation.id);
+    expect(ids).toContain("chapter:1:1");
+    expect(ids).toContain("drive:file-1:34:1");
   });
 
   it("aborts the previous in-flight generation when a retry registers", () => {

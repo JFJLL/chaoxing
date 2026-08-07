@@ -262,6 +262,26 @@ describe("searchDriveKnowledgeSources (FTS5 full-file retrieval)", () => {
     expect(sources[0]?.label).toBe("教材.pdf");
   });
 
+  it("keeps comma-separated multi-word terms as precise FTS phrases", async () => {
+    const complete = vi.fn().mockResolvedValue("Marketing, Marketing Philosophies, Marketing Orientations");
+    const search = vi.fn().mockReturnValue([{ fileId: "drive-1", page: 34, content: "marketing orientations" }]);
+
+    const sources = await searchDriveKnowledgeSources({
+      files: [{ id: "drive-1", name: "教材.pdf" }],
+      query: "请梳理市场营销的营销理念",
+      complete,
+      search
+    });
+
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({
+      match: expect.stringContaining('"Marketing Philosophies"')
+    }));
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({
+      match: expect.stringContaining('"Marketing Orientations"')
+    }));
+    expect(sources).toHaveLength(1);
+  });
+
   it("returns no sources when no files are attached", async () => {
     const search = vi.fn();
     const sources = await searchDriveKnowledgeSources({ files: [], query: "任何问题", search });

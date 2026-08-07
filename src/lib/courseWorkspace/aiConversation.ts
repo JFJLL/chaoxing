@@ -129,8 +129,6 @@ export function selectTutorSources(query: string, sources: CourseKnowledgeSource
     .map((item) => item.source);
 }
 
-const TUTOR_RANK_TIMEOUT_MS = 5_000;
-
 function withTimeout<T>(promise: Promise<T>, ms: number, fallback: () => T | Promise<T>) {
   return Promise.race([
     promise,
@@ -140,17 +138,43 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: () => T | Pro
 
 async function rankTutorSources(query: string, sources: CourseKnowledgeSource[], needsAiRanking: boolean) {
   if (!needsAiRanking) return selectTutorSources(query, sources);
+  const drive = sources.filter((source) => source.type === "drive");
+  let ranked: CourseKnowledgeSource[] = [];
   try {
     // Bound the LLM re-ranking: preparation must stay fast so the stream's
     // meta event reaches the client quickly (a slow model must never cause a
     // proxy timeout before any bytes are sent).
-    const ranked = await withTimeout(searchCourseKnowledge({ query, sources }), TUTOR_RANK_TIMEOUT_MS, () => []);
-    if (ranked.length) return ranked;
+    const value = Number(process.env.AI_TUTOR_RANK_TIMEOUT_MS);
+    const rankTimeoutMs = Number.isFinite(value) && value > 0 ? value : 8_000;
+    ranked = await withTimeout(searchCourseKnowledge({ query, sources }), rankTimeoutMs, () => []);
   } catch {
     // Deterministic local scoring keeps the tutor usable when the ranking
     // model is unavailable or misconfigured.
   }
-  return selectTutorSources(query, sources);
+  // The FTS drive hits are the retrieval ground truth for the (possibly
+  // translated) query: never let the LLM re-ranking veto them entirely, since
+  // it may prefer Chinese course materials over the attached English textbook.
+  const merged = [...ranked, ...drive.slice(0, 6)];
+  const seen = new Set<string>();
+  const selected: CourseKnowledgeSource[] = [];
+  for (const source of merged) {
+    if (seen.has(source.id)) continue;
+    seen.add(source.id);
+    selected.push(source);
+    if (selected.length >= 12) break;
+  }
+  if (selected.length) return selected;
+  return fallbackTutorSources(query, sources);
+}
+
+function fallbackTutorSources(query: string, sources: CourseKnowledgeSource[]) {
+  // FTS drive hits are relevance-ranked by the full-text index (and matched
+  // via the translated English terms), so they must survive the local fallback
+  // even though a Chinese query cannot score English snippets by substring.
+  const drive = sources.filter((source) => source.type === "drive").slice(0, 8);
+  const others = selectTutorSources(query, sources.filter((source) => source.type !== "drive"), 8);
+  const seen = new Set(drive.map((source) => source.id));
+  return [...drive, ...others.filter((source) => !seen.has(source.id))].slice(0, 12);
 }
 
 export function buildTutorSystemPrompt(sources: CourseKnowledgeSource[]) {
