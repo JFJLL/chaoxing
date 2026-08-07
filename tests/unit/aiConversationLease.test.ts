@@ -2,9 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findConversation: vi.fn(),
+  findMessages: vi.fn(),
   createMessage: vi.fn(),
   updateConversation: vi.fn(),
-  updateMany: vi.fn()
+  updateMany: vi.fn(),
+  buildCourseKnowledgeSources: vi.fn(),
+  searchDriveKnowledgeSources: vi.fn(),
+  resolveCourseConversationFiles: vi.fn()
 }));
 
 vi.mock("@/lib/db", () => {
@@ -17,21 +21,46 @@ vi.mock("@/lib/db", () => {
   };
   return {
     db: {
-      courseAiConversation: { updateMany: mocks.updateMany },
+      courseAiConversation: { findUnique: mocks.findConversation, updateMany: mocks.updateMany },
+      courseAiMessage: { findMany: mocks.findMessages },
       $transaction: vi.fn(async (run: (client: typeof tx) => unknown) => run(tx))
     }
   };
 });
 vi.mock("@/lib/permissions", () => ({ requireCourseAccess: vi.fn() }));
-vi.mock("@/lib/courseWorkspace/courseKnowledgeSources", () => ({ buildCourseKnowledgeSources: vi.fn() }));
+vi.mock("@/lib/courseWorkspace/courseKnowledgeSources", () => ({
+  buildCourseKnowledgeSources: mocks.buildCourseKnowledgeSources,
+  searchDriveKnowledgeSources: mocks.searchDriveKnowledgeSources
+}));
+vi.mock("@/lib/copilot/files", () => ({
+  assertCourseCopilotReferences: vi.fn(),
+  listCourseCopilotFiles: vi.fn(),
+  resolveCourseConversationFiles: mocks.resolveCourseConversationFiles
+}));
 
-import { completeTutorTurn, failTutorTurn } from "../../src/lib/courseWorkspace/aiConversation";
+import {
+  abortTutorGeneration,
+  completeTutorTurn,
+  failTutorTurn,
+  prepareTutorTurn,
+  registerTutorGeneration,
+  unregisterTutorGeneration
+} from "../../src/lib/courseWorkspace/aiConversation";
+
+const user = { id: "user-1", name: "测试", role: "TEACHER" as const, institutionId: "institution-1" };
+
+function conversation() {
+  return { id: "conversation-1", courseId: "course-1", userId: "user-1", kind: "TUTOR", attachments: [] };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.findConversation.mockImplementation(async ({ where }: { where: { generationToken: string } }) => (
-    where.generationToken === "new-token" ? { id: "conversation-1" } : null
+  mocks.findConversation.mockImplementation(async ({ where }: { where: { generationToken?: string } }) => (
+    where.generationToken === "new-token" ? { id: "conversation-1" }
+      : where.generationToken ? null
+        : conversation()
   ));
+  mocks.findMessages.mockResolvedValue([]);
   mocks.createMessage.mockResolvedValue({
     id: "assistant-1",
     role: "ASSISTANT",
@@ -40,7 +69,10 @@ beforeEach(() => {
     createdAt: new Date("2026-07-13T00:00:00.000Z")
   });
   mocks.updateConversation.mockResolvedValue({});
-  mocks.updateMany.mockResolvedValue({ count: 0 });
+  mocks.updateMany.mockResolvedValue({ count: 1 });
+  mocks.buildCourseKnowledgeSources.mockResolvedValue([]);
+  mocks.searchDriveKnowledgeSources.mockResolvedValue([]);
+  mocks.resolveCourseConversationFiles.mockResolvedValue([]);
 });
 
 describe("AI tutor generation lease", () => {
@@ -72,5 +104,60 @@ describe("AI tutor generation lease", () => {
       },
       data: { status: "ACTIVE", generationToken: null }
     });
+  });
+
+  it("releases the lease when preparation fails after the lock was acquired", async () => {
+    mocks.searchDriveKnowledgeSources.mockRejectedValue(new Error("来源解析失败"));
+
+    await expect(prepareTutorTurn({
+      user,
+      courseId: "course-1",
+      conversationId: "conversation-1",
+      body: { message: "问题", requestId: "123e4567-e89b-12d3-a456-426614174000" }
+    })).rejects.toThrow("来源解析失败");
+
+    const resetCall = mocks.updateMany.mock.calls.find((call) =>
+      call[0]?.data?.status === "ACTIVE" && call[0]?.data?.generationToken === null
+    );
+    expect(resetCall).toBeTruthy();
+  });
+
+  it("preempts a conversation still marked GENERATING when the client retries", async () => {
+    mocks.findMessages.mockResolvedValue([{ id: "user-1", role: "USER", content: "问题", createdAt: new Date() }]);
+    const calls: Array<{ where?: object; data?: object }> = [];
+    mocks.updateMany.mockImplementation(async (args: { where?: object; data?: object }) => {
+      calls.push(args);
+      return { count: 1 };
+    });
+
+    await expect(prepareTutorTurn({
+      user,
+      courseId: "course-1",
+      conversationId: "conversation-1",
+      body: { retryMessageId: "user-1" }
+    })).resolves.toMatchObject({ conversationId: "conversation-1" });
+
+    // The first write releases the stale lock; the second acquires a fresh lease.
+    expect(calls[0]).toMatchObject({
+      where: { id: "conversation-1", status: "GENERATING" },
+      data: { status: "ACTIVE", generationToken: null }
+    });
+    expect(calls[1]?.data).toMatchObject({ status: "GENERATING" });
+  });
+
+  it("aborts the previous in-flight generation when a retry registers", () => {
+    const first = new AbortController();
+    const second = new AbortController();
+    registerTutorGeneration("conversation-1", first);
+    registerTutorGeneration("conversation-1", second);
+
+    expect(first.signal.aborted).toBe(true);
+    expect(second.signal.aborted).toBe(false);
+
+    abortTutorGeneration("conversation-1");
+    expect(second.signal.aborted).toBe(true);
+
+    unregisterTutorGeneration("conversation-1", second);
+    expect(() => abortTutorGeneration("conversation-1")).not.toThrow();
   });
 });

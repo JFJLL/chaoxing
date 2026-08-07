@@ -38,6 +38,28 @@ const tutorReferencesSchema = z.object({
   }).strict())
 }).strict();
 
+/**
+ * In-flight model streams per conversation (single-process deployment). Lets
+ * an explicit retry abort the previous turn instead of being blocked by a
+ * generation that is still running after the client already gave up on it.
+ */
+const tutorGenerationAborts = new Map<string, AbortController>();
+
+export function registerTutorGeneration(conversationId: string, controller: AbortController) {
+  tutorGenerationAborts.get(conversationId)?.abort();
+  tutorGenerationAborts.set(conversationId, controller);
+}
+
+export function abortTutorGeneration(conversationId: string) {
+  tutorGenerationAborts.get(conversationId)?.abort();
+}
+
+export function unregisterTutorGeneration(conversationId: string, controller: AbortController) {
+  if (tutorGenerationAborts.get(conversationId) === controller) {
+    tutorGenerationAborts.delete(conversationId);
+  }
+}
+
 export class AiConversationError extends Error {
   constructor(
     public readonly code: string,
@@ -337,6 +359,7 @@ export async function prepareTutorTurn(input: {
   courseId: string;
   conversationId: string;
   body: unknown;
+  signal?: AbortSignal;
 }) {
   await requireTutorCourseAccess(input.user, input.courseId);
   const parsed = tutorTurnSchema.safeParse(input.body);
@@ -355,6 +378,17 @@ export async function prepareTutorTurn(input: {
   }), { courseId: input.courseId, userId: input.user.id });
 
   const generationToken = randomUUID();
+  const isRetry = "retryMessageId" in parsed.data;
+  if (isRetry) {
+    // An explicit retry always takes over the previous turn: release the DB
+    // lease so the retry is never blocked by a stale "上一条回答仍在生成中"
+    // state. The route already aborts the previous in-flight stream when it
+    // registers this turn (see registerTutorGeneration).
+    await db.courseAiConversation.updateMany({
+      where: { id: conversation.id, status: "GENERATING" },
+      data: { status: "ACTIVE", generationToken: null }
+    });
+  }
   const acquired = await db.courseAiConversation.updateMany({
     where: {
       id: conversation.id,
@@ -376,6 +410,7 @@ export async function prepareTutorTurn(input: {
       take: 101,
       select: { id: true, role: true, content: true, createdAt: true }
     });
+    if (input.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     if (existingMessages.length > 100) {
       throw new AiConversationError("AI_CONVERSATION_LIMIT_REACHED", "当前对话已达到消息上限，请新建对话", 409);
     }
@@ -401,6 +436,7 @@ export async function prepareTutorTurn(input: {
       files: driveFiles,
       query: userMessage.content
     });
+    if (input.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const selectedSources = await rankTutorSources(
       userMessage.content,
       [...driveSources, ...sources],

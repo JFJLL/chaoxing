@@ -24,7 +24,7 @@ vi.mock("@/lib/courseWorkspace/aiConversation", async (importOriginal) => {
 });
 
 import { AiConversationError } from "../../src/lib/courseWorkspace/aiConversation";
-import { resetAiTutorRequestGuard } from "../../src/lib/ai/tutorRequestGuard";
+import { resetAiTutorRequestGuard, tutorRequestGuard } from "../../src/lib/ai/tutorRequestGuard";
 import { POST } from "../../src/app/api/courses/[courseId]/ai-tutor/conversations/[conversationId]/messages/route";
 
 const context = { params: Promise.resolve({ courseId: "course-1", conversationId: "conversation-1" }) };
@@ -118,6 +118,37 @@ describe("AI tutor message route", () => {
       { type: "error", code: "MODEL_NOT_CONFIGURED", error: "AI 模型尚未配置，请联系管理员" }
     ]);
     expect(mocks.completeTutorTurn).not.toHaveBeenCalled();
+  });
+
+  it("lets an explicit retry through the concurrency guard so it can preempt the previous turn", async () => {
+    const held = tutorRequestGuard.acquire("user-1:course-1");
+    expect(held.allowed).toBe(true);
+    mocks.createTextCompletionStream.mockResolvedValue(chunks("重试", "回答"));
+
+    const response = await POST(new Request("http://localhost", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ retryMessageId: "user-message-1" })
+    }), context);
+
+    expect(response.status).toBe(200);
+    const events: AiStreamEvent[] = [];
+    await readAiStream(response, (event) => events.push(event));
+    expect(events.map((event) => event.type)).toEqual(["meta", "delta", "delta", "done"]);
+    expect(mocks.prepareTutorTurn).toHaveBeenCalled();
+  });
+
+  it("still rate-limits a brand-new message while another turn is generating", async () => {
+    tutorRequestGuard.acquire("user-1:course-1");
+
+    const response = await POST(new Request("http://localhost", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "新问题" })
+    }), context);
+
+    expect(response.status).toBe(429);
+    expect(mocks.prepareTutorTurn).not.toHaveBeenCalled();
   });
 
   it("rejects inaccessible conversation IDs before opening a stream", async () => {
