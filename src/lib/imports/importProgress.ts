@@ -28,6 +28,23 @@ export type ImportPollingJob = {
   reviewReady: boolean;
 };
 
+export function isImportReviewReady(input: {
+  status: string;
+  hasOutline: boolean;
+  hasKnowledgeMap: boolean;
+  batchStatus?: string | null;
+}) {
+  if (input.status !== "READY_FOR_REVIEW") return true;
+  if (input.batchStatus === "FAILED") return true;
+  // A failed batch is also terminal for polling. The review page needs one
+  // final refresh so it can show the batch-level failure and retry guidance.
+  const batchReady =
+      !input.batchStatus ||
+      input.batchStatus === "READY_FOR_REVIEW" ||
+      input.batchStatus === "APPLIED";
+  return batchReady && input.hasOutline && input.hasKnowledgeMap;
+}
+
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }

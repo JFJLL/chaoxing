@@ -17,7 +17,10 @@ vi.mock("@/lib/imports/importQueue", () => ({
   getImportQueueSnapshot: () => ({ activeWorkers: 0, pendingJobs: [] }),
   recoverImportJobFromDatabase: mocks.recoverJob
 }));
-vi.mock("@/lib/imports/importProgress", () => ({ getJobsAhead: mocks.getJobsAhead }));
+vi.mock("@/lib/imports/importProgress", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/lib/imports/importProgress")>()),
+  getJobsAhead: mocks.getJobsAhead
+}));
 vi.mock("@/lib/db", () => ({
   db: {
     documentImportJob: { findUnique: mocks.findUnique, update: mocks.updateJob }
@@ -48,6 +51,7 @@ describe("GET /api/ai-import/:jobId", () => {
         currentStage: "等待教师确认",
         errorMessage: null,
         generatedOutline: "{\"chapters\":[]}",
+        batch: { status: "READY_FOR_REVIEW" },
         knowledgeMaps: [{ id: "map-1" }],
         extractedText: "不应返回的大段文档内容"
       });
@@ -68,6 +72,25 @@ describe("GET /api/ai-import/:jobId", () => {
     });
     expect(mocks.recoverJob).toHaveBeenCalledWith("job-1", "course-1");
     expect(JSON.stringify(body)).not.toContain("不应返回的大段文档内容");
+  });
+
+  it("keeps polling while the document map is ready but the batch is still combining", async () => {
+    mocks.findUnique
+      .mockResolvedValueOnce({ id: "job-1", courseId: "course-1" })
+      .mockResolvedValueOnce({
+        id: "job-1",
+        status: "READY_FOR_REVIEW",
+        currentStage: "等待教师确认",
+        errorMessage: null,
+        generatedOutline: "{\"chapters\":[]}",
+        batch: { status: "COMBINING" },
+        knowledgeMaps: [{ id: "map-1" }]
+      });
+
+    const response = await GET(new Request("http://localhost/api/ai-import/job-1") as never, context);
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.job.reviewReady).toBe(false);
   });
 });
 

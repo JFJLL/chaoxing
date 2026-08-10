@@ -5,6 +5,7 @@ import {
   getJobsAhead,
   getNextPollDelay,
   parseImportJobResponse,
+  isImportReviewReady,
   getQueueLabel,
   getUploadButtonLabel,
   isImportTerminal
@@ -71,6 +72,13 @@ describe("import progress", () => {
     expect(getNextPollDelay("READY_FOR_REVIEW")).toBeNull();
     expect(getNextPollDelay("READY_FOR_REVIEW", false)).toBe(500);
     expect(getNextPollDelay("FAILED")).toBeNull();
+  });
+
+  it("does not mark a document ready while its multi-document batch is combining", () => {
+    expect(isImportReviewReady({ status: "READY_FOR_REVIEW", hasOutline: true, hasKnowledgeMap: true, batchStatus: "COMBINING" })).toBe(false);
+    expect(isImportReviewReady({ status: "READY_FOR_REVIEW", hasOutline: true, hasKnowledgeMap: true, batchStatus: "READY_FOR_REVIEW" })).toBe(true);
+    expect(isImportReviewReady({ status: "READY_FOR_REVIEW", hasOutline: false, hasKnowledgeMap: false, batchStatus: "FAILED" })).toBe(true);
+    expect(isImportReviewReady({ status: "APPLIED", hasOutline: false, hasKnowledgeMap: false, batchStatus: "COMBINING" })).toBe(true);
   });
 
   it("shows whether an upload is being submitted", () => {

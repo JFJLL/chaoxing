@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseManager } from "@/lib/permissions";
@@ -49,6 +50,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       expectedOutlineVersion: Number(body.expectedOutlineVersion),
       expectedBatchVersion: Number(body.expectedBatchVersion)
     });
+    revalidatePath(`/space/courses/${job.courseId}/ai-workbench/content`, "page");
+    revalidatePath(`/space/courses/${job.courseId}/builder`, "page");
+    revalidatePath(`/space/courses/${job.courseId}/knowledge-map`, "page");
     return NextResponse.json({ ok: true, outlineVersion: result.outlineVersion });
   } catch (error) {
     if (error instanceof ImportBatchSaveError) {

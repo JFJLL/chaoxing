@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { revalidatePath } from "next/cache";
 import { extractText, type ExtractedDocument } from "@/lib/document/extractText";
 import { PdfHasNoTextLayerError } from "@/lib/document/extractPdf";
 import { indexKnowledgeDocument } from "@/lib/document/knowledgeDb";
@@ -114,6 +115,10 @@ export async function runImportJob(jobId: string) {
       ...(knowledgeIndexWarning ? { warning: knowledgeIndexWarning } : { warning: null }),
       finishedAt: new Date()
     });
+    // Revalidate after the job reaches READY_FOR_REVIEW so the refreshed page
+    // observes both the generated map and the terminal job status together.
+    safeRevalidatePath(`/space/courses/${job.courseId}/knowledge-map`);
+    safeRevalidatePath(`/space/courses/${job.courseId}/ai-workbench/content`);
     if (job.batchId) await finalizeImportBatch(job.batchId);
   } catch (error) {
     if (error instanceof ImportJobDeletedError) return;
@@ -126,6 +131,9 @@ export async function runImportJob(jobId: string) {
         errorMessage: error instanceof Error ? error.message : "导入任务失败"
       }
     });
+    safeRevalidatePath(`/space/courses/${job.courseId}/knowledge-map`);
+    safeRevalidatePath(`/space/courses/${job.courseId}/ai-workbench/content`);
+    safeRevalidatePath(`/space/courses/${job.courseId}/builder`);
     if (job.batchId) {
       await db.documentImportBatch.updateMany({
         where: { id: job.batchId, status: { notIn: ["APPLIED", "READY_FOR_REVIEW"] } },
@@ -133,5 +141,14 @@ export async function runImportJob(jobId: string) {
       });
     }
     throw error;
+  }
+}
+
+function safeRevalidatePath(path: string) {
+  try {
+    revalidatePath(path, "page");
+  } catch {
+    // Queue workers can run outside a Next request/static-generation context.
+    // The client polling path still refreshes the page when the job is ready.
   }
 }

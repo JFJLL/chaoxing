@@ -4,7 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseManager } from "@/lib/permissions";
 import { getImportQueueSnapshot, recoverImportJobFromDatabase } from "@/lib/imports/importQueue";
-import { getJobsAhead } from "@/lib/imports/importProgress";
+import { getJobsAhead, isImportReviewReady } from "@/lib/imports/importProgress";
 
 type RouteContext = {
   params: Promise<{ jobId: string }>;
@@ -35,7 +35,13 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       currentStage: true,
       errorMessage: true,
       generatedOutline: true,
-      knowledgeMaps: { select: { id: true }, take: 1 }
+      batch: { select: { status: true } },
+      knowledgeMaps: {
+        where: { status: "PUBLISHED", deletedAt: null },
+        orderBy: [{ version: "desc" }, { publishedAt: "desc" }],
+        select: { id: true },
+        take: 1
+      }
     }
   });
   if (!job) {
@@ -50,7 +56,12 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       status: job.status,
       currentStage: job.currentStage,
       errorMessage: job.errorMessage,
-      reviewReady: job.status !== "READY_FOR_REVIEW" || Boolean(job.generatedOutline && job.knowledgeMaps.length),
+      reviewReady: isImportReviewReady({
+        status: job.status,
+        hasOutline: Boolean(job.generatedOutline),
+        hasKnowledgeMap: job.knowledgeMaps.length > 0,
+        batchStatus: job.batch?.status
+      }),
       jobsAhead: job.status === "QUEUED" ? getJobsAhead(snapshot.activeWorkers, queueIndex) : null
     }
   });

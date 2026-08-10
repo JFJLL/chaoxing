@@ -8,6 +8,7 @@ import { ImportJobManager } from "@/components/ai-import/ImportJobManager";
 import type { CourseDirectoryNode, GeneratedCourseOutline } from "@/types/course";
 import { mapImportedOutlineToCourse } from "@/lib/imports/mapImportedOutlineToCourse";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
+import { isImportReviewReady } from "@/lib/imports/importProgress";
 
 type PageProps = {
   params: Promise<{ courseId: string; jobId: string }>;
@@ -35,6 +36,7 @@ export default async function AiImportReviewPage({ params }: PageProps) {
         }
       },
       knowledgeMaps: {
+        where: { status: "PUBLISHED", deletedAt: null },
         orderBy: { updatedAt: "desc" },
         include: { nodes: true, edges: true }
       }
@@ -45,6 +47,12 @@ export default async function AiImportReviewPage({ params }: PageProps) {
   const storedOutline = job.batch ? job.batch.generatedOutline : job.generatedOutline;
   const outline = storedOutline ? (JSON.parse(storedOutline) as GeneratedCourseOutline) : null;
   const latestMap = job.knowledgeMaps[0];
+  const reviewReady = isImportReviewReady({
+    status: job.status,
+    hasOutline: Boolean(outline),
+    hasKnowledgeMap: Boolean(latestMap),
+    batchStatus: job.batch?.status
+  });
   const batchIsCombining = Boolean(job.batch && !["READY_FOR_REVIEW", "APPLIED", "FAILED"].includes(job.batch.status));
 
   const existingChapters = await db.chapter.findMany({
@@ -92,7 +100,7 @@ export default async function AiImportReviewPage({ params }: PageProps) {
             initialCurrentStage={job.currentStage}
             initialJobsAhead={null}
             initialErrorMessage={job.errorMessage}
-            initialReviewReady={job.status !== "READY_FOR_REVIEW" || Boolean(outline && latestMap)}
+            initialReviewReady={reviewReady}
             retryHref={`/space/courses/${courseId}/ai-import`}
           />
           {job.warning ? <p className="rounded-md bg-orange-50 p-3 text-sm text-orange-700">{job.warning}</p> : null}
