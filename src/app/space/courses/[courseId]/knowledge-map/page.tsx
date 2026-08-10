@@ -14,13 +14,33 @@ export default async function KnowledgeMapPage({ params }: PageProps) {
   const course = await requireCourseAccess(user, courseId);
   const canManage = isCourseManagerRecord(user, course);
   const rows = await db.courseKnowledgeMap.findMany({
-    where: { courseId, status: "PUBLISHED", sourceJobId: { not: null }, deletedAt: null, sourceJob: { deletedAt: null, status: { in: PUBLISHED_KNOWLEDGE_MAP_SOURCE_STATUSES } } },
+    where: {
+      courseId,
+      status: "PUBLISHED",
+      deletedAt: null,
+      OR: [
+        { sourceJobId: { not: null }, sourceJob: { deletedAt: null, status: { in: PUBLISHED_KNOWLEDGE_MAP_SOURCE_STATUSES } } },
+        { selectionKey: { not: null }, sourceMapIds: { not: null } }
+      ]
+    },
     orderBy: [{ version: "desc" }, { publishedAt: "desc" }],
     include: { sourceJob: { select: { id: true, originalName: true } } }
   });
   const latestByDocument = new Map<string, typeof rows[number]>();
   for (const row of rows) if (row.sourceJobId && !latestByDocument.has(row.sourceJobId)) latestByDocument.set(row.sourceJobId, row);
   const documents = [...latestByDocument.values()];
+  const latestByComposite = new Map<string, typeof rows[number]>();
+  for (const row of rows) if (row.selectionKey && row.sourceMapIds && !latestByComposite.has(row.selectionKey)) latestByComposite.set(row.selectionKey, row);
+  const savedComposites = [...latestByComposite.values()].flatMap((row) => {
+    try {
+      const sourceMapIds = JSON.parse(row.sourceMapIds!) as unknown;
+      return Array.isArray(sourceMapIds) && sourceMapIds.every((id) => typeof id === "string")
+        ? [{ mapId: row.id, title: row.title, version: row.version, publishedAt: row.publishedAt!.toISOString(), sourceMapIds }]
+        : [];
+    } catch {
+      return [];
+    }
+  });
   const initial = documents[0] ? await composePublishedKnowledgeMaps({ courseId, courseTitle: course.title, mapIds: [documents[0].id], persist: false }) : null;
 
   return (
@@ -35,6 +55,7 @@ export default async function KnowledgeMapPage({ params }: PageProps) {
             courseId={courseId}
             canManage={canManage}
             documents={documents.map((document) => ({ mapId: document.id, sourceJobId: document.sourceJobId!, name: document.sourceJob!.originalName, version: document.version, publishedAt: document.publishedAt!.toISOString() }))}
+            savedComposites={savedComposites}
             initialMap={{ id: initial.map.id, title: initial.map.title, summary: initial.map.summary, version: initial.map.version, textContent: initial.map.textContent, nodes: initial.map.nodes.map(({ id, label, type, summary, order }) => ({ id, label, type, summary, order })), edges: initial.map.edges.map(({ id, sourceId, targetId, type, label }) => ({ id, sourceId, targetId, type, label })) }}
             initialEditTargetId={documents[0].id}
           />

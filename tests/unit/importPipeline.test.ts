@@ -523,6 +523,31 @@ describe("import pipeline", () => {
     expect(JSON.parse(rebuilt.map.sourceMapIds ?? "[]").sort()).toEqual(latestMapIds.sort());
   }, 20_000);
 
+  it("reuses a completed map when the same document content is imported again", async () => {
+    const first = await createBatchJobs([{ name: "重复资料.md", text: "# 重复资料\n\n相同正文。" }]);
+    await prisma.documentImportJob.update({ where: { id: first.jobs[0]!.id }, data: { contentHash: "a".repeat(64) } });
+    mocks.generateCourseOutline.mockResolvedValue({ outline: outline("重复资料") });
+    await runImportJob(first.jobs[0]!.id);
+    const sourceMap = await prisma.courseKnowledgeMap.findFirstOrThrow({
+      where: { sourceJobId: first.jobs[0]!.id, status: "PUBLISHED", deletedAt: null },
+      include: { nodes: true, edges: true }
+    });
+
+    const second = await createBatchJobs([{ name: "重复资料-再次导入.md", text: "不同的临时文件内容。" }]);
+    await prisma.documentImportJob.update({ where: { id: second.jobs[0]!.id }, data: { contentHash: "a".repeat(64) } });
+    mocks.generateCourseOutline.mockClear();
+    await runImportJob(second.jobs[0]!.id);
+
+    expect(mocks.generateCourseOutline).not.toHaveBeenCalled();
+    const reusedMap = await prisma.courseKnowledgeMap.findFirstOrThrow({
+      where: { sourceJobId: second.jobs[0]!.id, status: "PUBLISHED", deletedAt: null },
+      include: { nodes: true, edges: true }
+    });
+    expect(reusedMap.textContent).toBe(sourceMap.textContent);
+    expect(reusedMap.nodes.map((node) => node.label).sort()).toEqual(sourceMap.nodes.map((node) => node.label).sort());
+    expect((await prisma.documentImportJob.findUniqueOrThrow({ where: { id: second.jobs[0]!.id } })).status).toBe("READY_FOR_REVIEW");
+  }, 20_000);
+
   it("never resurrects a soft-deleted job when the worker runs", async () => {
     const { jobs } = await createBatchJobs([
       { name: "已删除.md", text: "# 已删除\n\n正文。" }

@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { KnowledgeMapGraph, type KnowledgeEdge, type KnowledgeNode } from "@/components/course-workspace/KnowledgeMapGraph";
 
 type DocumentOption = { mapId: string; sourceJobId: string; name: string; version: number; publishedAt: string };
+type SavedCompositeOption = { mapId: string; title: string; version: number; publishedAt: string; sourceMapIds: string[] };
 type MapDto = {
   id: string;
   title: string;
@@ -33,12 +34,14 @@ export function KnowledgeMapWorkspace({
   courseId,
   canManage,
   documents,
+  savedComposites,
   initialMap,
   initialEditTargetId
 }: {
   courseId: string;
   canManage: boolean;
   documents: DocumentOption[];
+  savedComposites: SavedCompositeOption[];
   initialMap: MapDto;
   initialEditTargetId: string | null;
 }) {
@@ -133,18 +136,23 @@ export function KnowledgeMapWorkspace({
     }
   }
 
-  async function remove() {
-    if (!editTargetId || !window.confirm(selectedIds.length > 1 ? "删除教师保存的组合版本后，学生仍可临时组合查看基础文档。确认删除？" : "删除后学生将不再看到这份文档的知识图谱，历史版本也会一并隐藏。确认删除？")) return;
+  async function removeMap(targetId: string, targetSelectionIds: string[], isComposite: boolean) {
+    if (!window.confirm(isComposite ? "删除教师保存的组合版本后，学生仍可临时组合查看基础文档。确认删除？" : "删除后学生将不再看到这份文档的知识图谱，历史版本也会一并隐藏。确认删除？")) return;
     setDeleting(true);
     setError("");
     try {
-      const response = await fetch(`/api/courses/${courseId}/knowledge-maps/${editTargetId}`, { method: "DELETE" });
+      const response = await fetch(`/api/courses/${courseId}/knowledge-maps/${targetId}`, { method: "DELETE" });
       const body = await response.json().catch(() => null) as { error?: string } | null;
       if (!response.ok) throw new Error(body?.error ?? "知识图谱删除失败");
-      if (selectedIds.length === 1) window.location.reload();
-      else {
-        setEditTargetId(null);
-        await loadSelection(selectedIds, false);
+      if (targetSelectionIds.some((id) => selectedIds.includes(id))) {
+        const nextIds = selectedIds.filter((id) => !targetSelectionIds.includes(id));
+        if (!nextIds.length) window.location.reload();
+        else {
+          setSelectedIds(nextIds);
+          await loadSelection(nextIds, false);
+        }
+      } else {
+        router.refresh();
       }
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "知识图谱删除失败");
@@ -170,13 +178,15 @@ export function KnowledgeMapWorkspace({
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {documents.map((document) => (
-            <label key={document.mapId} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${selectedIds.includes(document.mapId) ? "border-blue-200 bg-white shadow-sm" : "border-transparent bg-white/60 hover:border-slate-200"}`}>
+            <div key={document.mapId} className={`flex items-start gap-3 rounded-xl border p-3 transition ${selectedIds.includes(document.mapId) ? "border-blue-200 bg-white shadow-sm" : "border-transparent bg-white/60 hover:border-slate-200"}`}>
               <input type="checkbox" className="mt-1" checked={selectedIds.includes(document.mapId)} onChange={() => toggleDocument(document.mapId)} />
               <FileText className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-              <span className="min-w-0"><span className="block truncate text-sm font-medium text-slate-800">{document.name}</span><span className="mt-1 block text-xs text-slate-400">v{document.version} · {new Date(document.publishedAt).toLocaleString("zh-CN")}</span></span>
-            </label>
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800">{document.name}</span><span className="mt-1 block text-xs text-slate-400">v{document.version} · {new Date(document.publishedAt).toLocaleString("zh-CN")}</span></span>
+              {canManage ? <button type="button" aria-label={`删除知识图谱：${document.name}`} className="mt-0.5 shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600" disabled={deleting} onClick={() => void removeMap(document.mapId, [document.mapId], false)}><Trash2 className="h-4 w-4" /></button> : null}
+            </div>
           ))}
         </div>
+        {savedComposites.length ? <div className="mt-4 border-t border-slate-200 pt-4"><div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-slate-800">已保存组合</h3><span className="text-xs text-slate-500">可再次打开、编辑或删除</span></div><div className="mt-2 grid gap-2 md:grid-cols-2">{savedComposites.map((composite) => <div key={composite.mapId} className="flex items-center gap-3 rounded-xl border border-violet-100 bg-violet-50/70 p-3"><button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setSelectedIds(composite.sourceMapIds); void loadSelection(composite.sourceMapIds, false); }}><span className="block truncate text-sm font-medium text-slate-800">{composite.title}</span><span className="mt-1 block text-xs text-slate-500">v{composite.version} · {new Date(composite.publishedAt).toLocaleString("zh-CN")}</span></button>{canManage ? <button type="button" aria-label={`删除组合：${composite.title}`} className="shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600" disabled={deleting} onClick={() => void removeMap(composite.mapId, composite.sourceMapIds, true)}><Trash2 className="h-4 w-4" /></button> : null}</div>)}</div></div> : null}
       </section>
 
       {error ? <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
@@ -189,16 +199,19 @@ export function KnowledgeMapWorkspace({
             <Network className="h-5 w-5 shrink-0 text-blue-600" />
           </div>
           <p className="mt-3 text-sm leading-6 text-slate-600">{map.summary ?? "课程知识关系。"}</p>
-          {canManage ? <div className={`mt-4 grid gap-2 ${editTargetId ? "grid-cols-2" : "grid-cols-1"}`}><Button type="button" variant="secondary" className="h-9" disabled={loading} onClick={() => void beginEditing()}><Pencil className="h-4 w-4" />{editTargetId ? "文本编辑" : "保存组合并编辑"}</Button>{editTargetId ? <Button type="button" variant="danger" className="h-9" disabled={deleting} onClick={() => void remove()}>{deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}删除</Button> : null}</div> : null}
+          {canManage ? <div className="mt-4"><Button type="button" variant="secondary" className="h-9 w-full" disabled={loading} onClick={() => void beginEditing()}><Pencil className="h-4 w-4" />{editTargetId ? "文本编辑" : "保存组合并编辑"}</Button></div> : null}
           <div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-xl bg-white p-3"><p className="text-xs text-slate-500">节点</p><p className="mt-1 text-2xl font-semibold">{map.nodes.length}</p></div><div className="rounded-xl bg-white p-3"><p className="text-xs text-slate-500">关系</p><p className="mt-1 text-2xl font-semibold">{map.edges.length}</p></div></div>
           <div className="mt-4 space-y-2">{relationStats.map(([type, count]) => <div key={type} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-xs"><span className="text-slate-600">{relationLabels[type] ?? type}</span><span className="font-semibold">{count}</span></div>)}</div>
         </aside>
       </div>
 
-      <Dialog open={editing} title="文本编辑知识图谱" panelClassName="max-w-5xl" onClose={() => !saving && setEditing(false)}>
+      <Dialog open={editing} title="并列编辑知识图谱" panelClassName="max-w-7xl" onClose={() => !saving && setEditing(false)}>
         <div className="space-y-4">
-          <div className="rounded-xl bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-800">使用 Markdown 大纲编辑。多文档图谱保存为独立组合视图，不会修改各文档的基础图谱。</div>
-          <textarea aria-label="知识图谱 Markdown 文本" value={text} onChange={(event) => setText(event.target.value)} spellCheck={false} className="min-h-80 w-full rounded-xl border border-slate-200 bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-100 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:min-h-[480px]" />
+          <div className="rounded-xl bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-800">左侧实时查看知识图谱，右侧编辑 Markdown 大纲。多文档图谱保存为独立组合视图，不会修改各文档的基础图谱。</div>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] lg:items-stretch">
+            <div className="min-h-[520px] overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2"><KnowledgeMapGraph key={`editing-${map.id}`} nodes={map.nodes} edges={map.edges} /></div>
+            <textarea aria-label="知识图谱 Markdown 文本" value={text} onChange={(event) => setText(event.target.value)} spellCheck={false} className="min-h-[520px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-sm leading-6 text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+          </div>
           {dialogError ? <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{dialogError}</p> : null}
           <div className="flex justify-end gap-2"><Button type="button" variant="secondary" disabled={saving} onClick={() => setEditing(false)}><X className="h-4 w-4" />取消</Button><Button type="button" disabled={saving || !text.trim()} onClick={() => void save()}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}保存并发布新版本</Button></div>
         </div>

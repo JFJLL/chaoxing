@@ -6,6 +6,7 @@ import { indexKnowledgeDocument } from "@/lib/document/knowledgeDb";
 import { generateCourseOutline, generateCourseOutlineFromPdf } from "@/lib/ai/generateCourseOutline";
 import type { GeneratedCourseOutline } from "@/types/course";
 import { createKnowledgeMapDraft } from "@/lib/knowledgeMap/generateKnowledgeMap";
+import { clonePublishedKnowledgeMap } from "@/lib/knowledgeMap/knowledgeMapService";
 import { withImportFilePath } from "@/lib/storage";
 import { withDriveFilePath } from "@/lib/modules/driveFiles";
 import { finalizeImportBatch } from "@/lib/imports/importBatch";
@@ -38,6 +39,51 @@ export async function runImportJob(jobId: string) {
 
   try {
     await advance({ status: "EXTRACTING", currentStage: "文档解析", errorMessage: null, startedAt: new Date(), finishedAt: null });
+    const duplicate = job.contentHash
+      ? await db.documentImportJob.findFirst({
+          where: {
+            courseId: job.courseId,
+            contentHash: job.contentHash,
+            id: { not: job.id },
+            deletedAt: null,
+            status: { in: ["READY_FOR_REVIEW", "APPLIED"] },
+            generatedOutline: { not: null }
+          },
+          orderBy: { updatedAt: "desc" },
+          select: {
+            extractedText: true,
+            parsedSections: true,
+            generatedOutline: true,
+            warning: true,
+            knowledgeMaps: {
+              where: { status: "PUBLISHED", deletedAt: null },
+              orderBy: [{ version: "desc" }, { publishedAt: "desc" }],
+              select: { id: true },
+              take: 1
+            }
+          }
+        })
+      : null;
+    if (duplicate?.generatedOutline && duplicate.knowledgeMaps[0]) {
+      await advance({
+        extractedText: duplicate.extractedText,
+        parsedSections: duplicate.parsedSections,
+        generatedOutline: duplicate.generatedOutline,
+        warning: duplicate.warning,
+        status: "READY_FOR_REVIEW",
+        currentStage: "复用已有知识图谱",
+        finishedAt: new Date()
+      });
+      await clonePublishedKnowledgeMap({
+        courseId: job.courseId,
+        sourceMapId: duplicate.knowledgeMaps[0].id,
+        sourceJobId: job.id
+      });
+      safeRevalidatePath(`/space/courses/${job.courseId}/knowledge-map`);
+      safeRevalidatePath(`/space/courses/${job.courseId}/ai-workbench/content`);
+      if (job.batchId) await finalizeImportBatch(job.batchId);
+      return;
+    }
     const course = await db.course.findUnique({
       where: { id: job.courseId },
       select: { title: true }

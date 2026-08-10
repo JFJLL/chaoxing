@@ -106,6 +106,71 @@ async function persistPublishedMap(input: {
   return tx.courseKnowledgeMap.findUniqueOrThrow({ where: { id: map.id }, include: mapInclude });
 }
 
+/**
+ * Copies a published source map for a new import job without rebuilding it.
+ * This is used when the same document content is imported again: the graph,
+ * text representation and node metadata remain identical while the new job
+ * gets its own visible source-map series.
+ */
+export async function clonePublishedKnowledgeMap(input: {
+  courseId: string;
+  sourceMapId: string;
+  sourceJobId: string;
+}) {
+  return db.$transaction(async (tx) => {
+    const source = await tx.courseKnowledgeMap.findFirst({
+      where: { id: input.sourceMapId, courseId: input.courseId, status: "PUBLISHED", deletedAt: null },
+      include: { nodes: true, edges: true }
+    });
+    if (!source) throw new Error("可复用的知识图谱不存在或已删除");
+    const latest = await tx.courseKnowledgeMap.findFirst({
+      where: { courseId: input.courseId, sourceJobId: input.sourceJobId },
+      orderBy: { version: "desc" },
+      select: { version: true }
+    });
+    const map = await tx.courseKnowledgeMap.create({
+      data: {
+        courseId: input.courseId,
+        sourceJobId: input.sourceJobId,
+        title: source.title,
+        summary: source.summary,
+        status: "PUBLISHED",
+        version: nextKnowledgeMapVersion(latest?.version),
+        publishedAt: new Date(),
+        textContent: source.textContent
+      }
+    });
+    const nodeIds = new Map<string, string>();
+    for (const node of source.nodes) {
+      const id = randomUUID();
+      nodeIds.set(node.id, id);
+      await tx.knowledgeNode.create({
+        data: {
+          id,
+          mapId: map.id,
+          label: node.label,
+          type: node.type,
+          summary: node.summary,
+          order: node.order,
+          metadata: node.metadata
+        }
+      });
+    }
+    await tx.knowledgeEdge.createMany({
+      data: source.edges.map((edge) => ({
+        mapId: map.id,
+        sourceId: nodeIds.get(edge.sourceId)!,
+        targetId: nodeIds.get(edge.targetId)!,
+        type: edge.type,
+        label: edge.label,
+        weight: edge.weight,
+        metadata: edge.metadata
+      }))
+    });
+    return tx.courseKnowledgeMap.findUniqueOrThrow({ where: { id: map.id }, include: mapInclude });
+  });
+}
+
 function toSource(map: {
   id: string;
   sourceJob: { originalName: string } | null;
