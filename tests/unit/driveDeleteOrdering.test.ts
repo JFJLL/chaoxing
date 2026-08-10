@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   deleteShare: vi.fn(),
   softDelete: vi.fn(),
   transaction: vi.fn(),
+  countNoticeReferences: vi.fn(),
   deleteStorage: vi.fn()
 }));
 
@@ -29,6 +30,7 @@ vi.mock("@/lib/db", () => ({
     course: { findFirst: mocks.findCourse },
     resource: { deleteMany: mocks.deleteResource },
     driveShare: { deleteMany: mocks.deleteShare },
+    announcementAttachment: { count: mocks.countNoticeReferences },
     $transaction: mocks.transaction
   }
 }));
@@ -55,6 +57,7 @@ describe("drive deletion ordering", () => {
     mocks.deleteResource.mockResolvedValue({ count: 0 });
     mocks.deleteShare.mockResolvedValue({ count: 0 });
     mocks.softDelete.mockResolvedValue({ count: 1 });
+    mocks.countNoticeReferences.mockResolvedValue(0);
     mocks.transaction.mockImplementation(async (operations: Promise<unknown>[]) => Promise.all(operations));
   });
 

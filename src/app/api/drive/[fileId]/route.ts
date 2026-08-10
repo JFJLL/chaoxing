@@ -78,6 +78,13 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
         error: `“${protectedCourse.title}”正在使用此文件夹作为课程云盘，不能从普通云盘删除`
       }, { status: 409 });
     }
+    const noticeReferences = await db.announcementAttachment.count({ where: { driveFileId: { in: [...ids] } } });
+    if (noticeReferences) {
+      return NextResponse.json({
+        code: "DRIVE_FILE_IN_NOTICE",
+        error: `文件已被课程通知引用（共 ${noticeReferences} 处），请先移除通知附件`
+      }, { status: 409 });
+    }
     const deletedAt = new Date();
     await db.$transaction([
       db.resource.deleteMany({ where: { driveFileId: { in: [...ids] } } }),

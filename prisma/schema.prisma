@@ -85,7 +85,7 @@ model Course {
   institution        Institution             @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   driveRootFolderId  String?                 @unique
   driveRootFolder    DriveFile?              @relation("CourseDriveRoot", fields: [driveRootFolderId], references: [id], onDelete: SetNull)
-  copilotName        String                  @default("Copilot")
+  copilotName        String                  @default("课程AI智能体")
   outlineVersion     Int                     @default(0)
   collaborators      CourseCollaborator[]
   enrollments        CourseEnrollment[]
@@ -406,22 +406,30 @@ model CopilotUsageEvent {
 }
 
 model CourseKnowledgeMap {
-  id          String             @id @default(cuid())
-  courseId    String
-  course      Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  sourceJobId String?
-  sourceJob   DocumentImportJob? @relation(fields: [sourceJobId], references: [id], onDelete: SetNull)
-  title       String
-  summary     String?
-  status      String             @default("DRAFT")
-  version     Int                @default(1)
-  publishedAt DateTime?
-  nodes       KnowledgeNode[]
-  edges       KnowledgeEdge[]
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id           String             @id @default(cuid())
+  courseId     String
+  course       Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  sourceJobId  String?
+  sourceJob    DocumentImportJob? @relation(fields: [sourceJobId], references: [id], onDelete: SetNull)
+  title        String
+  summary      String?
+  status       String             @default("DRAFT")
+  version      Int                @default(1)
+  publishedAt  DateTime?
+  selectionKey String?
+  sourceMapIds String?
+  textContent  String?
+  deletedAt    DateTime?
+  nodes        KnowledgeNode[]
+  edges        KnowledgeEdge[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
+  @@unique([courseId, sourceJobId, version])
+  @@unique([courseId, selectionKey, version])
   @@index([sourceJobId, status, version])
+  @@index([courseId, selectionKey, status, version])
+  @@index([courseId, deletedAt, publishedAt])
 }
 
 model KnowledgeNode {
@@ -626,35 +634,36 @@ model NoteTag {
 }
 
 model DriveFile {
-  id                 String                    @id @default(cuid())
-  ownerId            String
-  owner              User                      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  parentId           String?
-  parent             DriveFile?                @relation("DriveTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children           DriveFile[]               @relation("DriveTree")
-  name               String
-  kind               String
-  mimeType           String?
-  size               Int                       @default(0)
-  path               String?
-  contentHash        String?
-  extractionStatus   String                    @default("PENDING")
-  extractedText      String?
-  extractionError    String?
-  extractedAt        DateTime?
-  deletedAt          DateTime?
-  shares             DriveShare[]
-  resources          Resource[]
-  topicResources     TopicResource[]
-  groupFiles         GroupFile[]
-  importJobs         DocumentImportJob[]       @relation("ImportSourceDriveFile")
-  rootCourse         Course?                   @relation("CourseDriveRoot")
-  courseBindings     CourseDriveBinding[]
-  courseAccessRules  CourseDriveAccessRule[]
-  artifactExports    CourseAiArtifactExport[]
-  copilotAttachments CopilotConversationFile[]
-  createdAt          DateTime                  @default(now())
-  updatedAt          DateTime                  @updatedAt
+  id                      String                    @id @default(cuid())
+  ownerId                 String
+  owner                   User                      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  parentId                String?
+  parent                  DriveFile?                @relation("DriveTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children                DriveFile[]               @relation("DriveTree")
+  name                    String
+  kind                    String
+  mimeType                String?
+  size                    Int                       @default(0)
+  path                    String?
+  contentHash             String?
+  extractionStatus        String                    @default("PENDING")
+  extractedText           String?
+  extractionError         String?
+  extractedAt             DateTime?
+  deletedAt               DateTime?
+  shares                  DriveShare[]
+  resources               Resource[]
+  topicResources          TopicResource[]
+  groupFiles              GroupFile[]
+  importJobs              DocumentImportJob[]       @relation("ImportSourceDriveFile")
+  rootCourse              Course?                   @relation("CourseDriveRoot")
+  courseBindings          CourseDriveBinding[]
+  courseAccessRules       CourseDriveAccessRule[]
+  artifactExports         CourseAiArtifactExport[]
+  copilotAttachments      CopilotConversationFile[]
+  announcementAttachments AnnouncementAttachment[]
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
 }
 
 model CourseDriveBinding {
@@ -790,21 +799,35 @@ model LiveChatMessage {
 }
 
 model Announcement {
-  id        String             @id @default(cuid())
-  courseId  String
-  course    Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  authorId  String
-  author    User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  title     String
-  body      String
-  status    String             @default("DRAFT")
-  publishAt DateTime?
-  pinned    Boolean            @default(false)
-  reads     AnnouncementRead[]
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  id          String                   @id @default(cuid())
+  courseId    String
+  course      Course                   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User                     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title       String
+  body        String
+  status      String                   @default("DRAFT")
+  publishAt   DateTime?
+  pinned      Boolean                  @default(false)
+  reads       AnnouncementRead[]
+  attachments AnnouncementAttachment[]
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
 
   @@index([courseId, status, publishAt])
+}
+
+model AnnouncementAttachment {
+  id             String       @id @default(cuid())
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  driveFileId    String
+  driveFile      DriveFile    @relation(fields: [driveFileId], references: [id], onDelete: Restrict)
+  nameSnapshot   String
+  createdAt      DateTime     @default(now())
+
+  @@unique([announcementId, driveFileId])
+  @@index([driveFileId])
 }
 
 model AnnouncementRead {

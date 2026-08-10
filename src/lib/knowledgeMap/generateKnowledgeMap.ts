@@ -2,6 +2,8 @@ import { randomUUID } from "crypto";
 import type { Prisma } from "@prisma/client";
 import type { GeneratedCourseOutline } from "@/types/course";
 import { db } from "@/lib/db";
+import { composeKnowledgeMap } from "@/lib/knowledgeMap/knowledgeMapComposite";
+import { serializeKnowledgeMapText } from "@/lib/knowledgeMap/knowledgeMapText";
 
 type KnowledgeMapNodeDraft = {
   id: string;
@@ -222,8 +224,25 @@ export async function createKnowledgeMapDraft({
   sourceJobId?: string;
   outline: GeneratedCourseOutline;
   tx?: Prisma.TransactionClient | typeof db;
-}) {
+}): Promise<Prisma.CourseKnowledgeMapGetPayload<{ include: { nodes: true; edges: true } }>> {
+  if (tx === db) {
+    return db.$transaction((transaction) => createKnowledgeMapDraft({
+      courseId,
+      sourceJobId,
+      outline,
+      tx: transaction
+    }));
+  }
   const draft = buildKnowledgeMapDraft(outline);
+  const source = sourceJobId ? await tx.documentImportJob.findUnique({
+    where: { id: sourceJobId },
+    select: { originalName: true }
+  }) : null;
+  const preview = composeKnowledgeMap({
+    courseTitle: outline.title,
+    sources: [{ id: sourceJobId ?? "course", name: source?.originalName ?? outline.title, nodes: draft.nodes, edges: draft.edges }],
+    objectives: outline.learningObjectives
+  });
   const latest = sourceJobId ? await tx.courseKnowledgeMap.findFirst({
     where: { courseId, sourceJobId },
     orderBy: { version: "desc" },
@@ -235,8 +254,10 @@ export async function createKnowledgeMapDraft({
       sourceJobId,
       title: `${outline.title} 知识图谱`,
       summary: outline.description,
-      status: "DRAFT",
-      version: (latest?.version ?? 0) + 1
+      status: "PUBLISHED",
+      version: (latest?.version ?? 0) + 1,
+      publishedAt: new Date(),
+      textContent: serializeKnowledgeMapText(preview.nodes, preview.edges)
     }
   });
 

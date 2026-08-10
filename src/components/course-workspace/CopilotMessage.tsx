@@ -36,7 +36,7 @@ export function CopilotAssistantReply({ content, pending = false }: { content: s
       className="mx-auto flex w-full max-w-3xl gap-3 text-sm text-slate-800"
       role={pending ? "status" : undefined}
       aria-live={pending ? "polite" : undefined}
-      aria-label={pending ? "Copilot 正在回复" : "Copilot 回复"}
+      aria-label={pending ? "AI智能体正在回复" : "AI智能体回复"}
     >
       <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
         <Bot className="h-4 w-4" aria-hidden="true" />

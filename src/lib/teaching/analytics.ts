@@ -1,4 +1,4 @@
-type CountDimension = { completed: number; total: number };
+type CountDimension = { completed: number; total: number; rate?: number | null };
 
 function rate(value: number, total: number) {
   return total > 0 ? Math.round((value / total) * 100) : null;
@@ -11,7 +11,7 @@ export function buildLearningIndicators(input: {
   exams: { gradedScore: number; gradedMaxScore: number };
 }) {
   return {
-    lessonCompletionRate: rate(input.lessons.completed, input.lessons.total),
+    lessonCompletionRate: input.lessons.rate ?? rate(input.lessons.completed, input.lessons.total),
     attendanceRate: rate(input.attendance.present, input.attendance.total),
     assignmentCompletionRate: rate(input.assignments.submitted, input.assignments.total),
     examAverageRate: rate(input.exams.gradedScore, input.exams.gradedMaxScore)

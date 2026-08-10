@@ -6,6 +6,7 @@ import {
   Bot,
   Check,
   ChevronDown,
+  ClipboardPaste,
   FileText,
   Folder,
   Image as ImageIcon,
@@ -22,7 +23,8 @@ import {
 import { Button } from "@/components/ui/Button";
 import { CopilotAssistantReply } from "@/components/course-workspace/CopilotMessage";
 import { FilePicker } from "@/components/ui/FilePicker";
-import { Input } from "@/components/ui/Input";
+import { Input, Textarea } from "@/components/ui/Input";
+import { Dialog } from "@/components/ui/Dialog";
 import { readAiStream, type AiStreamEvent } from "@/lib/ai/streamProtocol";
 import {
   CourseDriveReferencePicker,
@@ -122,6 +124,10 @@ export function CopilotWorkspace({
   const [status, setStatus] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [busy, setBusy] = useState("");
   const [selectedSkillFileName, setSelectedSkillFileName] = useState("");
+  const [pasteSkillOpen, setPasteSkillOpen] = useState(false);
+  const [pastedSkillName, setPastedSkillName] = useState("");
+  const [pastedSkillDescription, setPastedSkillDescription] = useState("");
+  const [pastedSkillPrompt, setPastedSkillPrompt] = useState("");
   const skillInputRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -175,7 +181,7 @@ export function CopilotWorkspace({
         setRootFolders(Array.isArray(body.folders) ? body.folders : []);
         setCanBindRootState(body.canBindRoot === true);
       } catch (error) {
-        if (!cancelled) setStatus({ tone: "error", text: error instanceof Error ? error.message : "Copilot 设置加载失败" });
+        if (!cancelled) setStatus({ tone: "error", text: error instanceof Error ? error.message : "AI智能体设置加载失败" });
       } finally {
         if (!cancelled) setSettingsLoaded(true);
       }
@@ -364,7 +370,7 @@ export function CopilotWorkspace({
         }
       });
     } catch (error) {
-      setStatus({ tone: "error", text: controller.signal.aborted ? (userMessageId ? "已停止生成，可重试上一条问题" : "已停止生成，问题已保留") : error instanceof Error ? error.message : "Copilot 调用失败" });
+      setStatus({ tone: "error", text: controller.signal.aborted ? (userMessageId ? "已停止生成，可重试上一条问题" : "已停止生成，问题已保留") : error instanceof Error ? error.message : "AI智能体调用失败" });
       if (!userMessageId && !retryMessageId) setDraft((current) => current || message);
     } finally {
       abortRef.current = null;
@@ -387,10 +393,10 @@ export function CopilotWorkspace({
       });
       setCopilotName(body.copilotName);
       setCopilotNameDraft(body.copilotName);
-      setStatus({ tone: "success", text: `名称已修改为「${body.copilotName}」，学生端将同步显示` });
+      setStatus({ tone: "success", text: `AI智能体别名已修改为「${body.copilotName}」` });
       router.refresh();
     } catch (error) {
-      setStatus({ tone: "error", text: error instanceof Error ? error.message : "Copilot 名称保存失败" });
+      setStatus({ tone: "error", text: error instanceof Error ? error.message : "智能体名称保存失败" });
     } finally {
       setBusy("");
     }
@@ -434,6 +440,28 @@ export function CopilotWorkspace({
     }
   }
 
+  async function createPastedSkill() {
+    setBusy("skill-paste");
+    setStatus(null);
+    try {
+      const body = await api(`/api/courses/${courseId}/copilot/skills`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: pastedSkillName, description: pastedSkillDescription, prompt: pastedSkillPrompt })
+      });
+      setSkills((current) => [body.skill, ...current]);
+      setPastedSkillName("");
+      setPastedSkillDescription("");
+      setPastedSkillPrompt("");
+      setPasteSkillOpen(false);
+      setStatus({ tone: "success", text: `Skill「${body.skill.name}」已创建，测试后可启用` });
+    } catch (error) {
+      setStatus({ tone: "error", text: error instanceof Error ? error.message : "Skill 创建失败" });
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function changeSkillStatus(skill: SkillDto) {
     setBusy(`skill-${skill.id}`);
     try {
@@ -471,8 +499,8 @@ export function CopilotWorkspace({
     <div className="space-y-5">
       {canManage ? (
         <div className="inline-flex rounded-xl bg-slate-100 p-1">
-          <button type="button" onClick={() => setView("chat")} className={`rounded-lg px-4 py-2 text-sm font-medium ${view === "chat" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"}`}><Sparkles className="mr-2 inline h-4 w-4" />测试 Copilot</button>
-          <button type="button" onClick={() => setView("settings")} className={`rounded-lg px-4 py-2 text-sm font-medium ${view === "settings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"}`}><Settings2 className="mr-2 inline h-4 w-4" />Copilot 设置</button>
+          <button type="button" onClick={() => setView("chat")} className={`rounded-lg px-4 py-2 text-sm font-medium ${view === "chat" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"}`}><Sparkles className="mr-2 inline h-4 w-4" />测试 AI智能体</button>
+          <button type="button" onClick={() => setView("settings")} className={`rounded-lg px-4 py-2 text-sm font-medium ${view === "settings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"}`}><Settings2 className="mr-2 inline h-4 w-4" />AI智能体设置</button>
         </div>
       ) : null}
       {status ? <div role="status" className={`flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm ${status.tone === "error" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}><span>{status.text}</span>{status.tone === "error" && retryMessageId && !streaming ? <Button type="button" variant="secondary" className="h-8" onClick={() => void send(retryMessageId)}>重试上一条</Button> : null}</div> : null}
@@ -560,7 +588,7 @@ export function CopilotWorkspace({
                   </div>
                 ) : null}
                 {streaming ? <CopilotAssistantReply content={streamText} pending /> : null}
-                {!selected?.messages.length && !pendingUserMessage && !streaming ? <div className="mx-auto flex min-h-64 max-w-md flex-col items-center justify-center text-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50"><Bot className="h-6 w-6 text-blue-600" /></span><h2 className="mt-4 font-semibold text-slate-900">开始使用{copilotName}</h2><p className="mt-2 text-sm leading-6 text-slate-500">直接提问即可开始；需要特定方法时选择 Skill，需要结合课程材料时添加文件。</p></div> : null}
+                {!selected?.messages.length && !pendingUserMessage && !streaming ? <div className="mx-auto flex min-h-64 max-w-md flex-col items-center justify-center text-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50"><Bot className="h-6 w-6 text-blue-600" /></span><h2 className="mt-4 font-semibold text-slate-900">开始使用 AI智能体</h2><p className="mt-2 text-sm leading-6 text-slate-500">直接提问即可开始；需要特定方法时选择 Skill，需要结合课程材料时添加文件。</p></div> : null}
               </div>
             </div>
 
@@ -571,7 +599,7 @@ export function CopilotWorkspace({
                   value={draft}
                   rows={1}
                   maxLength={4_000}
-                  aria-label="输入 Copilot 问题"
+                  aria-label="输入 AI智能体问题"
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }}
                   placeholder="输入问题，Enter 发送，Shift+Enter 换行"
@@ -588,12 +616,12 @@ export function CopilotWorkspace({
       ) : (
         <div className="space-y-6">
           <section className="rounded-2xl border border-slate-100 bg-white p-5">
-            <h2 className="font-semibold text-slate-900">Copilot 名称</h2>
-            <p className="mt-1 text-sm text-slate-500">学生会在上课入口和对话页看到这个名称。</p>
+            <h2 className="font-semibold text-slate-900">AI智能体别名</h2>
+            <p className="mt-1 text-sm text-slate-500">用于教师内部区分课程智能体；学生端统一显示“AI智能体”。</p>
             <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-              <Input aria-label="Copilot 名称" value={copilotNameDraft} maxLength={40} onChange={(event) => setCopilotNameDraft(event.target.value)} />
+              <Input aria-label="AI智能体别名" value={copilotNameDraft} maxLength={40} onChange={(event) => setCopilotNameDraft(event.target.value)} />
               <Button onClick={() => void saveCopilotName()} disabled={busy === "copilot-name" || !copilotNameDraft.trim() || copilotNameDraft.trim() === copilotName}>
-                {busy === "copilot-name" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}保存名称
+                {busy === "copilot-name" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}保存别名
               </Button>
             </div>
           </section>
@@ -632,7 +660,7 @@ export function CopilotWorkspace({
           </section>
 
           <section className="rounded-2xl border border-slate-100 bg-white p-5">
-            <h2 className="font-semibold text-slate-900">课程 Skill</h2><p className="mt-1 text-sm text-slate-500">支持 Markdown 和 ZIP，最大 10MB；上传后先测试，再启用给学生。</p>
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-slate-900">课程 Skill</h2><p className="mt-1 text-sm text-slate-500">可粘贴 Prompt，或上传 Markdown / ZIP；创建后先测试，再启用给学生。</p></div><Button type="button" variant="secondary" onClick={() => { setStatus(null); setPasteSkillOpen(true); }}><ClipboardPaste className="h-4 w-4" />粘贴 Prompt</Button></div>
             <form action={uploadSkill} className="mt-4 grid gap-3 rounded-2xl border border-[var(--cx-border)] bg-slate-50/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <FilePicker
                 ref={skillInputRef}
@@ -660,6 +688,16 @@ export function CopilotWorkspace({
         </div>
       )}
 
+      <Dialog open={pasteSkillOpen} title="粘贴 Prompt 创建 Skill" onClose={() => busy !== "skill-paste" && setPasteSkillOpen(false)}>
+        <div className="space-y-4">
+          <label className="block space-y-1.5"><span className="text-sm font-medium text-slate-700">Skill 名称 <span className="text-red-500">*</span></span><Input value={pastedSkillName} minLength={2} maxLength={40} onChange={(event) => setPastedSkillName(event.target.value)} placeholder="例如：案例分析教练" /></label>
+          <label className="block space-y-1.5"><span className="text-sm font-medium text-slate-700">简介</span><Input value={pastedSkillDescription} maxLength={500} onChange={(event) => setPastedSkillDescription(event.target.value)} placeholder="帮助学生理解这个 Skill 适合做什么" /></label>
+          <label className="block space-y-1.5"><span className="text-sm font-medium text-slate-700">Prompt <span className="text-red-500">*</span></span><Textarea value={pastedSkillPrompt} maxLength={20000} onChange={(event) => setPastedSkillPrompt(event.target.value)} className="min-h-64 font-mono" placeholder="粘贴智能体的角色、步骤和输出要求……" /><span className="block text-xs text-slate-400">最多 20,000 字；Skill 名称用于学生选择和教师管理。</span></label>
+          <p className="text-xs leading-5 text-slate-500">Skill 只影响回答方式；学生即使不选择 Skill，也可以询问本课程相关问题。</p>
+          {status?.tone === "error" ? <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{status.text}</p> : null}
+          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" disabled={busy === "skill-paste"} onClick={() => setPasteSkillOpen(false)}>取消</Button><Button type="button" disabled={busy === "skill-paste" || pastedSkillName.trim().length < 2 || pastedSkillPrompt.trim().length < 10} onClick={() => void createPastedSkill()}>{busy === "skill-paste" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}创建 Skill</Button></div>
+        </div>
+      </Dialog>
     </div>
   );
 }

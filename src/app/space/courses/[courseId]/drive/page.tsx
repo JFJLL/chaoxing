@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth";
-import { requireCourseManager } from "@/lib/permissions";
+import { isCourseManagerRecord, requireCourseAccess } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { CourseDriveWorkspace } from "@/components/course-workspace/CourseDriveWorkspace";
 
@@ -12,7 +12,8 @@ export default async function CourseDrivePage({ params, searchParams }: PageProp
   const user = await requireUser();
   const { courseId } = await params;
   const { parentId } = await searchParams;
-  const course = await requireCourseManager(user, courseId);
+  const course = await requireCourseAccess(user, courseId);
+  const canManage = isCourseManagerRecord(user, course);
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="drive">
@@ -22,12 +23,12 @@ export default async function CourseDrivePage({ params, searchParams }: PageProp
             <HardDriveIcon />
           </span>
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">课程云盘</h1>
-            <p className="mt-1 text-sm text-slate-500">管理《{course.title}》的课程资料、对话上传和 AI 产物。</p>
+            <h1 className="text-2xl font-semibold text-slate-900">{canManage ? "课程云盘" : "课程资料"}</h1>
+            <p className="mt-1 text-sm text-slate-500">{canManage ? `管理《${course.title}》的课程资料、对话上传和 AI 产物。` : "查看和下载老师向学生开放的课程文件。"}</p>
           </div>
         </header>
         <div className="mt-6">
-          <CourseDriveWorkspace courseId={course.id} courseTitle={course.title} initialParentId={parentId} />
+          <CourseDriveWorkspace courseId={course.id} courseTitle={course.title} initialParentId={parentId} canManage={canManage} />
         </div>
       </section>
     </FanyaCourseShell>

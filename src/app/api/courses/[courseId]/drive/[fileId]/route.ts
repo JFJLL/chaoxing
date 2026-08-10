@@ -5,6 +5,7 @@ import { courseDriveErrorResponse } from "@/lib/courseDrive/http";
 import {
   deleteCourseDriveItem,
   requireCourseDriveMutationTarget,
+  requireCourseDriveTarget,
   updateCourseDriveItem
 } from "@/lib/courseDrive/service";
 import { deleteDriveFileFromStorage, streamDriveFile } from "@/lib/modules/driveFiles";
@@ -17,10 +18,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const user = await requireUser();
   const { courseId, fileId } = await context.params;
   try {
-    const contextTarget = await requireCourseDriveMutationTarget(user, courseId, fileId);
-    if (request.nextUrl.searchParams.get("download")) return streamDriveFile(contextTarget.target.id, "attachment");
-    if (request.nextUrl.searchParams.get("preview")) return streamDriveFile(contextTarget.target.id, "inline");
-    return NextResponse.json({ file: contextTarget.target });
+    const target = await requireCourseDriveTarget(user, courseId, fileId);
+    if (request.nextUrl.searchParams.get("download")) return streamDriveFile(target.id, "attachment");
+    if (request.nextUrl.searchParams.get("preview")) return streamDriveFile(target.id, "inline");
+    return NextResponse.json({ file: target });
   } catch (error) {
     return courseDriveErrorResponse(error);
   }

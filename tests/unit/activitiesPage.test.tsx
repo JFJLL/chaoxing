@@ -37,10 +37,11 @@ describe("ActivitiesPage", () => {
 
     expect(html).toContain("AI助教");
     expect(html).toContain('href="/space/courses/course-1/activities/tutor"');
-    expect(html).toContain("课程小助手");
+    expect(html).toContain("AI智能体");
     expect(html).toContain('href="/space/courses/course-1/activities/copilot"');
     expect(html).not.toContain("AI陪练");
     expect(html).toContain("签到");
+    expect(html).not.toContain('href="/space/courses/course-1/knowledge-map"');
     expect(html).toContain("hover:-translate-y-0.5");
     expect(html).toContain("hover:shadow-floating");
     expect(html).toContain("group-hover:translate-x-0.5");
@@ -52,10 +53,12 @@ describe("ActivitiesPage", () => {
     const html = renderToStaticMarkup(await ActivitiesPage({ params: Promise.resolve({ courseId: "course-1" }) }));
 
     expect(html).not.toContain('href="/space/courses/course-1/activities/tutor"');
-    expect(html).toContain("课程小助手");
+    expect(html).toContain("AI智能体");
     expect(html).toContain('href="/space/courses/course-1/activities/copilot"');
     expect(html).not.toContain("AI陪练");
     expect(html).toContain("签到");
+    expect(html).toContain("知识图谱");
+    expect(html).toContain('href="/space/courses/course-1/knowledge-map"');
   });
 
   it("shows course management classroom tools to a collaborator", async () => {
@@ -69,5 +72,6 @@ describe("ActivitiesPage", () => {
 
     expect(html).toContain('href="/space/courses/course-1/activities/tutor"');
     expect(html).toContain("AI助教");
+    expect(html).not.toContain('href="/space/courses/course-1/knowledge-map"');
   });
 });

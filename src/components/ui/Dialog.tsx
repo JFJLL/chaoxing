@@ -48,12 +48,12 @@ export function Dialog({ open, title, children, onClose, panelClassName }: Dialo
   if (!open) return null;
   return (
     <div className="cx-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className={clsx("cx-dialog-panel w-full max-w-lg overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl", panelClassName)}>
+      <section ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className={clsx("cx-dialog-panel flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl", panelClassName)}>
         <header className="flex items-center justify-between border-b border-[var(--cx-border)] px-5 py-4">
           <h2 id={titleId} className="text-base font-semibold text-slate-900">{title}</h2>
           <button ref={closeRef} type="button" onClick={onClose} aria-label="关闭" className="cx-focus-ring cx-tactile inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800"><X className="h-4 w-4 shrink-0" /></button>
         </header>
-        <div className="p-5">{children}</div>
+        <div className="min-h-0 overflow-y-auto p-5">{children}</div>
       </section>
     </div>
   );

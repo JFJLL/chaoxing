@@ -11,7 +11,7 @@ type RouteContext = { params: Promise<{ courseId: string; conversationId: string
 function errorResponse(error: unknown) {
   if (error instanceof CopilotError) return Response.json({ code: error.code, error: error.message }, { status: error.status });
   console.error("[copilot-conversation]", error);
-  return Response.json({ code: "COPILOT_REQUEST_FAILED", error: "Copilot 对话操作失败，请重试" }, { status: 500 });
+  return Response.json({ code: "COPILOT_REQUEST_FAILED", error: "AI智能体对话操作失败，请重试" }, { status: 500 });
 }
 
 export async function PUT(request: Request, context: RouteContext) {

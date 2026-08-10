@@ -22,7 +22,7 @@ export default async function StructurePage({ params }: PageProps) {
     <FanyaCourseShell user={user} course={course} activeTab="structure">
       <CourseModulePanel
         title="课程结构"
-        description="按章、课时查看课程目录。"
+        description="课时完成由学生自报，并在课程总进度中按预计学习时长加权；签到、作业和考试不会被混入课时进度。"
       >
         <div className="space-y-4">
           {course.chapters.map((chapter) => (

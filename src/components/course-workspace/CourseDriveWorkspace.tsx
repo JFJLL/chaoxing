@@ -60,11 +60,13 @@ export async function fetchCourseDriveMoveFolders(courseId: string): Promise<Mov
 export function CourseDriveWorkspace({
   courseId,
   courseTitle,
-  initialParentId
+  initialParentId,
+  canManage = true
 }: {
   courseId: string;
   courseTitle: string;
   initialParentId?: string;
+  canManage?: boolean;
 }) {
   const [root, setRoot] = useState<DriveRoot | null>();
   const [folders, setFolders] = useState<RootCandidate[]>([]);
@@ -115,7 +117,7 @@ export function CourseDriveWorkspace({
       try {
         const [nextChildren, nextMoveFolders] = await Promise.all([
           fetchDriveChildren(courseId, initialParentId),
-          fetchCourseDriveMoveFolders(courseId)
+          canManage ? fetchCourseDriveMoveFolders(courseId) : Promise.resolve([])
         ]);
         if (!cancelled) {
           setChildren(nextChildren);
@@ -130,7 +132,7 @@ export function CourseDriveWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [courseId, initialParentId, root]);
+  }, [canManage, courseId, initialParentId, root]);
 
   if (error && root === undefined) {
     return <p role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>;
@@ -168,7 +170,7 @@ export function CourseDriveWorkspace({
   const refreshChildren = async () => {
     const [nextChildren, nextMoveFolders] = await Promise.all([
       fetchDriveChildren(courseId, initialParentId),
-      fetchCourseDriveMoveFolders(courseId)
+      canManage ? fetchCourseDriveMoveFolders(courseId) : Promise.resolve([])
     ]);
     setChildren(nextChildren);
     setMoveFolders(nextMoveFolders);
@@ -179,14 +181,14 @@ export function CourseDriveWorkspace({
       files={children.items.map((item) => ({ ...item, size: item.size ?? 0 }))}
       folders={[{ id: root.id, name: root.name, parentId: null }, ...moveFolders]}
       courses={[{ id: courseId, title: courseTitle }]}
-      canManage
+      canManage={canManage}
       courseId={courseId}
       onRefresh={refreshChildren}
       parentId={currentParentId}
       breadcrumbs={children.breadcrumbs}
       baseHref={`/space/courses/${courseId}/drive`}
       rootParentId={root.id}
-      rootLabel="课程云盘"
+      rootLabel={canManage ? "课程云盘" : "课程资料"}
     />
   );
 }

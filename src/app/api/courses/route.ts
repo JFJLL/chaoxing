@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
         startDate: input.startsAt ? new Date(input.startsAt) : null,
         endDate: input.endsAt ? new Date(input.endsAt) : null,
         term: "自建课程",
+        copilotName: "课程AI智能体",
         status: "DRAFT",
         ownerId: user.id,
         institutionId: user.institutionId

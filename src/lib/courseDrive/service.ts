@@ -71,6 +71,23 @@ function ancestryToRoot(
   return null;
 }
 
+function aiOutputFolderIds(
+  courseId: string,
+  rootId: string,
+  nodes: DriveNode[],
+  bindingFolderIds: string[]
+) {
+  const ids = new Set(bindingFolderIds);
+  for (const node of nodes) {
+    if (
+      node.kind === "folder"
+      && node.parentId === rootId
+      && (node.name === "AI产物" || node.id === `course-drive-${courseId}-ai-output-root`)
+    ) ids.add(node.id);
+  }
+  return ids;
+}
+
 function assertCourseDriveInstitution(
   user: SessionUser,
   course: { institutionId: string; ownerId: string }
@@ -440,6 +457,19 @@ export async function requireCourseDriveTarget(user: SessionUser, courseId: stri
   assertCourseDriveInstitution(user, course);
   const context = await loadTargetWithinRoot(course, fileId);
   if (isCourseManagerRecord(user, course)) return context.target;
+  const protectedAiOutput = await db.courseDriveBinding.findMany({
+    where: { courseId, purpose: { startsWith: "AI_" }, folderId: { in: context.ancestry } },
+    select: { folderId: true }
+  });
+  const protectedIds = aiOutputFolderIds(
+    courseId,
+    course.driveRootFolderId!,
+    context.nodes,
+    protectedAiOutput.map((binding) => binding.folderId)
+  );
+  if (context.ancestry.some((id) => protectedIds.has(id))) {
+    throw new CourseDriveError("AI产物仅教师可见", 403, "COURSE_DRIVE_AI_OUTPUT_HIDDEN");
+  }
   const rules = await db.courseDriveAccessRule.findMany({
     where: { courseId, driveFileId: { in: context.ancestry } },
     select: { driveFileId: true, access: true }
@@ -551,6 +581,11 @@ export async function ensureCoursePurposeFolder(
         deletedAt: null
       }
     });
+    await db.courseDriveBinding.upsert({
+      where: { courseId_purpose: { courseId, purpose: "AI_OUTPUT_ROOT" } },
+      create: { courseId, purpose: "AI_OUTPUT_ROOT", folderId: aiRoot.id },
+      update: { folderId: aiRoot.id }
+    });
     parentId = aiRoot.id;
   }
   const matches = await db.driveFile.findMany({
@@ -608,17 +643,24 @@ export async function listCourseDrivePicker(
   const root = byId.get(course.driveRootFolderId);
   if (!root) return [];
   const descendantRows = nodes.filter((node) => ancestryToRoot(node, root.id, byId));
-  const rules = await db.courseDriveAccessRule.findMany({
-    where: { courseId, driveFileId: { in: descendantRows.map((node) => node.id) } },
-    select: { driveFileId: true, access: true }
-  });
   const manager = isCourseManagerRecord(user, course);
+  const [rules, aiBindings] = await Promise.all([
+    db.courseDriveAccessRule.findMany({
+      where: { courseId, driveFileId: { in: descendantRows.map((node) => node.id) } },
+      select: { driveFileId: true, access: true }
+    }),
+    manager ? Promise.resolve([]) : db.courseDriveBinding.findMany({
+      where: { courseId, purpose: { startsWith: "AI_" } },
+      select: { folderId: true }
+    })
+  ]);
+  const aiFolderIds = aiOutputFolderIds(courseId, root.id, nodes, aiBindings.map((binding) => binding.folderId));
   return descendantRows
     .filter((node) => node.id !== root.id)
     .filter((node) => {
       if (manager) return true;
       const ancestry = ancestryToRoot(node, root.id, byId);
-      return Boolean(ancestry && resolveNearestDriveRule(ancestry, rules) === "ALLOW");
+      return Boolean(ancestry && !ancestry.some((id) => aiFolderIds.has(id)) && resolveNearestDriveRule(ancestry, rules) === "ALLOW");
     })
     .filter((node) => !options.documentsOnly || (node.kind !== "folder" && isDocumentName(node.name)))
     .map((node) => ({
@@ -630,6 +672,38 @@ export async function listCourseDrivePicker(
       parentId: node.parentId
     }))
     .sort((left, right) => left.path.localeCompare(right.path, "zh-CN"));
+}
+
+export async function listStudentVisibleCourseFiles(user: SessionUser, courseId: string) {
+  const course = await requireCourseDriveManagerAccess(user, courseId);
+  if (!course.driveRootFolderId) return [];
+  const nodes = await loadActiveOwnerNodes(course.ownerId);
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const root = byId.get(course.driveRootFolderId);
+  if (!root) return [];
+  const descendants = nodes.filter((node) => node.kind !== "folder" && ancestryToRoot(node, root.id, byId));
+  const [rules, aiBindings] = await Promise.all([
+    db.courseDriveAccessRule.findMany({ where: { courseId }, select: { driveFileId: true, access: true } }),
+    db.courseDriveBinding.findMany({ where: { courseId, purpose: { startsWith: "AI_" } }, select: { folderId: true } })
+  ]);
+  const aiFolderIds = aiOutputFolderIds(courseId, root.id, nodes, aiBindings.map((binding) => binding.folderId));
+  return descendants.flatMap((node) => {
+    const ancestry = ancestryToRoot(node, root.id, byId);
+    if (!ancestry || ancestry.some((id) => aiFolderIds.has(id)) || resolveNearestDriveRule(ancestry, rules) !== "ALLOW") return [];
+    return [{ id: node.id, name: node.name, path: nodePath(node, byId, root.id), mimeType: node.mimeType, size: node.size }];
+  }).sort((left, right) => left.path.localeCompare(right.path, "zh-CN"));
+}
+
+export async function assertAnnouncementAttachmentFiles(user: SessionUser, courseId: string, fileIds: string[]) {
+  const uniqueIds = [...new Set(fileIds)];
+  if (uniqueIds.length !== fileIds.length) throw new CourseDriveError("通知不能重复添加同一个文件", 400);
+  const available = await listStudentVisibleCourseFiles(user, courseId);
+  const byId = new Map(available.map((file) => [file.id, file]));
+  const selected = uniqueIds.map((id) => byId.get(id));
+  if (selected.some((file) => !file)) {
+    throw new CourseDriveError("通知只能添加已向学生开放的课程文件，且不能引用 AI产物", 400, "NOTICE_ATTACHMENT_NOT_STUDENT_VISIBLE");
+  }
+  return selected.filter((file): file is NonNullable<typeof file> => Boolean(file));
 }
 
 export async function listCourseDriveChildren(user: SessionUser, courseId: string, parentId?: string | null) {
@@ -646,22 +720,31 @@ export async function listCourseDriveChildren(user: SessionUser, courseId: strin
   if (!requestedParent || !ancestryToRoot(requestedParent, root.id, byId)) {
     throw new CourseDriveError("目标文件夹不在当前课程云盘中", 403, "COURSE_DRIVE_OUTSIDE_ROOT");
   }
-  const rules = await db.courseDriveAccessRule.findMany({
-    where: { courseId },
-    select: { driveFileId: true, access: true }
-  });
   const manager = isCourseManagerRecord(user, course);
+  const [rules, aiBindings] = await Promise.all([
+    db.courseDriveAccessRule.findMany({ where: { courseId }, select: { driveFileId: true, access: true } }),
+    manager ? Promise.resolve([]) : db.courseDriveBinding.findMany({ where: { courseId, purpose: { startsWith: "AI_" } }, select: { folderId: true } })
+  ]);
+  const aiFolderIds = aiOutputFolderIds(courseId, root.id, nodes, aiBindings.map((binding) => binding.folderId));
+  const visibleToStudent = (node: DriveNode) => {
+    const ancestry = ancestryToRoot(node, root.id, byId);
+    return Boolean(ancestry && !ancestry.some((id) => aiFolderIds.has(id)) && resolveNearestDriveRule(ancestry, rules) === "ALLOW");
+  };
+  const leadsToVisibleContent = (folder: DriveNode) => nodes.some((node) => {
+    if (node.id === folder.id || !visibleToStudent(node)) return false;
+    return ancestryToRoot(node, folder.id, byId) !== null;
+  });
   const requestedParentAncestry = ancestryToRoot(requestedParent, root.id, byId) ?? [];
-  if (!manager && requestedParent.id !== root.id && resolveNearestDriveRule(requestedParentAncestry, rules) !== "ALLOW") {
+  if (!manager && requestedParentAncestry.some((id) => aiFolderIds.has(id))) {
+    throw new CourseDriveError("AI产物仅教师可见", 403, "COURSE_DRIVE_AI_OUTPUT_HIDDEN");
+  }
+  if (!manager && requestedParent.id !== root.id && !visibleToStudent(requestedParent) && !leadsToVisibleContent(requestedParent)) {
     throw new CourseDriveError("教师尚未向学生开放此文件夹", 403, "COURSE_DRIVE_ACCESS_DENIED");
   }
   const children = nodes.filter((node) => node.parentId === requestedParent.id);
   const visible = manager
     ? children
-    : children.filter((child) => {
-        const childAncestry = ancestryToRoot(child, root.id, byId);
-        return Boolean(childAncestry && resolveNearestDriveRule(childAncestry, rules) === "ALLOW");
-      });
+    : children.filter((child) => visibleToStudent(child) || (child.kind === "folder" && leadsToVisibleContent(child)));
   const breadcrumbs = [...requestedParentAncestry]
     .reverse()
     .map((id) => byId.get(id))
@@ -791,15 +874,16 @@ export async function deleteCourseDriveItem(user: SessionUser, courseId: string,
     const ids = context.nodes
       .filter((node) => ancestryToRoot(node, context.target.id, context.byId))
       .map((node) => node.id);
-    const [resources, importJobs, artifactExports, topicResources, groupFiles, copilotAttachments] = await Promise.all([
+    const [resources, importJobs, artifactExports, topicResources, groupFiles, copilotAttachments, announcementAttachments] = await Promise.all([
       tx.resource.count({ where: { driveFileId: { in: ids } } }),
       tx.documentImportJob.count({ where: { driveFileId: { in: ids } } }),
       tx.courseAiArtifactExport.count({ where: { driveFileId: { in: ids } } }),
       tx.topicResource.count({ where: { driveFileId: { in: ids } } }),
       tx.groupFile.count({ where: { driveFileId: { in: ids } } }),
-      tx.copilotConversationFile.count({ where: { driveFileId: { in: ids } } })
+      tx.copilotConversationFile.count({ where: { driveFileId: { in: ids } } }),
+      tx.announcementAttachment.count({ where: { driveFileId: { in: ids } } })
     ]);
-    const protectedReferenceCount = resources + importJobs + artifactExports + topicResources + groupFiles + copilotAttachments;
+    const protectedReferenceCount = resources + importJobs + artifactExports + topicResources + groupFiles + copilotAttachments + announcementAttachments;
     if (protectedReferenceCount > 0) {
       throw new CourseDriveError(
         `文件已被课程内容、导入记录或 AI 产物引用（共 ${protectedReferenceCount} 处），不能删除`,

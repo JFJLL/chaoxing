@@ -31,7 +31,7 @@ export async function POST(request: Request, context: RouteContext) {
     body = await readBoundedJsonBody(request, 8_192);
   } catch (error) {
     if (error instanceof BoundedJsonBodyError && error.reason === "too_large") {
-      return Response.json({ code: "COPILOT_MESSAGE_BODY_TOO_LARGE", error: "Copilot 请求内容过大" }, { status: 413 });
+      return Response.json({ code: "COPILOT_MESSAGE_BODY_TOO_LARGE", error: "AI智能体请求内容过大" }, { status: 413 });
     }
     return Response.json({ code: "COPILOT_MESSAGE_INVALID", error: "请输入有效问题" }, { status: 400 });
   }

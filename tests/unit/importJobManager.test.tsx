@@ -11,7 +11,7 @@ import { ImportJobManager } from "../../src/components/ai-import/ImportJobManage
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
 describe("ImportJobManager AI handoff", () => {
-  it("keeps import review focused on map publication without bypassing the lesson-plan source chain", () => {
+  it("shows automatic map publication without bypassing the lesson-plan source chain", () => {
     const markup = renderToStaticMarkup(<ImportJobManager
       courseId="course-1"
       jobId="job-1"
@@ -20,17 +20,29 @@ describe("ImportJobManager AI handoff", () => {
         id: "map-1",
         title: "知识导图",
         summary: null,
-        status: "DRAFT",
+        status: "PUBLISHED",
         nodes: [],
         edges: []
       }}
     />);
 
-    expect(markup).toContain("发布导图");
+    expect(markup).toContain("已自动发布");
+    expect(markup).not.toContain("发布导图");
     expect(markup).not.toContain('href="/space/courses/course-1/ai-workbench/apps/courseware"');
     expect(markup).not.toContain('href="/space/courses/course-1/ai-workbench/apps/ppt_courseware"');
     expect(markup).not.toContain('href="/space/courses/course-1/ai-workbench/apps/html_courseware"');
     expect(markup).not.toContain("生成HTML课件");
     expect(markup).not.toContain("generate-html");
+  });
+
+  it("does not label a historical draft as automatically published", () => {
+    const markup = renderToStaticMarkup(<ImportJobManager
+      courseId="course-1"
+      jobId="job-1"
+      status="READY_FOR_REVIEW"
+      map={{ id: "map-1", title: "旧知识导图", summary: null, status: "DRAFT", nodes: [], edges: [] }}
+    />);
+    expect(markup).toContain("历史草稿，未发布");
+    expect(markup).not.toContain("已自动发布");
   });
 });

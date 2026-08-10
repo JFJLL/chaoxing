@@ -23,6 +23,7 @@ function coverClass(cover?: string | null) {
 function getNavigationLabel(item: CourseNavItem, canManage: boolean) {
   if (item.id === "ai-workbench" && !canManage) return "AI助教";
   if (item.id === "analytics" && !canManage) return "我的学习";
+  if (item.id === "drive" && !canManage) return "课程资料";
   return item.label;
 }
 
@@ -90,7 +91,7 @@ export function CourseWorkspaceSidebar({ course, activeTab, canManage, zoviiCred
           return <CourseNavLink key={item.id} item={item} courseId={course.id} active={active} canManage={canManage} />;
         })}
         <ZoviiCanvasLauncher credential={zoviiCredential} />
-        {canManage && driveNav ? (
+        {driveNav ? (
           <CourseNavLink
             item={driveNav}
             courseId={course.id}

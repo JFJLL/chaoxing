@@ -38,8 +38,8 @@ export default async function CopilotPage({ params }: PageProps) {
   return (
     <FanyaCourseShell user={user} course={course} activeTab="activities">
       <CourseModulePanel
-        title={course.copilotName}
-        description={canManage ? `测试${course.copilotName}，管理名称、Skill 和课程云盘文件夹。` : `选择 Skill 和课程文件，让${course.copilotName}帮你完成学习任务。`}
+        title="AI智能体"
+        description={canManage ? "测试 AI智能体，管理智能体别名、Skill 和课程云盘文件夹。" : "可直接询问课程问题，也可选择 Skill 和课程文件获得更具体的帮助。"}
       >
         <CopilotWorkspace
           courseId={courseId}

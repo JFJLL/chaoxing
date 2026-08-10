@@ -29,7 +29,7 @@ export async function GET(_request: Request, context: RouteContext) {
       canBindRoot
     });
   } catch (error) {
-    return courseDriveErrorResponse(error, "Copilot 设置加载失败");
+    return courseDriveErrorResponse(error, "AI智能体设置加载失败");
   }
 }
 
@@ -39,7 +39,7 @@ export async function PUT(request: Request, context: RouteContext) {
   try {
     await requireCourseManager(user, courseId);
     const parsed = settingsSchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) return Response.json({ error: "Copilot 设置无效：名称为 1–40 个字符" }, { status: 400 });
+    if (!parsed.success) return Response.json({ error: "AI智能体设置无效：名称为 1–40 个字符" }, { status: 400 });
     const includesFolderId = Object.prototype.hasOwnProperty.call(parsed.data, "folderId");
     if (includesFolderId) await requireCourseOwner(user, courseId);
     if (parsed.data.folderId === null) {
@@ -51,6 +51,6 @@ export async function PUT(request: Request, context: RouteContext) {
     });
     return Response.json({ folderId: course.driveRootFolderId, copilotName: course.copilotName });
   } catch (error) {
-    return courseDriveErrorResponse(error, "Copilot 设置更新失败");
+    return courseDriveErrorResponse(error, "AI智能体设置更新失败");
   }
 }

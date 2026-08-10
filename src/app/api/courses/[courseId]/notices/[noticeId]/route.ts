@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireCourseManager } from "@/lib/permissions";
 import { normalizeNoticePublishAt } from "@/lib/teaching/notices";
+import { assertAnnouncementAttachmentFiles } from "@/lib/courseDrive/service";
 
 type RouteContext = { params: Promise<{ courseId: string; noticeId: string }> };
 
@@ -12,7 +13,8 @@ const updateSchema = z.object({
   body: z.string().trim().min(1).max(10_000).optional(),
   status: z.enum(["DRAFT", "PUBLISHED", "WITHDRAWN"]).optional(),
   publishAt: z.string().datetime().nullable().optional(),
-  pinned: z.boolean().optional()
+  pinned: z.boolean().optional(),
+  attachmentIds: z.array(z.string().min(1).max(200)).max(20).optional()
 });
 
 export async function PUT(request: NextRequest, context: RouteContext) {
@@ -26,16 +28,30 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     include: { author: { select: { name: true } }, reads: { where: { user: { enrollments: { some: { courseId } } } }, select: { userId: true, readAt: true } } }
   });
   if (!existing) return NextResponse.json({ error: "通知不存在" }, { status: 404 });
-  const notice = await db.announcement.update({
-    where: { id: noticeId },
-    data: {
-      ...parsed.data,
-      publishAt: normalizeNoticePublishAt({
-        nextStatus: parsed.data.status,
-        previousStatus: existing.status,
-        requestedPublishAt: parsed.data.publishAt
-      })
+  let files;
+  try {
+    files = parsed.data.attachmentIds === undefined ? null : await assertAnnouncementAttachmentFiles(user, courseId, parsed.data.attachmentIds);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "通知文件无效" }, { status: 400 });
+  }
+  const { attachmentIds: _attachmentIds, ...updates } = parsed.data;
+  const notice = await db.$transaction(async (tx) => {
+    const updated = await tx.announcement.update({
+      where: { id: noticeId },
+      data: {
+        ...updates,
+        publishAt: normalizeNoticePublishAt({
+          nextStatus: parsed.data.status,
+          previousStatus: existing.status,
+          requestedPublishAt: parsed.data.publishAt
+        })
+      }
+    });
+    if (files) {
+      await tx.announcementAttachment.deleteMany({ where: { announcementId: noticeId } });
+      if (files.length) await tx.announcementAttachment.createMany({ data: files.map((file) => ({ announcementId: noticeId, driveFileId: file.id, nameSnapshot: file.name })) });
     }
+    return tx.announcement.findUniqueOrThrow({ where: { id: updated.id }, include: { attachments: { include: { driveFile: { select: { id: true, name: true, mimeType: true, size: true } } } } } });
   });
   return NextResponse.json({
     notice: {

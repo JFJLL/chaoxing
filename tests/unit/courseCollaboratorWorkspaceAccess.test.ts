@@ -61,7 +61,8 @@ describe("collaborator course management surface", () => {
     const drivePage = read("src/app/space/courses/[courseId]/drive/page.tsx");
     const shell = read("src/components/course-workspace/FanyaCourseShell.tsx");
 
-    expect(drivePage).toContain("requireCourseManager");
+    expect(drivePage).toContain("requireCourseAccess");
+    expect(drivePage).toContain("isCourseManagerRecord");
     expect(drivePage).not.toContain("requireCourseOwner");
     expect(shell).toContain("isCourseManagerRecord");
     expect(shell).not.toMatch(/course\.ownerId\s*===\s*user\.id/);

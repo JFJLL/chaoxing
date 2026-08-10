@@ -43,7 +43,7 @@ describe("CopilotWorkspace", () => {
     expect(html).not.toContain("教师隐藏指令");
     expect(html).not.toContain("最多 5 个文件");
     expect(html).not.toMatch(/\d+ 个文件/);
-    expect(html).toContain("开始使用课程小助手");
+    expect(html).toContain("开始使用 AI智能体");
   });
 
   it("lets a student choose a Skill before a conversation exists", () => {
@@ -59,7 +59,7 @@ describe("CopilotWorkspace", () => {
   it("offers test and settings modes to course managers", () => {
     const html = renderToStaticMarkup(<CopilotWorkspace courseId="course-1" canManage initialCopilotName="课程小助手" initialFolderId={null} initialConversations={[conversation]} initialSkills={[skill]} initialFiles={[]} initialFolders={[]} initialAnalytics={{ calls: 0, activeUsers: 0, success: 0, failed: 0, skills: [] }} />);
 
-    expect(html).toContain("测试 Copilot");
-    expect(html).toContain("Copilot 设置");
+    expect(html).toContain("测试 AI智能体");
+    expect(html).toContain("AI智能体设置");
   });
 });

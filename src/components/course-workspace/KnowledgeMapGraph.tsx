@@ -41,13 +41,14 @@ type DragState = { pointerId: number; startX: number; startY: number; originX: n
 const hierarchyLevel: Record<string, number> = {
   course: 0,
   objective: 1,
-  chapter: 1,
-  lesson: 2,
-  concept: 3,
-  activity: 3,
-  skill: 3,
-  case: 3,
-  assessment: 3
+  document: 1,
+  chapter: 2,
+  lesson: 3,
+  concept: 4,
+  activity: 4,
+  skill: 4,
+  case: 4,
+  assessment: 4
 };
 
 const structuralEdgeTypes = new Set(["outcome", "contains", "practice", "checks"]);
@@ -55,6 +56,7 @@ const structuralEdgeTypes = new Set(["outcome", "contains", "practice", "checks"
 const styleByType: Record<string, NodeStyle> = {
   course: { fill: "#2563eb", stroke: "#1d4ed8", text: "#ffffff", soft: "#dbeafe" },
   objective: { fill: "#ecfdf5", stroke: "#10b981", text: "#065f46", soft: "#d1fae5" },
+  document: { fill: "#eef2ff", stroke: "#6366f1", text: "#312e81", soft: "#e0e7ff" },
   chapter: { fill: "#eff6ff", stroke: "#3b82f6", text: "#1e3a8a", soft: "#dbeafe" },
   lesson: { fill: "#fff7ed", stroke: "#f97316", text: "#7c2d12", soft: "#ffedd5" },
   concept: { fill: "#faf5ff", stroke: "#a855f7", text: "#581c87", soft: "#f3e8ff" },
@@ -100,6 +102,7 @@ function typeLabel(type: string) {
   const labels: Record<string, string> = {
     course: "课程",
     objective: "目标",
+    document: "文档",
     chapter: "章节",
     lesson: "课时",
     concept: "概念",

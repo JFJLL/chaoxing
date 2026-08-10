@@ -76,30 +76,19 @@ export function ImportJobManager({
       </div>
 
       {map ? (
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid gap-3">
           <div className="rounded-md bg-slate-50 p-4">
             <div className="flex items-center gap-2">
               <Network className="h-4 w-4 text-blue-600" />
               <h3 className="font-medium text-slate-900">{map.title}</h3>
-              <span className="rounded-full bg-white px-2 py-0.5 text-xs text-slate-500">{map.status === "PUBLISHED" ? "已发布" : "草稿"}</span>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${map.status === "PUBLISHED" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{map.status === "PUBLISHED" ? "已自动发布" : "历史草稿，未发布"}</span>
             </div>
             <p className="mt-2 text-sm leading-6 text-slate-600">{map.summary ?? "根据课程目录生成的知识图谱草稿。"}</p>
             <p className="mt-2 text-xs text-slate-500">{map.nodes.length} 个节点，{map.edges.length} 条关系</p>
           </div>
-          <div className="flex flex-wrap items-start gap-2 lg:justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => action("publish-map", `/api/courses/${courseId}/knowledge-maps/${map.id}/publish`, { method: "POST" })}
-              disabled={busy === "publish-map" || map.status === "PUBLISHED"}
-            >
-              <Network className="h-4 w-4" />
-              {map.status === "PUBLISHED" ? "导图已发布" : "发布导图"}
-            </Button>
-          </div>
         </div>
       ) : (
-        <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-500">任务完成后会在这里出现知识图谱草稿。</p>
+        <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-500">任务完成后会在这里出现自动发布的知识图谱。</p>
       )}
 
       {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}

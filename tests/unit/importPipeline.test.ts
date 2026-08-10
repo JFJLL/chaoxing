@@ -17,6 +17,9 @@ let runImportJob: typeof import("../../src/lib/imports/runImportJob").runImportJ
 let enqueueImportJob: typeof import("../../src/lib/imports/importQueue").enqueueImportJob;
 let recoverImportJobFromDatabase: typeof import("../../src/lib/imports/importQueue").recoverImportJobFromDatabase;
 let saveImportBatchOutline: typeof import("../../src/lib/imports/saveImportBatchOutline").saveImportBatchOutline;
+let composePublishedKnowledgeMaps: typeof import("../../src/lib/knowledgeMap/knowledgeMapService").composePublishedKnowledgeMaps;
+let saveKnowledgeMapTextRevision: typeof import("../../src/lib/knowledgeMap/knowledgeMapService").saveKnowledgeMapTextRevision;
+let softDeleteKnowledgeMapSeries: typeof import("../../src/lib/knowledgeMap/knowledgeMapService").softDeleteKnowledgeMapSeries;
 let courseId: string;
 let userId: string;
 let institutionId: string;
@@ -173,6 +176,7 @@ describe("import pipeline", () => {
     ({ runImportJob } = await import("../../src/lib/imports/runImportJob"));
     ({ enqueueImportJob, recoverImportJobFromDatabase } = await import("../../src/lib/imports/importQueue"));
     ({ saveImportBatchOutline } = await import("../../src/lib/imports/saveImportBatchOutline"));
+    ({ composePublishedKnowledgeMaps, saveKnowledgeMapTextRevision, softDeleteKnowledgeMapSeries } = await import("../../src/lib/knowledgeMap/knowledgeMapService"));
 
     const institution = await prisma.institution.create({
       data: { name: `导入流水线测试 ${randomUUID()}` }
@@ -209,6 +213,7 @@ describe("import pipeline", () => {
   afterEach(async () => {
     await prisma.auditLog.deleteMany({ where: { entity: "Course", entityId: courseId } });
     await prisma.chapter.deleteMany({ where: { courseId } });
+    await prisma.courseKnowledgeMap.deleteMany({ where: { courseId, sourceJobId: null } });
     await prisma.course.updateMany({ where: { id: courseId }, data: { outlineVersion: 0 } });
     if (createdJobIds.size) {
       await prisma.courseKnowledgeMap.deleteMany({ where: { sourceJobId: { in: [...createdJobIds] } } });
@@ -457,6 +462,66 @@ describe("import pipeline", () => {
     expect(await prisma.chapter.count({ where: { courseId } })).toBe(1);
     expect((await prisma.course.findUniqueOrThrow({ where: { id: courseId } })).outlineVersion).toBe(1);
   });
+
+  it("keeps applied document maps visible and rebuilds deleted composites from the latest source versions", async () => {
+    const { batch, jobs } = await createBatchJobs([
+      { name: "组合甲.md", text: "# 组合甲\n\n甲正文。" },
+      { name: "组合乙.md", text: "# 组合乙\n\n乙正文。" }
+    ]);
+    mocks.generateCourseOutline.mockImplementation(async (input: { documentText: string }) => ({
+      outline: outline(input.documentText.includes("组合甲") ? "组合甲" : input.documentText.includes("资料 1：") ? "组合目录" : "组合乙")
+    }));
+    await Promise.all(jobs.map((job) => runImportJob(job.id)));
+
+    await saveImportBatchOutline({
+      jobId: jobs[0]!.id,
+      actorId: userId,
+      outline: outline("组合目录"),
+      expectedOutlineVersion: 0,
+      expectedBatchVersion: 1
+    });
+    expect((await prisma.documentImportBatch.findUniqueOrThrow({ where: { id: batch.id } })).status).toBe("APPLIED");
+
+    const sourceMaps = await prisma.courseKnowledgeMap.findMany({
+      where: { sourceJobId: { in: jobs.map((job) => job.id) }, deletedAt: null },
+      orderBy: { sourceJobId: "asc" },
+      include: { nodes: true, edges: true }
+    });
+    expect(sourceMaps).toHaveLength(2);
+    const firstComposite = await composePublishedKnowledgeMaps({
+      courseId,
+      courseTitle: "隔离导入流水线课程",
+      mapIds: sourceMaps.map((map) => map.id),
+      persist: true
+    });
+    expect(firstComposite.map.version).toBe(1);
+
+    const revised = await saveKnowledgeMapTextRevision({
+      courseId,
+      mapId: sourceMaps[0]!.id,
+      text: sourceMaps[0]!.textContent!.replace("第一章", "第一章（新版）"),
+      expectedVersion: 1
+    });
+    const latestMapIds = [revised.id, sourceMaps[1]!.id];
+    const preview = await composePublishedKnowledgeMaps({
+      courseId,
+      courseTitle: "隔离导入流水线课程",
+      mapIds: latestMapIds,
+      persist: false
+    });
+    expect(preview.persisted).toBe(false);
+    expect(preview.map.id).toContain("preview:");
+
+    await softDeleteKnowledgeMapSeries(courseId, firstComposite.map.id);
+    const rebuilt = await composePublishedKnowledgeMaps({
+      courseId,
+      courseTitle: "隔离导入流水线课程",
+      mapIds: latestMapIds,
+      persist: true
+    });
+    expect(rebuilt.map.version).toBe(2);
+    expect(JSON.parse(rebuilt.map.sourceMapIds ?? "[]").sort()).toEqual(latestMapIds.sort());
+  }, 20_000);
 
   it("never resurrects a soft-deleted job when the worker runs", async () => {
     const { jobs } = await createBatchJobs([

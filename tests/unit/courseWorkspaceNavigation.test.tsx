@@ -128,7 +128,7 @@ describe("course workspace navigation", () => {
     expect(spaceHtml).not.toContain("生图");
   });
 
-  it("places the course drive below Zovii for teachers and hides it from students", () => {
+  it("places the course drive below Zovii and labels the student entry as course materials", () => {
     const teacherHtml = renderToStaticMarkup(
       <CourseWorkspaceSidebar course={{ id: "course-1", title: "测试课程" }} activeTab="drive" canManage />
     );
@@ -139,8 +139,9 @@ describe("course workspace navigation", () => {
     expect(teacherHtml).toContain('href="/space/courses/course-1/drive"');
     expect(teacherHtml).toMatch(/href="\/space\/courses\/course-1\/drive" aria-current="page"/);
     expect(teacherHtml.indexOf("云盘")).toBeGreaterThan(teacherHtml.indexOf("Zovii 智能画布"));
-    expect(studentHtml).not.toContain('href="/space/courses/course-1/drive"');
+    expect(studentHtml).toContain('href="/space/courses/course-1/drive"');
     expect(studentHtml).not.toContain(">云盘<");
+    expect(studentHtml).toContain(">课程资料<");
   });
 
   it("uses the original blue surface for the global space sidebar", () => {

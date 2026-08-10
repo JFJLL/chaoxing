@@ -541,12 +541,16 @@ export async function buildCopilotFileContext(fileIds: string[]) {
   let imageBytes = 0;
   const documents: Array<{ name: string; text: string }> = [];
   const images: Array<{ name: string; mimeType: string; data: string }> = [];
+  let remainingDocumentCharacters = 60_000;
 
   for (const file of ordered) {
     const kind = copilotFileKind(file.name, file.mimeType);
     if (kind === "document") {
       if (file.extractionStatus !== "READY" || !file.extractedText) throw new Error(`${file.name} 尚未完成解析`);
-      documents.push({ name: file.name, text: file.extractedText });
+      if (remainingDocumentCharacters <= 0) continue;
+      const text = file.extractedText.slice(0, remainingDocumentCharacters);
+      documents.push({ name: file.name, text });
+      remainingDocumentCharacters -= text.length;
       continue;
     }
     if (kind === "image") {

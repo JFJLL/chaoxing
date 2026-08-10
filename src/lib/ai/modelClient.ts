@@ -13,6 +13,7 @@ type CompletionInput = {
   system: string;
   user: string;
   model?: string;
+  signal?: AbortSignal;
 };
 
 type JsonCompletionInput = CompletionInput;
@@ -205,7 +206,7 @@ async function createOpenAiCompatibleJsonCompletion(config: AiModelConfig, input
       }
     ],
     response_format: { type: "json_object" }
-  });
+  }, { signal: input.signal });
 
   return completion.choices[0]?.message.content || "";
 }
@@ -247,7 +248,8 @@ async function createGeminiJsonCompletion(config: AiModelConfig, input: JsonComp
       generationConfig: {
         responseMimeType: "application/json"
       }
-    })
+    }),
+    signal: input.signal
   });
 
   if (!response.ok) {

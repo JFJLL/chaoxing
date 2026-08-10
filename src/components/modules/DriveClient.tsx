@@ -256,10 +256,16 @@ function DriveItemActionsMenu({
               打开文件夹
             </Link>
           ) : (
-            <a href={`${driveMutationBasePath(courseId)}/${file.id}?download=1`} role="menuitem" onClick={() => setOpen(false)} className={driveMenuItemClassName}>
-              <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
-              下载
-            </a>
+            <>
+              <a href={`${driveMutationBasePath(courseId)}/${file.id}?preview=1`} target="_blank" rel="noreferrer" role="menuitem" onClick={() => setOpen(false)} className={driveMenuItemClassName}>
+                <Eye className="h-4 w-4 shrink-0" aria-hidden="true" />
+                预览
+              </a>
+              <a href={`${driveMutationBasePath(courseId)}/${file.id}?download=1`} role="menuitem" onClick={() => setOpen(false)} className={driveMenuItemClassName}>
+                <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
+                下载
+              </a>
+            </>
           )}
           {canManage ? (
             <>
@@ -283,7 +289,7 @@ function DriveItemActionsMenu({
                 <Move className="h-4 w-4 shrink-0" aria-hidden="true" />
                 移动
               </button>
-              {file.kind === "file" && coursesLength ? (
+              {file.kind === "file" && !courseId && coursesLength ? (
                 <button type="button" role="menuitem" disabled={disabled} onClick={() => runAction(onAttach)} className={driveMenuItemClassName}>
                   <FolderPlus className="h-4 w-4 shrink-0" aria-hidden="true" />
                   添加到课程资料

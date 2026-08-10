@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   findDriveFiles: vi.fn(),
   findCourses: vi.fn(),
   findRules: vi.fn(),
+  findBindings: vi.fn(),
   createDriveFile: vi.fn(),
   requireCourseAccess: vi.fn(),
   requireCourseManager: vi.fn()
@@ -13,7 +14,8 @@ vi.mock("@/lib/db", () => ({
   db: {
     driveFile: { findMany: mocks.findDriveFiles, create: mocks.createDriveFile },
     course: { findMany: mocks.findCourses },
-    courseDriveAccessRule: { findMany: mocks.findRules }
+    courseDriveAccessRule: { findMany: mocks.findRules },
+    courseDriveBinding: { findMany: mocks.findBindings, findFirst: vi.fn() }
   }
 }));
 vi.mock("@/lib/permissions", () => ({
@@ -56,6 +58,7 @@ describe("course drive adversarial boundaries", () => {
       driveRootFolderId: "root-a",
       status: "ACTIVE"
     });
+    mocks.findBindings.mockResolvedValue([]);
   });
 
   it("blocks bound roots and cross-course moves while allowing an unbound file to enter a course", async () => {
