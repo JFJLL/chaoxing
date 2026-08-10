@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import { FileText, Loader2, Network, Pencil, Save, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { Dialog } from "@/components/ui/Dialog";
 import { KnowledgeMapGraph, type KnowledgeEdge, type KnowledgeNode } from "@/components/course-workspace/KnowledgeMapGraph";
 
 type DocumentOption = { mapId: string; sourceJobId: string; name: string; version: number; publishedAt: string };
@@ -58,7 +57,7 @@ export function KnowledgeMapWorkspace({
   const [text, setText] = useState(initialMap.textContent ?? "");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [dialogError, setDialogError] = useState("");
+  const [editorError, setEditorError] = useState("");
 
   async function loadSelection(nextIds: string[], persist = false) {
     const sequence = ++requestSequence.current;
@@ -102,13 +101,20 @@ export function KnowledgeMapWorkspace({
   }
 
   async function beginEditing() {
-    setDialogError("");
+    setEditorError("");
     if (editTargetId) {
       setEditing(true);
       return;
     }
     const created = await loadSelection(selectedIds, true);
     if (created) setEditing(true);
+  }
+
+  function cancelEditing() {
+    if (saving) return;
+    setEditing(false);
+    setEditorError("");
+    setText(map.textContent ?? "");
   }
 
   async function save() {
@@ -130,7 +136,7 @@ export function KnowledgeMapWorkspace({
       setEditing(false);
       router.refresh();
     } catch (saveError) {
-      setDialogError(saveError instanceof Error ? saveError.message : "知识图谱保存失败");
+      setEditorError(saveError instanceof Error ? saveError.message : "知识图谱保存失败");
     } finally {
       setSaving(false);
     }
@@ -190,32 +196,45 @@ export function KnowledgeMapWorkspace({
       </section>
 
       {error ? <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
-      <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className={`relative grid gap-5 ${editing ? "xl:grid-cols-[minmax(0,1fr)_minmax(400px,0.85fr)]" : "xl:grid-cols-[minmax(0,1fr)_320px]"}`}>
         {loading ? <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[28px] bg-white/70 backdrop-blur-sm"><span className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm text-slate-600 shadow"><Loader2 className="h-4 w-4 animate-spin" />正在归纳共同目标</span></div> : null}
         <KnowledgeMapGraph key={map.id} nodes={map.nodes} edges={map.edges} />
-        <aside className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div><h2 className="font-semibold text-slate-900">{map.title}</h2><p className="mt-1 text-xs text-slate-400">已发布版本 v{map.version}</p></div>
-            <Network className="h-5 w-5 shrink-0 text-blue-600" />
-          </div>
-          <p className="mt-3 text-sm leading-6 text-slate-600">{map.summary ?? "课程知识关系。"}</p>
-          {canManage ? <div className="mt-4"><Button type="button" variant="secondary" className="h-9 w-full" disabled={loading} onClick={() => void beginEditing()}><Pencil className="h-4 w-4" />{editTargetId ? "文本编辑" : "保存组合并编辑"}</Button></div> : null}
-          <div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-xl bg-white p-3"><p className="text-xs text-slate-500">节点</p><p className="mt-1 text-2xl font-semibold">{map.nodes.length}</p></div><div className="rounded-xl bg-white p-3"><p className="text-xs text-slate-500">关系</p><p className="mt-1 text-2xl font-semibold">{map.edges.length}</p></div></div>
-          <div className="mt-4 space-y-2">{relationStats.map(([type, count]) => <div key={type} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-xs"><span className="text-slate-600">{relationLabels[type] ?? type}</span><span className="font-semibold">{count}</span></div>)}</div>
-        </aside>
+        {editing ? (
+          <aside className="flex min-w-0 flex-col rounded-2xl border border-blue-200 bg-blue-50/40 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h2 className="font-semibold text-slate-900">文本编辑</h2>
+                <p className="mt-1 text-xs leading-5 text-slate-500">左侧为当前知识图谱，右侧编辑 Markdown 大纲；保存后发布为新版本并更新图谱。</p>
+              </div>
+              <Pencil className="h-5 w-5 shrink-0 text-blue-600" />
+            </div>
+            <textarea
+              autoFocus
+              aria-label="知识图谱 Markdown 文本"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              spellCheck={false}
+              className="mt-4 min-h-[480px] w-full flex-1 resize-y rounded-xl border border-slate-200 bg-white p-4 font-mono text-sm leading-6 text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+            {editorError ? <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{editorError}</p> : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="secondary" disabled={saving} onClick={cancelEditing}><X className="h-4 w-4" />取消</Button>
+              <Button type="button" disabled={saving || !text.trim()} onClick={() => void save()}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}保存并发布新版本</Button>
+            </div>
+          </aside>
+        ) : (
+          <aside className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div><h2 className="font-semibold text-slate-900">{map.title}</h2><p className="mt-1 text-xs text-slate-400">已发布版本 v{map.version}</p></div>
+              <Network className="h-5 w-5 shrink-0 text-blue-600" />
+            </div>
+            <p className="mt-3 text-sm leading-6 text-slate-600">{map.summary ?? "课程知识关系。"}</p>
+            {canManage ? <div className="mt-4"><Button type="button" variant="secondary" className="h-9 w-full" disabled={loading} onClick={() => void beginEditing()}><Pencil className="h-4 w-4" />{editTargetId ? "文本编辑" : "保存组合并编辑"}</Button></div> : null}
+            <div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-xl bg-white p-3"><p className="text-xs text-slate-500">节点</p><p className="mt-1 text-2xl font-semibold">{map.nodes.length}</p></div><div className="rounded-xl bg-white p-3"><p className="text-xs text-slate-500">关系</p><p className="mt-1 text-2xl font-semibold">{map.edges.length}</p></div></div>
+            <div className="mt-4 space-y-2">{relationStats.map(([type, count]) => <div key={type} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-xs"><span className="text-slate-600">{relationLabels[type] ?? type}</span><span className="font-semibold">{count}</span></div>)}</div>
+          </aside>
+        )}
       </div>
-
-      <Dialog open={editing} title="并列编辑知识图谱" panelClassName="max-w-7xl" onClose={() => !saving && setEditing(false)}>
-        <div className="space-y-4">
-          <div className="rounded-xl bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-800">左侧实时查看知识图谱，右侧编辑 Markdown 大纲。多文档图谱保存为独立组合视图，不会修改各文档的基础图谱。</div>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] lg:items-stretch">
-            <div className="min-h-[520px] overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2"><KnowledgeMapGraph key={`editing-${map.id}`} nodes={map.nodes} edges={map.edges} /></div>
-            <textarea aria-label="知识图谱 Markdown 文本" value={text} onChange={(event) => setText(event.target.value)} spellCheck={false} className="min-h-[520px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-sm leading-6 text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-          </div>
-          {dialogError ? <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{dialogError}</p> : null}
-          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" disabled={saving} onClick={() => setEditing(false)}><X className="h-4 w-4" />取消</Button><Button type="button" disabled={saving || !text.trim()} onClick={() => void save()}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}保存并发布新版本</Button></div>
-        </div>
-      </Dialog>
     </div>
   );
 }
