@@ -55,6 +55,7 @@ model User {
   liveChatMessages        LiveChatMessage[]
   announcements           Announcement[]
   announcementReads       AnnouncementRead[]
+  driveFileDownloads      DriveFileDownload[]     @relation("DriveFileDownloadUser")
   attendanceSessions      AttendanceSession[]     @relation("AttendanceCreator")
   attendanceRecords       AttendanceRecord[]      @relation("AttendanceStudent")
   lessonProgress          LessonProgress[]
@@ -662,6 +663,7 @@ model DriveFile {
   artifactExports         CourseAiArtifactExport[]
   copilotAttachments      CopilotConversationFile[]
   announcementAttachments AnnouncementAttachment[]
+  downloads               DriveFileDownload[]
   createdAt               DateTime                  @default(now())
   updatedAt               DateTime                  @updatedAt
 }
@@ -840,6 +842,18 @@ model AnnouncementRead {
 
   @@unique([announcementId, userId])
   @@index([userId, readAt])
+}
+
+model DriveFileDownload {
+  id           String    @id @default(cuid())
+  driveFileId  String
+  driveFile    DriveFile @relation(fields: [driveFileId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User      @relation("DriveFileDownloadUser", fields: [userId], references: [id], onDelete: Cascade)
+  downloadedAt DateTime  @default(now())
+
+  @@unique([driveFileId, userId])
+  @@index([userId, downloadedAt])
 }
 
 model AttendanceSession {

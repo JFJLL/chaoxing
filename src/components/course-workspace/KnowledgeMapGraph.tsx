@@ -483,7 +483,7 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
         </div>
         <div
           ref={canvasRef}
-          className="absolute left-0 top-0 will-change-transform"
+          className="absolute left-0 top-0"
           style={{ width: layout.width, height: layout.height, transformOrigin: "0 0" }}
         >
           <svg

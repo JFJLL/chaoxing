@@ -4,8 +4,6 @@ import { loadCourseWorkspace } from "@/lib/courseWorkspace/data";
 import { isCourseManagerRecord } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
 import { CourseModulePanel } from "@/components/course-workspace/CourseModulePanel";
-import { LessonProgressButton } from "@/components/course-workspace/LessonProgressButton";
-import { db } from "@/lib/db";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
@@ -15,14 +13,12 @@ export default async function StructurePage({ params }: PageProps) {
   const course = await loadCourseWorkspace(user, courseId);
   const canManage = isCourseManagerRecord(user, course);
   if (canManage) redirect(`/space/courses/${courseId}/ai-workbench/content`);
-  const lessonProgress = await db.lessonProgress.findMany({ where: { userId: user.id, lesson: { chapter: { courseId } }, completedAt: { not: null } }, select: { lessonId: true } });
-  const completedLessonIds = new Set(lessonProgress.map((item) => item.lessonId));
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="structure">
       <CourseModulePanel
         title="课程结构"
-        description="课时完成由学生自报，并在课程总进度中按预计学习时长加权；签到、作业和考试不会被混入课时进度。"
+        description="课时完成按已读通知与下载通知附件计算；签到、作业和考试不会被混入课时进度。"
       >
         <div className="space-y-4">
           {course.chapters.map((chapter) => (
@@ -31,9 +27,8 @@ export default async function StructurePage({ params }: PageProps) {
               <p className="mt-1 text-sm text-slate-500">{chapter.summary ?? "暂无章节简介"}</p>
               <div className="mt-4 space-y-2">
                 {chapter.lessons.map((lesson) => (
-                  <div key={lesson.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 text-sm text-slate-600">
+                  <div key={lesson.id} className="rounded-xl bg-white px-4 py-3 text-sm text-slate-600">
                     <span>{chapter.order}.{lesson.order} {lesson.title}</span>
-                    <LessonProgressButton courseId={courseId} lessonId={lesson.id} completed={completedLessonIds.has(lesson.id)} />
                   </div>
                 ))}
               </div>

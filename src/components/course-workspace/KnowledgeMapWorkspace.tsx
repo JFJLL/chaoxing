@@ -5,6 +5,7 @@ import { FileText, Loader2, Network, Pencil, Save, Trash2, X } from "lucide-reac
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { KnowledgeMapGraph, type KnowledgeEdge, type KnowledgeNode } from "@/components/course-workspace/KnowledgeMapGraph";
+import { KnowledgeMapTreeEditor } from "@/components/course-workspace/KnowledgeMapTreeEditor";
 
 type DocumentOption = { mapId: string; sourceJobId: string; name: string; version: number; publishedAt: string };
 type SavedCompositeOption = { mapId: string; title: string; version: number; publishedAt: string; sourceMapIds: string[] };
@@ -58,6 +59,8 @@ export function KnowledgeMapWorkspace({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [editorError, setEditorError] = useState("");
+  const [validityMessage, setValidityMessage] = useState("");
+  const [previewGraph, setPreviewGraph] = useState<{ nodes: KnowledgeNode[]; edges: KnowledgeEdge[] } | null>(null);
 
   async function loadSelection(nextIds: string[], persist = false) {
     const sequence = ++requestSequence.current;
@@ -102,6 +105,7 @@ export function KnowledgeMapWorkspace({
 
   async function beginEditing() {
     setEditorError("");
+    setValidityMessage("");
     if (editTargetId) {
       setEditing(true);
       return;
@@ -114,6 +118,8 @@ export function KnowledgeMapWorkspace({
     if (saving) return;
     setEditing(false);
     setEditorError("");
+    setValidityMessage("");
+    setPreviewGraph(null);
     setText(map.textContent ?? "");
   }
 
@@ -121,6 +127,7 @@ export function KnowledgeMapWorkspace({
     if (!editTargetId) return;
     setSaving(true);
     setError("");
+    setEditorError("");
     try {
       const response = await fetch(`/api/courses/${courseId}/knowledge-maps/${editTargetId}`, {
         method: "PUT",
@@ -134,6 +141,8 @@ export function KnowledgeMapWorkspace({
       setEditTargetId(body.map.id);
       setText(body.map.textContent ?? text);
       setEditing(false);
+      setPreviewGraph(null);
+      setValidityMessage("");
       router.refresh();
     } catch (saveError) {
       setEditorError(saveError instanceof Error ? saveError.message : "知识图谱保存失败");
@@ -198,28 +207,28 @@ export function KnowledgeMapWorkspace({
       {error ? <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
       <div className={`relative grid gap-5 ${editing ? "xl:grid-cols-[minmax(0,1fr)_minmax(400px,0.85fr)]" : "xl:grid-cols-[minmax(0,1fr)_320px]"}`}>
         {loading ? <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[28px] bg-white/70 backdrop-blur-sm"><span className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm text-slate-600 shadow"><Loader2 className="h-4 w-4 animate-spin" />正在归纳共同目标</span></div> : null}
-        <KnowledgeMapGraph key={map.id} nodes={map.nodes} edges={map.edges} />
+        <KnowledgeMapGraph key={editing ? `preview-${map.id}` : map.id} nodes={editing && previewGraph ? previewGraph.nodes : map.nodes} edges={editing && previewGraph ? previewGraph.edges : map.edges} />
         {editing ? (
           <aside className="flex min-w-0 flex-col rounded-2xl border border-blue-200 bg-blue-50/40 p-4">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h2 className="font-semibold text-slate-900">文本编辑</h2>
-                <p className="mt-1 text-xs leading-5 text-slate-500">左侧为当前知识图谱，右侧编辑 Markdown 大纲；保存后发布为新版本并更新图谱。</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">左侧实时预览编辑结果；保存后发布为新版本并更新图谱。</p>
               </div>
               <Pencil className="h-5 w-5 shrink-0 text-blue-600" />
             </div>
-            <textarea
-              autoFocus
-              aria-label="知识图谱 Markdown 文本"
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              spellCheck={false}
-              className="mt-4 min-h-[480px] w-full flex-1 resize-y rounded-xl border border-slate-200 bg-white p-4 font-mono text-sm leading-6 text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            <KnowledgeMapTreeEditor
+              key={map.id}
+              nodes={map.nodes}
+              edges={map.edges}
+              onSerializedChange={setText}
+              onPreviewChange={setPreviewGraph}
+              onValidityChange={setValidityMessage}
             />
-            {editorError ? <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{editorError}</p> : null}
+            {validityMessage || editorError ? <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{validityMessage || editorError}</p> : null}
             <div className="mt-4 flex justify-end gap-2">
               <Button type="button" variant="secondary" disabled={saving} onClick={cancelEditing}><X className="h-4 w-4" />取消</Button>
-              <Button type="button" disabled={saving || !text.trim()} onClick={() => void save()}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}保存并发布新版本</Button>
+              <Button type="button" disabled={saving || !text.trim() || Boolean(validityMessage)} onClick={() => void save()}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}保存并发布新版本</Button>
             </div>
           </aside>
         ) : (

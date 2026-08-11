@@ -1,16 +1,36 @@
-export function weightedLessonCompletionRate(
-  lessons: Array<{ id: string; estimatedMinutes: number | null }>,
-  completedLessonIds: ReadonlySet<string>
+type NoticeAttachment = { driveFileId: string | null; deleted: boolean };
+type NoticeRecord = { id: string; attachments: NoticeAttachment[] };
+type AnnouncementReadRecord = { announcementId: string; userId: string };
+type DriveFileDownloadRecord = { driveFileId: string; userId: string };
+
+function completedNoticeIds(
+  notices: NoticeRecord[],
+  reads: AnnouncementReadRecord[],
+  downloads: DriveFileDownloadRecord[],
+  studentId: string
 ) {
-  if (!lessons.length) return null;
-  const estimated = lessons.map((lesson) => lesson.estimatedMinutes).filter((value): value is number => Boolean(value && value > 0));
-  const fallbackWeight = estimated.length ? estimated.reduce((sum, value) => sum + value, 0) / estimated.length : 1;
-  let totalWeight = 0;
-  let completedWeight = 0;
-  for (const lesson of lessons) {
-    const weight = lesson.estimatedMinutes && lesson.estimatedMinutes > 0 ? lesson.estimatedMinutes : fallbackWeight;
-    totalWeight += weight;
-    if (completedLessonIds.has(lesson.id)) completedWeight += weight;
-  }
-  return totalWeight > 0 ? Math.round(completedWeight / totalWeight * 100) : null;
+  const readIds = new Set(reads.filter((read) => read.userId === studentId).map((read) => read.announcementId));
+  const downloadedFileIds = new Set(downloads.filter((download) => download.userId === studentId).map((download) => download.driveFileId));
+  return notices
+    .filter((notice) => readIds.has(notice.id) && notice.attachments.every((attachment) => attachment.deleted || !attachment.driveFileId || downloadedFileIds.has(attachment.driveFileId)))
+    .map((notice) => notice.id);
+}
+
+export function countCompletedNoticeEngagements(
+  notices: NoticeRecord[],
+  reads: AnnouncementReadRecord[],
+  downloads: DriveFileDownloadRecord[],
+  studentId: string
+) {
+  return completedNoticeIds(notices, reads, downloads, studentId).length;
+}
+
+export function noticeEngagementCompletionRate(
+  notices: NoticeRecord[],
+  reads: AnnouncementReadRecord[],
+  downloads: DriveFileDownloadRecord[],
+  studentId: string
+) {
+  if (!notices.length) return null;
+  return Math.round(countCompletedNoticeEngagements(notices, reads, downloads, studentId) / notices.length * 100);
 }

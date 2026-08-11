@@ -13,7 +13,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const { fileId } = await context.params;
   try {
     const file = await requireDriveFileReadable(user, fileId);
-    if (request.nextUrl.searchParams.get("download")) return streamDriveFile(fileId, "attachment");
+    if (request.nextUrl.searchParams.get("download")) {
+      await db.driveFileDownload.upsert({
+        where: { driveFileId_userId: { driveFileId: file.id, userId: user.id } },
+        create: { driveFileId: file.id, userId: user.id },
+        update: {}
+      });
+      return streamDriveFile(fileId, "attachment");
+    }
     if (request.nextUrl.searchParams.get("preview")) return streamDriveFile(fileId, "inline");
     return NextResponse.json({ file });
   } catch (error) {
