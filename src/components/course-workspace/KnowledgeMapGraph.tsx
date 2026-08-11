@@ -75,8 +75,8 @@ const GAP_X = 88;
 const GAP_Y = 22;
 const PADDING_X = 52;
 const PADDING_Y = 56;
-const MIN_SCALE = 0.2;
-const MAX_SCALE = 2.2;
+const MIN_SCALE = 0.25;
+const MAX_SCALE = 5;
 const ZOOM_STEP = 0.15;
 
 export function wrapKnowledgeLabel(value: string, maxCharacters = 14) {
@@ -278,22 +278,27 @@ export function buildKnowledgeMindMapLayout(nodes: KnowledgeNode[], edges: Knowl
 
 type GraphData = { nodes: KnowledgeNode[]; edges: KnowledgeEdge[]; expandedIds: Set<string> };
 
-// How long we wait for a freshly mounted layer to finish rasterizing before
-// swapping layer opacity. During that window the previous frame stays visible,
-// so expansion never shows blank (white) frames even on software rendering.
-const SWAP_RASTER_MS = 350;
+// The layer renders its SVG at the on-screen size (layout x fit) via viewBox,
+// so software rasterization cost stays bounded by the viewport instead of the
+// layout size. The CSS transform on the wrapper is pure user pan/zoom.
+function fitScale(layoutWidth: number, layoutHeight: number, viewportWidth: number, viewportHeight: number) {
+  if (!viewportWidth || !viewportHeight) return 1;
+  return Math.min((viewportWidth - 64) / layoutWidth, (viewportHeight - 64) / layoutHeight, 1);
+}
 
 const GraphLayer = memo(function GraphLayer({
   data,
   opacity,
-  layerKey,
+  viewportSize,
   onLayerRef,
+  onSvgRef,
   onToggle
 }: {
   data: GraphData;
   opacity: number;
-  layerKey: string;
+  viewportSize: { width: number; height: number };
   onLayerRef: (element: HTMLDivElement | null) => void;
+  onSvgRef: (element: SVGSVGElement | null) => void;
   onToggle: (nodeId: string) => void;
 }) {
   const { nodes, edges, expandedIds } = data;
@@ -319,31 +324,28 @@ const GraphLayer = memo(function GraphLayer({
     [edges, visibleIds]
   );
   const layout = useMemo(() => buildKnowledgeMindMapLayout(visibleNodes, visibleEdges), [visibleEdges, visibleNodes]);
+  const fit = fitScale(layout.width, layout.height, viewportSize.width, viewportSize.height);
+  const width = Math.max(1, Math.round(layout.width * fit));
+  const height = Math.max(1, Math.round(layout.height * fit));
 
   if (!layout.rootId) return null;
 
   return (
     <div
       ref={onLayerRef}
-      className="absolute left-0 top-0 h-full w-full will-change-transform"
+      className="absolute left-0 top-0 h-full w-full transition-opacity duration-200 will-change-transform"
       style={{ transformOrigin: "0 0", opacity }}
       aria-hidden={opacity === 0}
     >
-      <div className="absolute left-0 top-0" style={{ width: layout.width, height: layout.height }}>
+      <div className="absolute left-0 top-0" style={{ width, height }}>
         <svg
-          width={layout.width}
-          height={layout.height}
+          ref={onSvgRef}
+          width={width}
+          height={height}
           viewBox={`0 0 ${layout.width} ${layout.height}`}
           role="img"
           aria-label="课程思维导图"
         >
-          <defs>
-            <pattern id={`mind-map-grid-${layerKey}`} width="28" height="28" patternUnits="userSpaceOnUse">
-              <circle cx="1" cy="1" r="1" fill="#cbd5e1" opacity="0.28" />
-            </pattern>
-          </defs>
-          <rect width={layout.width} height={layout.height} fill={`url(#mind-map-grid-${layerKey})`} />
-
           {layout.links.map((link) => {
             const source = layout.positions.get(link.sourceId);
             const target = layout.positions.get(link.targetId);
@@ -430,6 +432,38 @@ const GraphLayer = memo(function GraphLayer({
   );
 });
 
+function serializeSvg(svg: SVGSVGElement | null) {
+  try {
+    return svg ? new XMLSerializer().serializeToString(svg) : null;
+  } catch {
+    return null;
+  }
+}
+
+function probeRaster(svg: SVGSVGElement | null): Promise<void> {
+  return new Promise((resolve) => {
+    const xml = serializeSvg(svg);
+    if (!xml) {
+      resolve();
+      return;
+    }
+    try {
+      const image = new Image();
+      image.onload = () => {
+        try {
+          void image.decode().then(resolve, resolve);
+        } catch {
+          resolve();
+        }
+      };
+      image.onerror = () => resolve();
+      image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`;
+    } catch {
+      resolve();
+    }
+  });
+}
+
 export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; edges: KnowledgeEdge[] }) {
   const hierarchy = useMemo(() => buildKnowledgeHierarchyIndex(nodes, edges), [nodes, edges]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
@@ -440,18 +474,20 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
     }
     return initial;
   });
-  const [focusNodeId, setFocusNodeId] = useState<string | null>(hierarchy.root?.id ?? null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const layerRefs = useRef<Array<HTMLDivElement | null>>([null, null]);
+  const svgRefs = useRef<Array<SVGSVGElement | null>>([null, null]);
   const scaleLabelRef = useRef<HTMLSpanElement>(null);
   const viewRef = useRef<ViewTransform>({ x: 0, y: 0, scale: 1 });
   const layoutSizeRef = useRef({ width: 960, height: 520 });
+  const fitRef = useRef(1);
   const dragRef = useRef<DragState | null>(null);
   const viewInitializedRef = useRef(false);
   const swapTimer = useRef<number | null>(null);
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [slot, setSlot] = useState<"A" | "B">("A");
   const [swap, setSwap] = useState<GraphData | null>(null);
-  const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+  const [reveal, setReveal] = useState(false);
   const visibleIds = useMemo(() => {
     const visible = new Set<string>();
     if (!hierarchy.root) return visible;
@@ -474,6 +510,7 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
   const layout = useMemo(() => buildKnowledgeMindMapLayout(visibleNodes, visibleEdges), [visibleEdges, visibleNodes]);
   const hiddenNodeCount = nodes.length - visibleNodes.length;
   layoutSizeRef.current = { width: layout.width, height: layout.height };
+  fitRef.current = fitScale(layout.width, layout.height, viewportSize.width, viewportSize.height);
   const currentData = useMemo<GraphData>(() => ({ nodes, edges, expandedIds }), [nodes, edges, expandedIds]);
 
   const applyView = useCallback((next: ViewTransform) => {
@@ -481,7 +518,9 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
     for (const layer of layerRefs.current) {
       if (layer) layer.style.transform = `translate(${next.x}px, ${next.y}px) scale(${next.scale})`;
     }
-    if (scaleLabelRef.current) scaleLabelRef.current.textContent = `${Math.round(next.scale * 100)}%`;
+    if (scaleLabelRef.current) {
+      scaleLabelRef.current.textContent = `${Math.round(next.scale * fitRef.current * 100)}%`;
+    }
   }, []);
 
   const registerLayer = useCallback((index: 0 | 1) => (element: HTMLDivElement | null) => {
@@ -492,15 +531,19 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
     }
   }, []);
 
+  const registerSvg = useCallback((index: 0 | 1) => (element: SVGSVGElement | null) => {
+    svgRefs.current[index] = element;
+  }, []);
+
   const fitView = useCallback(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
     const size = layoutSizeRef.current;
-    const scale = clampScale(Math.min((viewport.clientWidth - 64) / size.width, (viewport.clientHeight - 64) / size.height, 1));
+    const fit = fitScale(size.width, size.height, viewport.clientWidth, viewport.clientHeight);
     applyView({
-      scale,
-      x: (viewport.clientWidth - size.width * scale) / 2,
-      y: (viewport.clientHeight - size.height * scale) / 2
+      scale: 1,
+      x: (viewport.clientWidth - size.width * fit) / 2,
+      y: (viewport.clientHeight - size.height * fit) / 2
     });
   }, [applyView]);
 
@@ -524,25 +567,33 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
+    if (viewportSize.width !== viewport.clientWidth || viewportSize.height !== viewport.clientHeight) {
+      setViewportSize({ width: viewport.clientWidth, height: viewport.clientHeight });
+      return;
+    }
     if (!viewInitializedRef.current) {
       viewInitializedRef.current = true;
       fitView();
       return;
     }
-    const focusPosition = focusNodeId ? layout.positions.get(focusNodeId) : null;
-    if (!focusPosition) return;
+    // When the layout changes (expand/collapse), re-center the (possibly new)
+    // canvas at the current zoom level so the graph stays in view without
+    // jumping to a specific node.
+    const size = layoutSizeRef.current;
+    const fit = fitScale(size.width, size.height, viewport.clientWidth, viewport.clientHeight);
     const scale = viewRef.current.scale;
     applyView({
       scale,
-      x: viewport.clientWidth / 2 - (focusPosition.x + focusPosition.width / 2) * scale,
-      y: viewport.clientHeight / 2 - (focusPosition.y + focusPosition.height / 2) * scale
+      x: (viewport.clientWidth - size.width * fit * scale) / 2,
+      y: (viewport.clientHeight - size.height * fit * scale) / 2
     });
-  }, [applyView, fitView, focusNodeId, layout]);
+  }, [applyView, fitView, layout, viewportSize]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
+      setViewportSize({ width: viewport.clientWidth, height: viewport.clientHeight });
       if (viewInitializedRef.current) fitView();
     });
     observer.observe(viewport);
@@ -570,7 +621,6 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
     if (swapTimer.current !== null || swap) return;
     const children = hierarchy.childrenByParent.get(nodeId) ?? [];
     if (!children.length) return;
-    setFocusNodeId(nodeId);
     setSwap(currentData);
     setExpandedIds((current) => {
       const next = new Set(current);
@@ -585,11 +635,29 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
     });
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (swapTimer.current !== null) window.clearTimeout(swapTimer.current);
+      const incoming = slot === "A" ? svgRefs.current[1] : svgRefs.current[0];
       swapTimer.current = window.setTimeout(() => {
-        swapTimer.current = null;
-        setSwap(null);
-        setSlot((current) => (current === "A" ? "B" : "A"));
-      }, SWAP_RASTER_MS);
+        void probeRaster(incoming ?? null).then(() => {
+          if (swapTimer.current === null) return;
+          setReveal(true);
+          if (swapTimer.current !== null) window.clearTimeout(swapTimer.current);
+          swapTimer.current = window.setTimeout(() => {
+            swapTimer.current = null;
+            setSwap(null);
+            setSlot((current) => (current === "A" ? "B" : "A"));
+            setReveal(false);
+          }, 240);
+        });
+      }, 40);
+      // safety cap: never freeze longer than this
+      window.setTimeout(() => {
+        if (swapTimer.current !== null) {
+          swapTimer.current = null;
+          setSwap(null);
+          setSlot((current) => (current === "A" ? "B" : "A"));
+          setReveal(false);
+        }
+      }, 1500);
     }));
   };
 
@@ -628,6 +696,10 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
   if (!layout.rootId) {
     return <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">图谱中暂无可展示节点。</p>;
   }
+
+  const layerA = slot === "A";
+  const layerB = slot === "B";
+  const layerOpacity = (isSlot: boolean) => (isSlot ? 1 : reveal ? 1 : 0);
 
   return (
     <div className="overflow-hidden rounded-[28px] border border-slate-100 bg-white shadow-sm">
@@ -668,23 +740,25 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
           <Move className="h-3.5 w-3.5" />
           拖动查看
         </div>
-        {slot === "A" || swap ? (
+        {layerA || swap ? (
           <GraphLayer
             key="layer-A"
-            data={slot === "A" ? (swap ?? currentData) : currentData}
-            opacity={slot === "A" ? 1 : 0}
-            layerKey="a"
+            data={layerA ? (swap ?? currentData) : currentData}
+            opacity={layerOpacity(layerA)}
+            viewportSize={viewportSize}
             onLayerRef={registerLayer(0)}
+            onSvgRef={registerSvg(0)}
             onToggle={toggleBranch}
           />
         ) : null}
-        {slot === "B" || swap ? (
+        {layerB || swap ? (
           <GraphLayer
             key="layer-B"
-            data={slot === "B" ? (swap ?? currentData) : currentData}
-            opacity={slot === "B" ? 1 : 0}
-            layerKey="b"
+            data={layerB ? (swap ?? currentData) : currentData}
+            opacity={layerOpacity(layerB)}
+            viewportSize={viewportSize}
             onLayerRef={registerLayer(1)}
+            onSvgRef={registerSvg(1)}
             onToggle={toggleBranch}
           />
         ) : null}
