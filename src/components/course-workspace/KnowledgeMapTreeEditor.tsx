@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, GripVertical, Plus, Trash2, X } from "lucide-react";
 import {
   buildKnowledgeOutline,
@@ -306,6 +306,7 @@ export function KnowledgeMapTreeEditor({ nodes, edges, onSerializedChange, onPre
           {hasChildren ? (
             <button
               type="button"
+              data-cx-no-pending="true"
               title={collapsed ? "展开" : "收起"}
               aria-label={`${collapsed ? "展开" : "收起"}${outlineTypeLabels[node.type] ?? "节点"}：${node.label}`}
               className="shrink-0 rounded-lg p-0.5 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600"
