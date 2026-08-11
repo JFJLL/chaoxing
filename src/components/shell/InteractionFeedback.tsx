@@ -67,7 +67,7 @@ export function InteractionFeedback() {
       const target = event.target instanceof Element ? event.target : null;
       const element = target?.closest<HTMLElement>("a[href],button,[role='button'],input[type='submit']");
       if (!element) return;
-      if (element.matches("[disabled],[aria-disabled='true']")) return;
+      if (element.matches("[disabled],[aria-disabled='true'],[data-cx-no-pending='true']")) return;
 
       if (element instanceof HTMLAnchorElement) {
         if (shouldIgnoreAnchor(element)) return;

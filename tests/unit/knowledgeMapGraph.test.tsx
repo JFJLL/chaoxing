@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 import {
   KnowledgeMapGraph,
+  anchorLayoutToNode,
   buildKnowledgeMindMapLayout,
   wrapKnowledgeLabel,
   type KnowledgeEdge,
@@ -56,10 +57,24 @@ describe("knowledge mind-map layout", () => {
     expect(html).toContain('aria-label="缩小思维导图"');
     expect(html).toContain('aria-label="放大思维导图"');
     expect(html).toContain('aria-label="适应画布"');
+    expect(html.match(/data-cx-no-pending="true"/g)).toHaveLength(5);
     expect(html).toContain("2 条交叉关系已收起");
     expect(html).toContain("4 个下级节点已收起");
     expect(html).toContain("第一章 服务认知");
     expect(html).not.toContain("用户画像");
+    expect(html).toContain('<svg class="absolute inset-0 h-full w-full" role="img" aria-label="课程思维导图" shape-rendering="geometricPrecision" text-rendering="optimizeLegibility"><g>');
+    expect(html).not.toContain("transition-opacity");
+  });
+
+  it("keeps the toggled node at the same screen position after layout changes", () => {
+    const currentOffset = { x: 24, y: -18 };
+    const previous = { x: 400, y: 220, width: 256, height: 72 };
+    const next = { x: 400, y: 460, width: 256, height: 72 };
+
+    const anchored = anchorLayoutToNode(currentOffset, previous, next);
+
+    expect(anchored.x + next.x + next.width / 2).toBe(currentOffset.x + previous.x + previous.width / 2);
+    expect(anchored.y + next.y + next.height / 2).toBe(currentOffset.y + previous.y + previous.height / 2);
   });
 
   it("keeps every character of long labels and grows the node instead of truncating it", () => {

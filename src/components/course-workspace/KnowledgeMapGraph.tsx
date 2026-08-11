@@ -36,6 +36,7 @@ type NodePosition = {
 
 type TreeLink = Pick<KnowledgeEdge, "sourceId" | "targetId" | "type">;
 type ViewTransform = { x: number; y: number; scale: number };
+type LayoutOffset = { x: number; y: number };
 type DragState = { pointerId: number; startX: number; startY: number; originX: number; originY: number };
 
 const hierarchyLevel: Record<string, number> = {
@@ -118,8 +119,8 @@ function sortNodes(items: KnowledgeNode[]) {
   return items.slice().sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, "zh-CN"));
 }
 
-function clampScale(scale: number) {
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+function clampScale(scale: number, fittedScale: number) {
+  return Math.min(fittedScale * MAX_SCALE, Math.max(fittedScale * MIN_SCALE, scale));
 }
 
 export function buildKnowledgeHierarchyIndex(nodes: KnowledgeNode[], edges: KnowledgeEdge[]) {
@@ -276,32 +277,37 @@ export function buildKnowledgeMindMapLayout(nodes: KnowledgeNode[], edges: Knowl
   };
 }
 
-type GraphData = { nodes: KnowledgeNode[]; edges: KnowledgeEdge[]; expandedIds: Set<string> };
-
-// The layer renders its SVG at the on-screen size (layout x fit) via viewBox,
-// so software rasterization cost stays bounded by the viewport instead of the
-// layout size. The CSS transform on the wrapper is pure user pan/zoom.
 function fitScale(layoutWidth: number, layoutHeight: number, viewportWidth: number, viewportHeight: number) {
   if (!viewportWidth || !viewportHeight) return 1;
   return Math.min((viewportWidth - 64) / layoutWidth, (viewportHeight - 64) / layoutHeight, 1);
 }
 
-const GraphLayer = memo(function GraphLayer({
-  data,
-  opacity,
-  viewportSize,
-  onLayerRef,
-  onSvgRef,
+export function anchorLayoutToNode(
+  currentOffset: LayoutOffset,
+  previous: Pick<NodePosition, "x" | "y" | "width" | "height">,
+  next: Pick<NodePosition, "x" | "y" | "width" | "height">
+): LayoutOffset {
+  return {
+    x: currentOffset.x + previous.x + previous.width / 2 - next.x - next.width / 2,
+    y: currentOffset.y + previous.y + previous.height / 2 - next.y - next.height / 2
+  };
+}
+
+const GraphCanvas = memo(function GraphCanvas({
+  nodes,
+  edges,
+  expandedIds,
+  layoutOffset,
+  onContentRef,
   onToggle
 }: {
-  data: GraphData;
-  opacity: number;
-  viewportSize: { width: number; height: number };
-  onLayerRef: (element: HTMLDivElement | null) => void;
-  onSvgRef: (element: SVGSVGElement | null) => void;
+  nodes: KnowledgeNode[];
+  edges: KnowledgeEdge[];
+  expandedIds: Set<string>;
+  layoutOffset: LayoutOffset;
+  onContentRef: (element: SVGGElement | null) => void;
   onToggle: (nodeId: string) => void;
 }) {
-  const { nodes, edges, expandedIds } = data;
   const hierarchy = useMemo(() => buildKnowledgeHierarchyIndex(nodes, edges), [nodes, edges]);
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const visibleIds = useMemo(() => {
@@ -324,28 +330,19 @@ const GraphLayer = memo(function GraphLayer({
     [edges, visibleIds]
   );
   const layout = useMemo(() => buildKnowledgeMindMapLayout(visibleNodes, visibleEdges), [visibleEdges, visibleNodes]);
-  const fit = fitScale(layout.width, layout.height, viewportSize.width, viewportSize.height);
-  const width = Math.max(1, Math.round(layout.width * fit));
-  const height = Math.max(1, Math.round(layout.height * fit));
 
   if (!layout.rootId) return null;
 
   return (
-    <div
-      ref={onLayerRef}
-      className="absolute left-0 top-0 h-full w-full transition-opacity duration-200 will-change-transform"
-      style={{ transformOrigin: "0 0", opacity }}
-      aria-hidden={opacity === 0}
+    <svg
+      className="absolute inset-0 h-full w-full"
+      role="img"
+      aria-label="课程思维导图"
+      shapeRendering="geometricPrecision"
+      textRendering="optimizeLegibility"
     >
-      <div className="absolute left-0 top-0" style={{ width, height }}>
-        <svg
-          ref={onSvgRef}
-          width={width}
-          height={height}
-          viewBox={`0 0 ${layout.width} ${layout.height}`}
-          role="img"
-          aria-label="课程思维导图"
-        >
+      <g ref={onContentRef}>
+        <g transform={`translate(${layoutOffset.x} ${layoutOffset.y})`}>
           {layout.links.map((link) => {
             const source = layout.positions.get(link.sourceId);
             const target = layout.positions.get(link.targetId);
@@ -406,8 +403,12 @@ const GraphLayer = memo(function GraphLayer({
                     transform={`translate(20, ${position.height / 2})`}
                     role="button"
                     tabIndex={0}
+                    data-cx-no-pending="true"
                     aria-label={`${expanded ? "收起" : "展开"}${node.label}，${childCount} 个下级节点`}
                     className="cursor-pointer"
+                    onPointerDown={(event) => {
+                      if (event.pointerType === "mouse") event.preventDefault();
+                    }}
                     onClick={(event) => {
                       event.stopPropagation();
                       onToggle(node.id);
@@ -426,43 +427,11 @@ const GraphLayer = memo(function GraphLayer({
               </g>
             );
           })}
-        </svg>
-      </div>
-    </div>
+        </g>
+      </g>
+    </svg>
   );
 });
-
-function serializeSvg(svg: SVGSVGElement | null) {
-  try {
-    return svg ? new XMLSerializer().serializeToString(svg) : null;
-  } catch {
-    return null;
-  }
-}
-
-function probeRaster(svg: SVGSVGElement | null): Promise<void> {
-  return new Promise((resolve) => {
-    const xml = serializeSvg(svg);
-    if (!xml) {
-      resolve();
-      return;
-    }
-    try {
-      const image = new Image();
-      image.onload = () => {
-        try {
-          void image.decode().then(resolve, resolve);
-        } catch {
-          resolve();
-        }
-      };
-      image.onerror = () => resolve();
-      image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`;
-    } catch {
-      resolve();
-    }
-  });
-}
 
 export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; edges: KnowledgeEdge[] }) {
   const hierarchy = useMemo(() => buildKnowledgeHierarchyIndex(nodes, edges), [nodes, edges]);
@@ -475,19 +444,16 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
     return initial;
   });
   const viewportRef = useRef<HTMLDivElement>(null);
-  const layerRefs = useRef<Array<HTMLDivElement | null>>([null, null]);
-  const svgRefs = useRef<Array<SVGSVGElement | null>>([null, null]);
+  const contentRef = useRef<SVGGElement | null>(null);
   const scaleLabelRef = useRef<HTMLSpanElement>(null);
   const viewRef = useRef<ViewTransform>({ x: 0, y: 0, scale: 1 });
   const layoutSizeRef = useRef({ width: 960, height: 520 });
   const fitRef = useRef(1);
   const dragRef = useRef<DragState | null>(null);
   const viewInitializedRef = useRef(false);
-  const swapTimer = useRef<number | null>(null);
-  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
-  const [slot, setSlot] = useState<"A" | "B">("A");
-  const [swap, setSwap] = useState<GraphData | null>(null);
-  const [reveal, setReveal] = useState(false);
+  const viewportSizeRef = useRef({ width: 0, height: 0 });
+  const layoutOffsetRef = useRef<LayoutOffset>({ x: 0, y: 0 });
+  const [layoutOffset, setLayoutOffset] = useState<LayoutOffset>({ x: 0, y: 0 });
   const visibleIds = useMemo(() => {
     const visible = new Set<string>();
     if (!hierarchy.root) return visible;
@@ -510,29 +476,21 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
   const layout = useMemo(() => buildKnowledgeMindMapLayout(visibleNodes, visibleEdges), [visibleEdges, visibleNodes]);
   const hiddenNodeCount = nodes.length - visibleNodes.length;
   layoutSizeRef.current = { width: layout.width, height: layout.height };
-  fitRef.current = fitScale(layout.width, layout.height, viewportSize.width, viewportSize.height);
-  const currentData = useMemo<GraphData>(() => ({ nodes, edges, expandedIds }), [nodes, edges, expandedIds]);
 
   const applyView = useCallback((next: ViewTransform) => {
     viewRef.current = next;
-    for (const layer of layerRefs.current) {
-      if (layer) layer.style.transform = `translate(${next.x}px, ${next.y}px) scale(${next.scale})`;
-    }
+    contentRef.current?.setAttribute("transform", `translate(${next.x} ${next.y}) scale(${next.scale})`);
     if (scaleLabelRef.current) {
-      scaleLabelRef.current.textContent = `${Math.round(next.scale * fitRef.current * 100)}%`;
+      scaleLabelRef.current.textContent = `${Math.round(next.scale * 100)}%`;
     }
   }, []);
 
-  const registerLayer = useCallback((index: 0 | 1) => (element: HTMLDivElement | null) => {
-    layerRefs.current[index] = element;
+  const registerContent = useCallback((element: SVGGElement | null) => {
+    contentRef.current = element;
     if (element && viewInitializedRef.current) {
       const view = viewRef.current;
-      element.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+      element.setAttribute("transform", `translate(${view.x} ${view.y}) scale(${view.scale})`);
     }
-  }, []);
-
-  const registerSvg = useCallback((index: 0 | 1) => (element: SVGSVGElement | null) => {
-    svgRefs.current[index] = element;
   }, []);
 
   const fitView = useCallback(() => {
@@ -540,65 +498,67 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
     if (!viewport) return;
     const size = layoutSizeRef.current;
     const fit = fitScale(size.width, size.height, viewport.clientWidth, viewport.clientHeight);
+    const offset = layoutOffsetRef.current;
+    fitRef.current = fit;
     applyView({
-      scale: 1,
-      x: (viewport.clientWidth - size.width * fit) / 2,
-      y: (viewport.clientHeight - size.height * fit) / 2
+      scale: fit,
+      x: (viewport.clientWidth - size.width * fit) / 2 - offset.x * fit,
+      y: (viewport.clientHeight - size.height * fit) / 2 - offset.y * fit
     });
   }, [applyView]);
 
-  const zoomAt = useCallback((requestedScale: number, clientX?: number, clientY?: number) => {
+  const viewForZoom = useCallback((requestedScale: number, clientX?: number, clientY?: number) => {
     const viewport = viewportRef.current;
-    if (!viewport) return;
+    if (!viewport) return null;
     const rect = viewport.getBoundingClientRect();
     const current = viewRef.current;
-    const scale = clampScale(requestedScale);
+    const scale = clampScale(requestedScale, fitRef.current);
     const anchorX = (clientX ?? rect.left + rect.width / 2) - rect.left;
     const anchorY = (clientY ?? rect.top + rect.height / 2) - rect.top;
     const canvasX = (anchorX - current.x) / current.scale;
     const canvasY = (anchorY - current.y) / current.scale;
-    applyView({
+    return {
       scale,
       x: anchorX - canvasX * scale,
       y: anchorY - canvasY * scale
-    });
-  }, [applyView]);
+    };
+  }, []);
+
+  const zoomAt = useCallback((requestedScale: number, clientX?: number, clientY?: number) => {
+    const next = viewForZoom(requestedScale, clientX, clientY);
+    if (next) applyView(next);
+  }, [applyView, viewForZoom]);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-    if (viewportSize.width !== viewport.clientWidth || viewportSize.height !== viewport.clientHeight) {
-      setViewportSize({ width: viewport.clientWidth, height: viewport.clientHeight });
-      return;
-    }
     if (!viewInitializedRef.current) {
       viewInitializedRef.current = true;
+      viewportSizeRef.current = { width: viewport.clientWidth, height: viewport.clientHeight };
       fitView();
       return;
     }
-    // When the layout changes (expand/collapse), re-center the (possibly new)
-    // canvas at the current zoom level so the graph stays in view without
-    // jumping to a specific node.
-    const size = layoutSizeRef.current;
-    const fit = fitScale(size.width, size.height, viewport.clientWidth, viewport.clientHeight);
-    const scale = viewRef.current.scale;
-    applyView({
-      scale,
-      x: (viewport.clientWidth - size.width * fit * scale) / 2,
-      y: (viewport.clientHeight - size.height * fit * scale) / 2
-    });
-  }, [applyView, fitView, layout, viewportSize]);
+    fitRef.current = fitScale(layout.width, layout.height, viewport.clientWidth, viewport.clientHeight);
+  }, [applyView, fitView, layout]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
-      setViewportSize({ width: viewport.clientWidth, height: viewport.clientHeight });
-      if (viewInitializedRef.current) fitView();
+      const previous = viewportSizeRef.current;
+      const next = { width: viewport.clientWidth, height: viewport.clientHeight };
+      viewportSizeRef.current = next;
+      if (!viewInitializedRef.current || !previous.width || !previous.height) return;
+      fitRef.current = fitScale(layoutSizeRef.current.width, layoutSizeRef.current.height, next.width, next.height);
+      applyView({
+        ...viewRef.current,
+        x: viewRef.current.x + (next.width - previous.width) / 2,
+        y: viewRef.current.y + (next.height - previous.height) / 2
+      });
     });
     observer.observe(viewport);
     return () => observer.disconnect();
-  }, [fitView]);
+  }, [applyView]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -613,52 +573,41 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
     return () => viewport.removeEventListener("wheel", handleWheel);
   }, [zoomAt]);
 
-  useEffect(() => () => {
-    if (swapTimer.current !== null) window.clearTimeout(swapTimer.current);
-  }, []);
-
   const toggleBranch = (nodeId: string) => {
-    if (swapTimer.current !== null || swap) return;
     const children = hierarchy.childrenByParent.get(nodeId) ?? [];
     if (!children.length) return;
-    setSwap(currentData);
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      const removeBranch = (branchId: string) => {
-        next.delete(branchId);
-        for (const child of hierarchy.childrenByParent.get(branchId) ?? []) removeBranch(child.id);
-      };
-      if (next.has(nodeId)) removeBranch(nodeId);
-      else next.add(nodeId);
-      if (hierarchy.root) next.add(hierarchy.root.id);
-      return next;
-    });
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (swapTimer.current !== null) window.clearTimeout(swapTimer.current);
-      const incoming = slot === "A" ? svgRefs.current[1] : svgRefs.current[0];
-      swapTimer.current = window.setTimeout(() => {
-        void probeRaster(incoming ?? null).then(() => {
-          if (swapTimer.current === null) return;
-          setReveal(true);
-          if (swapTimer.current !== null) window.clearTimeout(swapTimer.current);
-          swapTimer.current = window.setTimeout(() => {
-            swapTimer.current = null;
-            setSwap(null);
-            setSlot((current) => (current === "A" ? "B" : "A"));
-            setReveal(false);
-          }, 240);
-        });
-      }, 40);
-      // safety cap: never freeze longer than this
-      window.setTimeout(() => {
-        if (swapTimer.current !== null) {
-          swapTimer.current = null;
-          setSwap(null);
-          setSlot((current) => (current === "A" ? "B" : "A"));
-          setReveal(false);
+    const nextExpanded = new Set(expandedIds);
+    const removeBranch = (branchId: string) => {
+      nextExpanded.delete(branchId);
+      for (const child of hierarchy.childrenByParent.get(branchId) ?? []) removeBranch(child.id);
+    };
+    if (nextExpanded.has(nodeId)) removeBranch(nodeId);
+    else nextExpanded.add(nodeId);
+    if (hierarchy.root) nextExpanded.add(hierarchy.root.id);
+
+    const nextVisibleIds = new Set<string>();
+    if (hierarchy.root) {
+      nextVisibleIds.add(hierarchy.root.id);
+      const visit = (parentId: string) => {
+        if (!nextExpanded.has(parentId)) return;
+        for (const child of hierarchy.childrenByParent.get(parentId) ?? []) {
+          nextVisibleIds.add(child.id);
+          visit(child.id);
         }
-      }, 1500);
-    }));
+      };
+      visit(hierarchy.root.id);
+    }
+    const nextVisibleNodes = nodes.filter((node) => nextVisibleIds.has(node.id));
+    const nextVisibleEdges = edges.filter((edge) => nextVisibleIds.has(edge.sourceId) && nextVisibleIds.has(edge.targetId));
+    const nextLayout = buildKnowledgeMindMapLayout(nextVisibleNodes, nextVisibleEdges);
+    const previousPosition = layout.positions.get(nodeId);
+    const nextPosition = nextLayout.positions.get(nodeId);
+    if (previousPosition && nextPosition) {
+      const nextOffset = anchorLayoutToNode(layoutOffsetRef.current, previousPosition, nextPosition);
+      layoutOffsetRef.current = nextOffset;
+      setLayoutOffset(nextOffset);
+    }
+    setExpandedIds(nextExpanded);
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -697,10 +646,6 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
     return <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">图谱中暂无可展示节点。</p>;
   }
 
-  const layerA = slot === "A";
-  const layerB = slot === "B";
-  const layerOpacity = (isSlot: boolean) => (isSlot ? 1 : reveal ? 1 : 0);
-
   return (
     <div className="overflow-hidden rounded-[28px] border border-slate-100 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
@@ -712,15 +657,15 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
           {hiddenNodeCount > 0 ? <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{hiddenNodeCount} 个下级节点已收起</span> : null}
           {hierarchy.secondaryEdgeCount > 0 ? <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">{hierarchy.secondaryEdgeCount} 条交叉关系已收起</span> : null}
           <div className="flex items-center rounded-xl border border-slate-200 bg-white p-1 shadow-sm" aria-label="思维导图缩放控制">
-            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100" aria-label="缩小思维导图" title="缩小" onClick={() => zoomAt(viewRef.current.scale - ZOOM_STEP)}>
+            <button type="button" data-cx-no-pending="true" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100" aria-label="缩小思维导图" title="缩小" onClick={() => zoomAt(viewRef.current.scale / (1 + ZOOM_STEP))}>
               <Minus className="h-4 w-4" aria-hidden="true" />
             </button>
             <span ref={scaleLabelRef} className="w-12 text-center text-xs font-medium tabular-nums text-slate-600">100%</span>
-            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100" aria-label="放大思维导图" title="放大" onClick={() => zoomAt(viewRef.current.scale + ZOOM_STEP)}>
+            <button type="button" data-cx-no-pending="true" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100" aria-label="放大思维导图" title="放大" onClick={() => zoomAt(viewRef.current.scale * (1 + ZOOM_STEP))}>
               <Plus className="h-4 w-4" aria-hidden="true" />
             </button>
             <span className="mx-1 h-5 w-px bg-slate-200" aria-hidden="true" />
-            <button type="button" className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-600 hover:bg-slate-100" aria-label="适应画布" title="适应画布" onClick={fitView}>
+            <button type="button" data-cx-no-pending="true" className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-600 hover:bg-slate-100" aria-label="适应画布" title="适应画布" onClick={fitView}>
               <Maximize2 className="h-4 w-4" aria-hidden="true" />
               适应
             </button>
@@ -740,28 +685,14 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
           <Move className="h-3.5 w-3.5" />
           拖动查看
         </div>
-        {layerA || swap ? (
-          <GraphLayer
-            key="layer-A"
-            data={layerA ? (swap ?? currentData) : currentData}
-            opacity={layerOpacity(layerA)}
-            viewportSize={viewportSize}
-            onLayerRef={registerLayer(0)}
-            onSvgRef={registerSvg(0)}
-            onToggle={toggleBranch}
-          />
-        ) : null}
-        {layerB || swap ? (
-          <GraphLayer
-            key="layer-B"
-            data={layerB ? (swap ?? currentData) : currentData}
-            opacity={layerOpacity(layerB)}
-            viewportSize={viewportSize}
-            onLayerRef={registerLayer(1)}
-            onSvgRef={registerSvg(1)}
-            onToggle={toggleBranch}
-          />
-        ) : null}
+        <GraphCanvas
+          nodes={nodes}
+          edges={edges}
+          expandedIds={expandedIds}
+          layoutOffset={layoutOffset}
+          onContentRef={registerContent}
+          onToggle={toggleBranch}
+        />
       </div>
     </div>
   );
