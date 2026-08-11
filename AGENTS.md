@@ -27,11 +27,15 @@ Maintain a teacher- and student-facing course workspace with clear, consistent i
 
 ## Verification contract
 
-- Treat `verification-policy.json` as the single source of truth for risk routes and required lanes.
-- UI changes require Kimi WebBridge evidence in `artifacts/verification/kimi-browser-qa.md` plus `.verification/evidence.json` using the current plan fingerprint.
+- `verification-policy.json` is the risk-routing authority; `scripts/verify-change.ps1` is the deterministic execution authority.
+- Change scope is merge-base against `changeScope.baseRef` (uncommitted + committed + deleted + renamed + untracked files all count).
+- UI changes require Kimi WebBridge evidence in `artifacts/verification/kimi-browser-qa.md` plus `.verification/evidence.json` using the current `changeSetHash`.
 - Queue, retry, worker, and idempotency changes require integration evidence; they do not automatically require browser evidence.
-- A receipt is valid only when `.verification/receipt.json` is fresh and matches the current diff fingerprint.
+- Completion requires `.verification/receipt.json` with `schemaVersion: 2`, `status: pass`, and a `changeSetHash` matching the current change set (policy hash, runner hash, and evidence artifact hashes are bound to the receipt).
 - Do not hand-edit `.verification/receipt.json` or weaken a lane to make a failure pass. Fix the root cause or document the missing capability.
+- Risk can only escalate: `-RiskFloor` may raise the computed risk, never lower it.
+- `agent-review` runs only when the plan requires it. Reviewers must be fresh-context and read-only; high/critical findings must be resolved before pass.
+- Browser acceptance uses Kimi WebBridge. When WebBridge is unavailable, record the lane as blocked and keep verification failed.
 - Hook mode is intentionally disabled. Do not add `.codex/hooks.json` or `.codex/hooks/` unless the user explicitly enables it after the manual workflow has proven stable.
 
 ## Safety and cleanup
