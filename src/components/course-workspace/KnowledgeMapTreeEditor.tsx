@@ -86,7 +86,7 @@ export function KnowledgeMapTreeEditor({ nodes, edges, onSerializedChange, onPre
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => {
     const collapsed = new Set<string>();
     const visit = (node: KnowledgeOutlineNode) => {
-      if (node.children.length && node.type !== "course" && node.type !== "objective" && node.type !== "document") collapsed.add(node.id);
+      if (node.children.length && node.type !== "course" && node.type !== "objective") collapsed.add(node.id);
       node.children.forEach(visit);
     };
     if (initial) visit(initial);
