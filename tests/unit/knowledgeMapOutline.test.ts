@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildKnowledgeOutline, outlineToGraph, serializeKnowledgeOutline } from "@/lib/knowledgeMap/knowledgeMapOutline";
+import { buildKnowledgeOutline, outlineToGraph, reorderTreeChildren, serializeKnowledgeOutline, type KnowledgeOutlineNode } from "@/lib/knowledgeMap/knowledgeMapOutline";
 import { parseKnowledgeMapText, serializeKnowledgeMapText } from "@/lib/knowledgeMap/knowledgeMapText";
 
 const nodes = [
@@ -75,5 +75,27 @@ describe("knowledge outline", () => {
     expect(edgeFor("activity")).toBe("practice");
     expect(edgeFor("assessment")).toBe("checks");
     expect(edgeFor("lesson")).toBe("contains");
+  });
+
+  it("reorders nodes inside an unfiltered sibling list", () => {
+    const tree = buildKnowledgeOutline(nodes, edges)!;
+    const document = tree.children.find((child) => child.type === "document")!;
+    const lesson = document.children[0]!.children.find((child) => child.id === "lesson")!;
+    const next = reorderTreeChildren(lesson.children, "concept", () => true, 2);
+    expect(next.map((child) => child.id)).toEqual(["activity", "assessment", "concept"]);
+  });
+
+  it("reorders grouped siblings while keeping other groups in their slots", () => {
+    const children: KnowledgeOutlineNode[] = [
+      { id: "o1", type: "objective", label: "目标1", children: [] },
+      { id: "d1", type: "document", label: "文档1", children: [] },
+      { id: "o2", type: "objective", label: "目标2", children: [] },
+      { id: "d2", type: "document", label: "文档2", children: [] }
+    ];
+    const isObjective = (node: KnowledgeOutlineNode) => node.type === "objective";
+    const next = reorderTreeChildren(children, "o1", isObjective, 1);
+    expect(next.map((child) => child.id)).toEqual(["o2", "d1", "o1", "d2"]);
+    expect(next.filter(isObjective).map((child) => child.id)).toEqual(["o2", "o1"]);
+    expect(next.filter((child) => child.type === "document").map((child) => child.id)).toEqual(["d1", "d2"]);
   });
 });

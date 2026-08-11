@@ -129,3 +129,25 @@ export function serializeKnowledgeOutline(root: KnowledgeOutlineNode): string {
   }
   return `${lines.join("\n").trim()}\n`;
 }
+
+/**
+ * Moves a node within its parent's children. `isGroupMember` selects the
+ * siblings the node may be reordered against (e.g. objectives among
+ * objectives); `visualIndex` is the insertion index inside that filtered
+ * group after removing the dragged node. Non-group siblings keep their slots.
+ */
+export function reorderTreeChildren(
+  children: KnowledgeOutlineNode[],
+  nodeId: string,
+  isGroupMember: (node: KnowledgeOutlineNode) => boolean,
+  visualIndex: number
+): KnowledgeOutlineNode[] {
+  const dragged = children.find((child) => child.id === nodeId);
+  if (!dragged) return children;
+  const others = children.filter((child) => child.id !== nodeId);
+  const groupOthers = others.filter(isGroupMember);
+  const clamped = Math.max(0, Math.min(visualIndex, groupOthers.length));
+  const newGroup = [...groupOthers.slice(0, clamped), dragged, ...groupOthers.slice(clamped)];
+  let groupIndex = 0;
+  return children.map((child) => (isGroupMember(child) ? newGroup[groupIndex++]! : child));
+}

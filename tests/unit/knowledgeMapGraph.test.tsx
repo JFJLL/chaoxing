@@ -69,7 +69,7 @@ describe("knowledge mind-map layout", () => {
     const shortLayout = buildKnowledgeMindMapLayout(nodes, edges);
     const longLayout = buildKnowledgeMindMapLayout(longNodes, edges);
 
-    for (const line of wrapKnowledgeLabel(longLabel)) expect(html).toContain(line);
+    for (const line of wrapKnowledgeLabel(longLabel, 12)) expect(html).toContain(line);
     expect(html).not.toContain("…");
     expect(longLayout.positions.get("objective")!.height).toBeGreaterThan(shortLayout.positions.get("objective")!.height);
   });

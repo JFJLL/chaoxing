@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, Minus, Move, Plus } from "lucide-react";
 
 export type KnowledgeNode = {
@@ -90,7 +90,7 @@ export function wrapKnowledgeLabel(value: string, maxCharacters = 14) {
 }
 
 function nodeMetrics(node: KnowledgeNode, root: boolean) {
-  const lines = wrapKnowledgeLabel(node.label, root ? 18 : 14);
+  const lines = wrapKnowledgeLabel(node.label, root ? 18 : 12);
   return {
     width: root ? ROOT_WIDTH : NODE_WIDTH,
     height: Math.max(MIN_NODE_HEIGHT, lines.length * TEXT_LINE_HEIGHT + TEXT_VERTICAL_PADDING),
@@ -276,17 +276,181 @@ export function buildKnowledgeMindMapLayout(nodes: KnowledgeNode[], edges: Knowl
   };
 }
 
+type GraphData = { nodes: KnowledgeNode[]; edges: KnowledgeEdge[]; expandedIds: Set<string> };
+
+// How long we wait for a freshly mounted layer to finish rasterizing before
+// swapping layer opacity. During that window the previous frame stays visible,
+// so expansion never shows blank (white) frames even on software rendering.
+const SWAP_RASTER_MS = 350;
+
+const GraphLayer = memo(function GraphLayer({
+  data,
+  opacity,
+  layerKey,
+  onLayerRef,
+  onToggle
+}: {
+  data: GraphData;
+  opacity: number;
+  layerKey: string;
+  onLayerRef: (element: HTMLDivElement | null) => void;
+  onToggle: (nodeId: string) => void;
+}) {
+  const { nodes, edges, expandedIds } = data;
+  const hierarchy = useMemo(() => buildKnowledgeHierarchyIndex(nodes, edges), [nodes, edges]);
+  const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+  const visibleIds = useMemo(() => {
+    const visible = new Set<string>();
+    if (!hierarchy.root) return visible;
+    visible.add(hierarchy.root.id);
+    const visit = (parentId: string) => {
+      if (!expandedIds.has(parentId)) return;
+      for (const child of hierarchy.childrenByParent.get(parentId) ?? []) {
+        visible.add(child.id);
+        visit(child.id);
+      }
+    };
+    visit(hierarchy.root.id);
+    return visible;
+  }, [expandedIds, hierarchy]);
+  const visibleNodes = useMemo(() => nodes.filter((node) => visibleIds.has(node.id)), [nodes, visibleIds]);
+  const visibleEdges = useMemo(
+    () => edges.filter((edge) => visibleIds.has(edge.sourceId) && visibleIds.has(edge.targetId)),
+    [edges, visibleIds]
+  );
+  const layout = useMemo(() => buildKnowledgeMindMapLayout(visibleNodes, visibleEdges), [visibleEdges, visibleNodes]);
+
+  if (!layout.rootId) return null;
+
+  return (
+    <div
+      ref={onLayerRef}
+      className="absolute left-0 top-0 h-full w-full will-change-transform"
+      style={{ transformOrigin: "0 0", opacity }}
+      aria-hidden={opacity === 0}
+    >
+      <div className="absolute left-0 top-0" style={{ width: layout.width, height: layout.height }}>
+        <svg
+          width={layout.width}
+          height={layout.height}
+          viewBox={`0 0 ${layout.width} ${layout.height}`}
+          role="img"
+          aria-label="课程思维导图"
+        >
+          <defs>
+            <pattern id={`mind-map-grid-${layerKey}`} width="28" height="28" patternUnits="userSpaceOnUse">
+              <circle cx="1" cy="1" r="1" fill="#cbd5e1" opacity="0.28" />
+            </pattern>
+          </defs>
+          <rect width={layout.width} height={layout.height} fill={`url(#mind-map-grid-${layerKey})`} />
+
+          {layout.links.map((link) => {
+            const source = layout.positions.get(link.sourceId);
+            const target = layout.positions.get(link.targetId);
+            const targetNode = nodeById.get(link.targetId);
+            if (!source || !target || !targetNode) return null;
+            const left = target.side === "left";
+            const startX = left ? source.x : source.x + source.width;
+            const endX = left ? target.x + target.width : target.x;
+            const startY = source.y + source.height / 2;
+            const endY = target.y + target.height / 2;
+            const midX = Math.round((startX + endX) / 2);
+            const color = (styleByType[targetNode.type] ?? styleByType.chapter).stroke;
+            return (
+              <path
+                key={`${link.sourceId}-${link.targetId}`}
+                d={`M ${startX} ${startY.toFixed(1)} C ${midX} ${startY.toFixed(1)}, ${midX} ${endY.toFixed(1)}, ${endX} ${endY.toFixed(1)}`}
+                fill="none"
+                stroke={color}
+                strokeWidth="3"
+                strokeLinecap="round"
+                opacity="0.55"
+              />
+            );
+          })}
+
+          {visibleNodes.map((node) => {
+            const position = layout.positions.get(node.id);
+            if (!position) return null;
+            const root = position.side === "root";
+            const childCount = hierarchy.childrenByParent.get(node.id)?.length ?? 0;
+            const expanded = expandedIds.has(node.id);
+            const color = styleByType[node.type] ?? { fill: "#f8fafc", stroke: "#64748b", text: "#334155", soft: "#e2e8f0" };
+            const lines = wrapKnowledgeLabel(node.label, root ? 18 : 12);
+            const textStartY = position.height / 2 - ((lines.length - 1) * TEXT_LINE_HEIGHT) / 2;
+            return (
+              <g
+                key={node.id}
+                transform={`translate(${position.x}, ${position.y.toFixed(1)})`}
+                data-node-id={node.id}
+                data-node-type={node.type}
+              >
+                <rect width={position.width} height={position.height} rx={root ? 22 : 16} fill={color.fill} stroke={color.stroke} strokeWidth={root ? 2 : 1.5} />
+                {root ? (
+                  <text x={position.width / 2 + 8} y={textStartY} textAnchor="middle" dominantBaseline="middle" fill={color.text} fontSize="15" fontWeight="800">
+                    {lines.map((line, index) => <tspan key={`${line}-${index}`} x={position.width / 2 + 8} dy={index === 0 ? 0 : TEXT_LINE_HEIGHT}>{line}</tspan>)}
+                  </text>
+                ) : (
+                  <>
+                    <rect x="34" y={position.height / 2 - 12} width="40" height="24" rx="12" fill={color.soft} />
+                    <text x="54" y={position.height / 2} textAnchor="middle" dominantBaseline="middle" fill={color.text} fontSize="11" fontWeight="800">{typeLabel(node.type)}</text>
+                    <text x="84" y={textStartY} dominantBaseline="middle" fill={color.text} fontSize="13" fontWeight="800">
+                      {lines.map((line, index) => <tspan key={`${line}-${index}`} x="84" dy={index === 0 ? 0 : TEXT_LINE_HEIGHT}>{line}</tspan>)}
+                    </text>
+                  </>
+                )}
+                {childCount ? (
+                  <g
+                    transform={`translate(20, ${position.height / 2})`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${expanded ? "收起" : "展开"}${node.label}，${childCount} 个下级节点`}
+                    className="cursor-pointer"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onToggle(node.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onToggle(node.id);
+                      }
+                    }}
+                  >
+                    <circle r="10" fill={expanded ? color.stroke : "#ffffff"} stroke={color.stroke} strokeWidth="1.5" />
+                    <path d={expanded ? "M -4 -2 L 4 -2 L 0 3 Z" : "M -2 -4 L 3 0 L -2 4 Z"} fill={expanded ? "#ffffff" : color.stroke} />
+                  </g>
+                ) : null}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+});
+
 export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; edges: KnowledgeEdge[] }) {
   const hierarchy = useMemo(() => buildKnowledgeHierarchyIndex(nodes, edges), [nodes, edges]);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set(hierarchy.root ? [hierarchy.root.id] : []));
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    if (hierarchy.root) {
+      initial.add(hierarchy.root.id);
+      for (const node of nodes) if (node.type === "document") initial.add(node.id);
+    }
+    return initial;
+  });
   const [focusNodeId, setFocusNodeId] = useState<string | null>(hierarchy.root?.id ?? null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const layerRefs = useRef<Array<HTMLDivElement | null>>([null, null]);
   const scaleLabelRef = useRef<HTMLSpanElement>(null);
   const viewRef = useRef<ViewTransform>({ x: 0, y: 0, scale: 1 });
   const layoutSizeRef = useRef({ width: 960, height: 520 });
   const dragRef = useRef<DragState | null>(null);
   const viewInitializedRef = useRef(false);
+  const swapTimer = useRef<number | null>(null);
+  const [slot, setSlot] = useState<"A" | "B">("A");
+  const [swap, setSwap] = useState<GraphData | null>(null);
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const visibleIds = useMemo(() => {
     const visible = new Set<string>();
@@ -310,13 +474,22 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
   const layout = useMemo(() => buildKnowledgeMindMapLayout(visibleNodes, visibleEdges), [visibleEdges, visibleNodes]);
   const hiddenNodeCount = nodes.length - visibleNodes.length;
   layoutSizeRef.current = { width: layout.width, height: layout.height };
+  const currentData = useMemo<GraphData>(() => ({ nodes, edges, expandedIds }), [nodes, edges, expandedIds]);
 
   const applyView = useCallback((next: ViewTransform) => {
     viewRef.current = next;
-    if (canvasRef.current) {
-      canvasRef.current.style.transform = `translate3d(${next.x}px, ${next.y}px, 0) scale(${next.scale})`;
+    for (const layer of layerRefs.current) {
+      if (layer) layer.style.transform = `translate(${next.x}px, ${next.y}px) scale(${next.scale})`;
     }
     if (scaleLabelRef.current) scaleLabelRef.current.textContent = `${Math.round(next.scale * 100)}%`;
+  }, []);
+
+  const registerLayer = useCallback((index: 0 | 1) => (element: HTMLDivElement | null) => {
+    layerRefs.current[index] = element;
+    if (element && viewInitializedRef.current) {
+      const view = viewRef.current;
+      element.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+    }
   }, []);
 
   const fitView = useCallback(() => {
@@ -389,10 +562,16 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
     return () => viewport.removeEventListener("wheel", handleWheel);
   }, [zoomAt]);
 
+  useEffect(() => () => {
+    if (swapTimer.current !== null) window.clearTimeout(swapTimer.current);
+  }, []);
+
   const toggleBranch = (nodeId: string) => {
+    if (swapTimer.current !== null || swap) return;
     const children = hierarchy.childrenByParent.get(nodeId) ?? [];
     if (!children.length) return;
     setFocusNodeId(nodeId);
+    setSwap(currentData);
     setExpandedIds((current) => {
       const next = new Set(current);
       const removeBranch = (branchId: string) => {
@@ -404,6 +583,14 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
       if (hierarchy.root) next.add(hierarchy.root.id);
       return next;
     });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (swapTimer.current !== null) window.clearTimeout(swapTimer.current);
+      swapTimer.current = window.setTimeout(() => {
+        swapTimer.current = null;
+        setSwap(null);
+        setSlot((current) => (current === "A" ? "B" : "A"));
+      }, SWAP_RASTER_MS);
+    }));
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -447,7 +634,7 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div>
           <h2 className="font-semibold text-slate-900">课程思维导图</h2>
-          <p className="mt-1 text-xs text-slate-500">点击节点展开或收起；拖动画布，使用 Ctrl/⌘ + 滚轮缩放。</p>
+          <p className="mt-1 text-xs text-slate-500">点击节点左侧按钮展开或收起；拖动画布，使用 Ctrl/⌘ + 滚轮缩放。</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {hiddenNodeCount > 0 ? <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{hiddenNodeCount} 个下级节点已收起</span> : null}
@@ -481,103 +668,26 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
           <Move className="h-3.5 w-3.5" />
           拖动查看
         </div>
-        <div
-          ref={canvasRef}
-          className="absolute left-0 top-0"
-          style={{ width: layout.width, height: layout.height, transformOrigin: "0 0" }}
-        >
-          <svg
-            width={layout.width}
-            height={layout.height}
-            viewBox={`0 0 ${layout.width} ${layout.height}`}
-            role="img"
-            aria-label="课程思维导图"
-          >
-            <defs>
-              <pattern id="mind-map-grid" width="28" height="28" patternUnits="userSpaceOnUse">
-                <circle cx="1" cy="1" r="1" fill="#cbd5e1" opacity="0.28" />
-              </pattern>
-            </defs>
-            <rect width={layout.width} height={layout.height} fill="url(#mind-map-grid)" />
-
-            {layout.links.map((link) => {
-              const source = layout.positions.get(link.sourceId);
-              const target = layout.positions.get(link.targetId);
-              const targetNode = nodeById.get(link.targetId);
-              if (!source || !target || !targetNode) return null;
-              const left = target.side === "left";
-              const startX = left ? source.x : source.x + source.width;
-              const endX = left ? target.x + target.width : target.x;
-              const startY = source.y + source.height / 2;
-              const endY = target.y + target.height / 2;
-              const midX = Math.round((startX + endX) / 2);
-              const color = (styleByType[targetNode.type] ?? styleByType.chapter).stroke;
-              return (
-                <path
-                  key={`${link.sourceId}-${link.targetId}`}
-                  d={`M ${startX} ${startY.toFixed(1)} C ${midX} ${startY.toFixed(1)}, ${midX} ${endY.toFixed(1)}, ${endX} ${endY.toFixed(1)}`}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  opacity="0.55"
-                />
-              );
-            })}
-
-            {visibleNodes.map((node) => {
-              const position = layout.positions.get(node.id);
-              if (!position) return null;
-              const root = position.side === "root";
-              const childCount = hierarchy.childrenByParent.get(node.id)?.length ?? 0;
-              const expanded = expandedIds.has(node.id);
-              const color = styleByType[node.type] ?? { fill: "#f8fafc", stroke: "#64748b", text: "#334155", soft: "#e2e8f0" };
-              const lines = wrapKnowledgeLabel(node.label, root ? 18 : 14);
-              const textStartY = position.height / 2 - ((lines.length - 1) * TEXT_LINE_HEIGHT) / 2;
-              return (
-                <g
-                  key={node.id}
-                  transform={`translate(${position.x}, ${position.y.toFixed(1)})`}
-                  data-node-id={node.id}
-                  data-node-type={node.type}
-                  role={childCount && !root ? "button" : undefined}
-                  tabIndex={childCount && !root ? 0 : undefined}
-                  aria-label={childCount && !root ? `${expanded ? "收起" : "展开"}${node.label}，${childCount} 个下级节点` : undefined}
-                  className={childCount && !root ? "cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600" : undefined}
-                  onClick={childCount && !root ? () => toggleBranch(node.id) : undefined}
-                  onKeyDown={childCount && !root ? (event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      toggleBranch(node.id);
-                    }
-                  } : undefined}
-                >
-                  <title>{node.summary ? `${node.label}：${node.summary}` : node.label}</title>
-                  <rect width={position.width} height={position.height} rx={root ? 22 : 16} fill={color.fill} stroke={color.stroke} strokeWidth={root ? 2 : 1.5} />
-                  {root ? (
-                    <text x={position.width / 2} y={textStartY} textAnchor="middle" dominantBaseline="middle" fill={color.text} fontSize="15" fontWeight="800">
-                      {lines.map((line, index) => <tspan key={`${line}-${index}`} x={position.width / 2} dy={index === 0 ? 0 : TEXT_LINE_HEIGHT}>{line}</tspan>)}
-                    </text>
-                  ) : (
-                    <>
-                      <rect x="12" y={position.height / 2 - 12} width="42" height="24" rx="12" fill={color.soft} />
-                      <text x="33" y={position.height / 2} textAnchor="middle" dominantBaseline="middle" fill={color.text} fontSize="11" fontWeight="800">{typeLabel(node.type)}</text>
-                      <text x="66" y={textStartY} dominantBaseline="middle" fill={color.text} fontSize="13" fontWeight="800">
-                        {lines.map((line, index) => <tspan key={`${line}-${index}`} x="66" dy={index === 0 ? 0 : TEXT_LINE_HEIGHT}>{line}</tspan>)}
-                      </text>
-                      {childCount ? (
-                        <>
-                          <circle cx={position.width - 18} cy="16" r="13" fill={color.stroke} />
-                          <text x={position.width - 18} y="16" textAnchor="middle" dominantBaseline="middle" fill="#ffffff" fontSize="10" fontWeight="800">{expanded ? "−" : `+${childCount}`}</text>
-                        </>
-                      ) : null}
-                    </>
-                  )}
-                </g>
-              );
-            })}
-          </svg>
-        </div>
+        {slot === "A" || swap ? (
+          <GraphLayer
+            key="layer-A"
+            data={slot === "A" ? (swap ?? currentData) : currentData}
+            opacity={slot === "A" ? 1 : 0}
+            layerKey="a"
+            onLayerRef={registerLayer(0)}
+            onToggle={toggleBranch}
+          />
+        ) : null}
+        {slot === "B" || swap ? (
+          <GraphLayer
+            key="layer-B"
+            data={slot === "B" ? (swap ?? currentData) : currentData}
+            opacity={slot === "B" ? 1 : 0}
+            layerKey="b"
+            onLayerRef={registerLayer(1)}
+            onToggle={toggleBranch}
+          />
+        ) : null}
       </div>
     </div>
   );
