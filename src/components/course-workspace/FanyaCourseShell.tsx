@@ -2,11 +2,12 @@ import type { ReactNode } from "react";
 import type { SessionUser } from "@/lib/auth";
 import type { CourseWorkspaceTab } from "@/types/courseWorkspace";
 import { isCourseManagerRecord } from "@/lib/permissions";
+import { db } from "@/lib/db";
 import { CourseWorkspaceHeader } from "@/components/course-workspace/CourseWorkspaceHeader";
 import { CourseWorkspaceSidebar } from "@/components/course-workspace/CourseWorkspaceSidebar";
 import { getZoviiDemoCredential } from "@/lib/zoviiDemoCredentials";
 
-export function FanyaCourseShell({
+export async function FanyaCourseShell({
   user,
   course,
   activeTab,
@@ -18,6 +19,10 @@ export function FanyaCourseShell({
   children: ReactNode;
 }) {
   const canManage = isCourseManagerRecord(user, course);
+  const account = await db.user.findUnique({
+    where: { id: user.id },
+    select: { email: true }
+  });
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[var(--cx-course-page)]">
@@ -27,7 +32,10 @@ export function FanyaCourseShell({
           canManage={canManage}
           course={course}
           activeTab={activeTab}
-          zoviiCredential={getZoviiDemoCredential(user)}
+          zoviiCredential={getZoviiDemoCredential({
+            name: user.name,
+            email: account?.email ?? undefined
+          })}
         />
         <main className="min-w-0 flex-1 bg-[radial-gradient(circle_at_top_right,rgba(86,105,201,0.08),transparent_34%),var(--cx-course-page)] p-4 sm:p-5 lg:p-8 xl:p-10">{children}</main>
       </div>

@@ -29,6 +29,19 @@ describe("Zovii demo login", () => {
     expect(getZoviiDemoCredential({ name: "其他用户" })).toBeNull();
   });
 
+  it("uses the teacher's own platform account with the batch password for new teachers", () => {
+    expect(
+      getZoviiDemoCredential({ name: "张洪生", email: "zhanghs@red-magic.cn" })
+    ).toEqual({ account: "zhanghs@red-magic.cn", password: "Scim2026" });
+    expect(
+      getZoviiDemoCredential({ name: "郇𤩽", email: "huanh@red-magic.cn" })
+    ).toEqual({ account: "huanh@red-magic.cn", password: "Scim2026" });
+  });
+
+  it("does not provide a batch credential without the platform email", () => {
+    expect(getZoviiDemoCredential({ name: "张洪生" })).toBeNull();
+  });
+
   it("does not provide a partial credential", () => {
     vi.stubEnv("ZOVII_DEMO_LI_SUYAN_ACCOUNT", "configured-account");
     expect(getZoviiDemoCredential({ name: "李素艳" })).toBeNull();
