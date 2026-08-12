@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { UserMenu } from "@/components/shell/UserMenu";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
@@ -29,7 +29,7 @@ describe("UserMenu 修改密码", () => {
     globalThis.fetch = vi.fn();
   });
 
-  it("shows the success message and resets the form after a successful change", async () => {
+  it("closes the dialog and shows a toast after a successful change", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(jsonResponse({ ok: true }));
@@ -52,7 +52,7 @@ describe("UserMenu 修改密码", () => {
     expect((await screen.findByRole("status")).textContent).toContain(
       "密码修改成功，下次登录请使用新密码。"
     );
-    expect((screen.getByLabelText("当前密码") as HTMLInputElement).value).toBe("");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/change-password",
       expect.objectContaining({
@@ -120,7 +120,7 @@ describe("UserMenu 修改密码", () => {
     ).toBe(false);
   });
 
-  it("clears previous feedback when the dialog is reopened", async () => {
+  it("opens a clean dialog after a successful change", async () => {
     globalThis.fetch = vi
       .fn()
       .mockResolvedValue(jsonResponse({ ok: true }));
@@ -139,11 +139,10 @@ describe("UserMenu 修改密码", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "确认修改" }));
     expect(await screen.findByRole("status")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
     fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
 
-    expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

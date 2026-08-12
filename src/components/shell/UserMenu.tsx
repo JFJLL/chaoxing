@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, KeyRound, LogOut } from "lucide-react";
 import type { FormEvent } from "react";
 import type { SessionUser } from "@/lib/auth";
@@ -11,7 +12,13 @@ export function UserMenu({ user }: { user: SessionUser }) {
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   async function handleLogout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -27,7 +34,6 @@ export function UserMenu({ user }: { user: SessionUser }) {
     const form = event.currentTarget;
     setPending(true);
     setError(null);
-    setSuccess(false);
 
     try {
       const formData = new FormData(form);
@@ -69,7 +75,8 @@ export function UserMenu({ user }: { user: SessionUser }) {
       }
 
       form.reset();
-      setSuccess(true);
+      setPasswordDialogOpen(false);
+      setToast("密码修改成功，下次登录请使用新密码。");
     } catch {
       setError("网络异常，请稍后重试");
     } finally {
@@ -96,7 +103,6 @@ export function UserMenu({ user }: { user: SessionUser }) {
           type="button"
           onClick={() => {
             setError(null);
-            setSuccess(false);
             setPending(false);
             setPasswordDialogOpen(true);
           }}
@@ -124,11 +130,6 @@ export function UserMenu({ user }: { user: SessionUser }) {
           {error ? (
             <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
-            </p>
-          ) : null}
-          {success ? (
-            <p role="status" className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
-              密码修改成功，下次登录请使用新密码。
             </p>
           ) : null}
           <div className="space-y-2">
@@ -187,6 +188,20 @@ export function UserMenu({ user }: { user: SessionUser }) {
           </div>
         </form>
       </Dialog>
+
+      {toast
+        ? createPortal(
+            <div className="pointer-events-none fixed inset-x-0 top-4 z-[60] flex justify-center">
+              <p
+                role="status"
+                className="cx-toast-in rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700 shadow-lg"
+              >
+                {toast}
+              </p>
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }
