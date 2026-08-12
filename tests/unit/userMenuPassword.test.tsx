@@ -146,4 +146,37 @@ describe("UserMenu 修改密码", () => {
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  it("shows an explicit validation error without calling the API when fields are empty", async () => {
+    render(<UserMenu user={teacher} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认修改" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "请输入当前密码"
+    );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects mismatched new passwords before calling the API", async () => {
+    render(<UserMenu user={teacher} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+    fireEvent.change(screen.getByLabelText("当前密码"), {
+      target: { value: "Scim2026" }
+    });
+    fireEvent.change(screen.getByLabelText("新密码"), {
+      target: { value: "QApass2026" }
+    });
+    fireEvent.change(screen.getByLabelText("确认新密码"), {
+      target: { value: "Different2026" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "确认修改" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "两次输入的新密码不一致"
+    );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
 });

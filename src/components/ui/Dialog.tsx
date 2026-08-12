@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -10,11 +11,12 @@ type DialogProps = {
   children: ReactNode;
   onClose: () => void;
   panelClassName?: string;
+  overlayClassName?: string;
 };
 
 const focusableSelector = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
-export function Dialog({ open, title, children, onClose, panelClassName }: DialogProps) {
+export function Dialog({ open, title, children, onClose, panelClassName, overlayClassName }: DialogProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -46,8 +48,8 @@ export function Dialog({ open, title, children, onClose, panelClassName }: Dialo
   }, [open]);
 
   if (!open) return null;
-  return (
-    <div className="cx-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  const panel = (
+    <div className={clsx("cx-dialog-overlay fixed inset-0 z-50 flex items-center justify-center p-4", overlayClassName ?? "bg-slate-950/45 backdrop-blur-[2px]")} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className={clsx("cx-dialog-panel flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl", panelClassName)}>
         <header className="flex items-center justify-between border-b border-[var(--cx-border)] px-5 py-4">
           <h2 id={titleId} className="text-base font-semibold text-slate-900">{title}</h2>
@@ -57,4 +59,9 @@ export function Dialog({ open, title, children, onClose, panelClassName }: Dialo
       </section>
     </div>
   );
+
+  // 挂载到 document.body，避免 fixed 定位被带 backdrop-filter/transform 的祖先
+  // （如顶栏 backdrop-blur）限制为相对祖先定位，导致弹窗贴顶。
+  if (typeof document === "undefined") return panel;
+  return createPortal(panel, document.body);
 }

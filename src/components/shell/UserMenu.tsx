@@ -31,13 +31,34 @@ export function UserMenu({ user }: { user: SessionUser }) {
 
     try {
       const formData = new FormData(form);
+      const currentPassword = String(formData.get("currentPassword") ?? "");
+      const newPassword = String(formData.get("newPassword") ?? "");
+      const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+      if (currentPassword.length < 6) {
+        setError("请输入当前密码");
+        return;
+      }
+      if (newPassword.length < 6) {
+        setError("新密码至少 6 位");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setError("两次输入的新密码不一致");
+        return;
+      }
+      if (newPassword === currentPassword) {
+        setError("新密码不能与当前密码相同");
+        return;
+      }
+
       const response = await fetch("/api/auth/change-password", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({
-          currentPassword: String(formData.get("currentPassword") ?? ""),
-          newPassword: String(formData.get("newPassword") ?? ""),
-          confirmPassword: String(formData.get("confirmPassword") ?? "")
+          currentPassword,
+          newPassword,
+          confirmPassword
         })
       });
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -96,9 +117,10 @@ export function UserMenu({ user }: { user: SessionUser }) {
       <Dialog
         open={passwordDialogOpen}
         title="修改密码"
+        overlayClassName="bg-transparent backdrop-blur-none"
         onClose={() => setPasswordDialogOpen(false)}
       >
-        <form onSubmit={handleChangePassword} className="space-y-4">
+        <form onSubmit={handleChangePassword} noValidate className="space-y-4">
           {error ? (
             <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
