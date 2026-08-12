@@ -1,10 +1,18 @@
 "use client";
 
-import { ChevronDown, LogOut } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, KeyRound, LogOut } from "lucide-react";
 import type { FormEvent } from "react";
 import type { SessionUser } from "@/lib/auth";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 
 export function UserMenu({ user }: { user: SessionUser }) {
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
   async function handleLogout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await fetch("/api/auth/logout", {
@@ -12,6 +20,40 @@ export function UserMenu({ user }: { user: SessionUser }) {
       headers: { accept: "application/json" }
     });
     window.location.assign("/login");
+  }
+
+  async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    setPending(true);
+    setError(null);
+    setSuccess(false);
+
+    try {
+      const formData = new FormData(form);
+      const response = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({
+          currentPassword: String(formData.get("currentPassword") ?? ""),
+          newPassword: String(formData.get("newPassword") ?? ""),
+          confirmPassword: String(formData.get("confirmPassword") ?? "")
+        })
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+
+      if (!response.ok) {
+        setError(payload.error ?? "修改失败，请稍后重试");
+        return;
+      }
+
+      form.reset();
+      setSuccess(true);
+    } catch {
+      setError("网络异常，请稍后重试");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -29,6 +71,20 @@ export function UserMenu({ user }: { user: SessionUser }) {
         <ChevronDown className="h-4 w-4 text-slate-400" />
       </button>
       <div className="invisible absolute right-0 top-12 z-40 w-48 translate-y-1 rounded-xl border border-[var(--cx-border)] bg-white py-2 opacity-0 shadow-floating transition group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setSuccess(false);
+            setPending(false);
+            setPasswordDialogOpen(true);
+          }}
+          aria-haspopup="dialog"
+          className="cx-focus-ring flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+        >
+          <KeyRound className="h-4 w-4" />
+          修改密码
+        </button>
         <form action="/api/auth/logout" method="post" onSubmit={handleLogout}>
           <button type="submit" className="cx-focus-ring flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">
             <LogOut className="h-4 w-4" />
@@ -36,6 +92,79 @@ export function UserMenu({ user }: { user: SessionUser }) {
           </button>
         </form>
       </div>
+
+      <Dialog
+        open={passwordDialogOpen}
+        title="修改密码"
+        onClose={() => setPasswordDialogOpen(false)}
+      >
+        <form onSubmit={handleChangePassword} className="space-y-4">
+          {error ? (
+            <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </p>
+          ) : null}
+          {success ? (
+            <p role="status" className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+              密码修改成功，下次登录请使用新密码。
+            </p>
+          ) : null}
+          <div className="space-y-2">
+            <label htmlFor="currentPassword" className="text-sm font-medium text-slate-700">
+              当前密码
+            </label>
+            <input
+              id="currentPassword"
+              name="currentPassword"
+              type="password"
+              autoComplete="current-password"
+              required
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-blue-100"
+              placeholder="请输入当前密码"
+            />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="newPassword" className="text-sm font-medium text-slate-700">
+              新密码
+            </label>
+            <input
+              id="newPassword"
+              name="newPassword"
+              type="password"
+              autoComplete="new-password"
+              minLength={6}
+              maxLength={72}
+              required
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-blue-100"
+              placeholder="至少 6 位"
+            />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700">
+              确认新密码
+            </label>
+            <input
+              id="confirmPassword"
+              name="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              minLength={6}
+              maxLength={72}
+              required
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-blue-100"
+              placeholder="再次输入新密码"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="secondary" disabled={pending} onClick={() => setPasswordDialogOpen(false)}>
+              取消
+            </Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? "提交中…" : "确认修改"}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
     </div>
   );
 }

@@ -19,6 +19,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "add:teachers": "tsx scripts/add-teachers.ts",
     "backfill:knowledge": "vitest run --config vitest.backfill.config.ts"
   },
   "dependencies": {

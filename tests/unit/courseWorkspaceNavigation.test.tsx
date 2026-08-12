@@ -99,12 +99,13 @@ describe("course workspace navigation", () => {
     expect(html).not.toContain('href="/space/courses/course-1/ai-import"');
   });
 
-  it("does not expose account actions that have no implementation", () => {
+  it("exposes implemented account actions only", () => {
     const html = renderToStaticMarkup(
       <UserMenu user={{ id: "teacher-1", name: "李老师", role: "TEACHER", institutionId: "institution-1" }} />
     );
 
     expect(html).toContain("退出空间");
+    expect(html).toContain("修改密码");
     expect(html).not.toContain("账号管理");
     expect(html).not.toContain("切换单位/角色");
   });
