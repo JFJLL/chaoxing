@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, KeyRound, LogOut } from "lucide-react";
+import { ChevronDown, KeyRound, LogOut, Settings } from "lucide-react";
 import type { FormEvent } from "react";
 import type { SessionUser } from "@/lib/auth";
 import { Button } from "@/components/ui/Button";
@@ -112,6 +112,10 @@ export function UserMenu({ user }: { user: SessionUser }) {
           <KeyRound className="h-4 w-4" />
           修改密码
         </button>
+        <a href="/settings" className="cx-focus-ring flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">
+          <Settings className="h-4 w-4" />
+          账号设置
+        </a>
         <form action="/api/auth/logout" method="post" onSubmit={handleLogout}>
           <button type="submit" className="cx-focus-ring flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">
             <LogOut className="h-4 w-4" />

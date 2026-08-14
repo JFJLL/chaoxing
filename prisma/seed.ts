@@ -8,7 +8,8 @@ const prisma = new PrismaClient();
 
 const UserRole = {
   STUDENT: "STUDENT",
-  TEACHER: "TEACHER"
+  TEACHER: "TEACHER",
+  ADMIN: "ADMIN"
 } as const;
 
 const CourseStatus = {
@@ -86,7 +87,7 @@ async function main() {
   const teacherPassword = await hashPassword("Teacher@2026");
   const studentPassword = await hashPassword("Student@2026");
 
-  const [teacher, secondTeacher, student] = await Promise.all([
+  const [teacher, secondTeacher, student, admin] = await Promise.all([
     prisma.user.create({
       data: {
         name: "李素艳",
@@ -114,6 +115,15 @@ async function main() {
         passwordHash: studentPassword,
         avatar: "/avatars/student.png",
         role: UserRole.STUDENT,
+        institutionId: institution.id
+      }
+    }),
+    prisma.user.create({
+      data: {
+        name: "系统管理员",
+        email: "admin@example.local",
+        passwordHash: await hashPassword("Admin@2026"),
+        role: UserRole.ADMIN,
         institutionId: institution.id
       }
     })
@@ -641,13 +651,13 @@ async function main() {
     }
   });
 
-  console.log("Seeded users:", [teacher.name, secondTeacher.name, student.name].join(", "));
+  console.log("Seeded users:", [teacher.name, secondTeacher.name, student.name, admin.name].join(", "));
   console.log(
     "Seeded courses:",
     [aiCourse.title, functionalCourse.title, practiceCourse.title, "文化市场营销学"].join(", ")
   );
   console.log(
-    "Dev credentials:\n- li.suyan@example.local / Teacher@2026\n- wang.yifan@example.local / Teacher@2026\n- student@example.local / Student@2026"
+    "Dev credentials:\n- li.suyan@example.local / Teacher@2026\n- wang.yifan@example.local / Teacher@2026\n- student@example.local / Student@2026\n- admin@example.local / Admin@2026"
   );
 }
 
