@@ -8,33 +8,24 @@ datasource db {
 }
 
 model Institution {
-  id                String                    @id @default(cuid())
-  name              String
-  branding          String?
-  users             User[]
-  courses           Course[]
-  integrations      InstitutionIntegration[]
-  integrationAdmins InstitutionIntegrationAdmin[]
-  externalOperations ExternalOperation[]       @relation("ExternalOperationInstitution")
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  branding  String?
+  users     User[]
+  courses   Course[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model User {
   id                      String                  @id @default(cuid())
   name                    String
   email                   String                  @unique
-  phone                   String?                 @unique
   passwordHash            String?
   avatar                  String?
   role                    String
   institutionId           String
   institution             Institution             @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  externalIdentities      ExternalIdentity[]
-  integrationAdminGrants  InstitutionIntegrationAdmin[] @relation("IntegrationAdmin")
-  integrationGrantedBy    InstitutionIntegrationAdmin[] @relation("IntegrationAdminGrantedBy")
-  integrationConfiguredBy InstitutionIntegration[]       @relation("IntegrationConfiguredBy")
-  externalOperations      ExternalOperation[]     @relation("ExternalOperationUser")
   ownedCourses            Course[]                @relation("CourseOwner")
   courseCollaborations    CourseCollaborator[]
   enrollments             CourseEnrollment[]
@@ -1106,75 +1097,4 @@ model AuditLog {
   metadata  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-}
-
-model ExternalIdentity {
-  id                  String    @id @default(cuid())
-  userId              String
-  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider            String    @default("ZOVII")
-  externalUserId      String
-  phone               String?
-  status              String    @default("LINKED")
-  encryptedCredential String?
-  credentialUpdatedAt DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-
-  @@unique([provider, externalUserId])
-  @@unique([provider, phone])
-  @@index([userId, provider])
-}
-
-model InstitutionIntegration {
-  id             String      @id @default(cuid())
-  institutionId  String
-  institution    Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  provider       String      @default("ZOVII")
-  enterpriseId   String
-  enabled        Boolean     @default(true)
-  configuredById String?
-  configuredBy   User?       @relation("IntegrationConfiguredBy", fields: [configuredById], references: [id], onDelete: SetNull)
-  configuredAt   DateTime    @default(now())
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
-  @@unique([institutionId, provider])
-  @@unique([provider, enterpriseId])
-}
-
-model InstitutionIntegrationAdmin {
-  id            String      @id @default(cuid())
-  institutionId String
-  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  userId        String
-  user          User        @relation("IntegrationAdmin", fields: [userId], references: [id], onDelete: Cascade)
-  grantedById   String?
-  grantedBy     User?       @relation("IntegrationAdminGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  @@unique([institutionId, userId])
-}
-
-model ExternalOperation {
-  id                String       @id @default(cuid())
-  kind              String
-  idempotencyKey    String       @unique
-  userId            String?
-  user              User?        @relation("ExternalOperationUser", fields: [userId], references: [id], onDelete: SetNull)
-  institutionId     String?
-  institution       Institution? @relation("ExternalOperationInstitution", fields: [institutionId], references: [id], onDelete: SetNull)
-  status            String       @default("PENDING")
-  externalRequestId String?
-  result            String?
-  errorCode         String?
-  lastError         String?
-  attempts          Int          @default(0)
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-
-  @@index([userId, kind])
-  @@index([institutionId, kind])
-  @@index([status, updatedAt])
 }

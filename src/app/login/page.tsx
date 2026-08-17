@@ -62,12 +62,6 @@ export default async function LoginPage({ searchParams }: PageProps) {
             登录
           </button>
         </form>
-        <p className="mt-4 text-center text-sm text-slate-500">
-          没有账号？{" "}
-          <a href="/register" className="font-medium text-yimei-sidebar hover:underline">
-            手机号注册
-          </a>
-        </p>
       </section>
     </main>
   );
