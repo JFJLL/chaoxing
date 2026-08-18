@@ -5,6 +5,13 @@ export const loginSchema = z.object({
   password: z.string().min(6, "密码至少 6 位")
 });
 
+export const registerSchema = z.object({
+  name: z.string().trim().min(1, "请输入姓名").max(50, "姓名不能超过 50 个字符"),
+  email: z.string().trim().email("请输入有效邮箱"),
+  password: z.string().min(6, "密码至少 6 位").max(72, "密码最长 72 位"),
+  role: z.enum(["STUDENT", "TEACHER"]).optional().default("STUDENT")
+});
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(6, "当前密码至少 6 位"),
