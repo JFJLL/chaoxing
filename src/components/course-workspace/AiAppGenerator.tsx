@@ -186,7 +186,8 @@ export function AiAppGenerator({
   documentSources = [],
   preferredSourceId,
   initialArtifacts,
-  hasCourseContent = true
+  hasCourseContent = true,
+  defaultSourcePanelExpanded = false
 }: {
   courseId: string;
   app: CourseAiAppDefinition & { appType: CourseAiAppType };
@@ -197,6 +198,7 @@ export function AiAppGenerator({
   preferredSourceId?: string;
   initialArtifacts: ManagerAiArtifactDto[];
   hasCourseContent?: boolean;
+  defaultSourcePanelExpanded?: boolean;
 }) {
   const [prompt, setPrompt] = useState("");
   const [options, setOptions] = useState<GeneratorOptions>(defaultOptions);
@@ -218,6 +220,25 @@ export function AiAppGenerator({
   );
   const [sourceSelections, setSourceSelections] = useState<Record<string, string[]>>({});
   const [expandedDocumentIds, setExpandedDocumentIds] = useState<Set<string>>(new Set());
+  const sourceSelectionSummary = useCallback((isPanelExpanded: boolean) => {
+    const selectedEntries = Object.entries(sourceSelections);
+    if (!selectedEntries.length) {
+      return isPanelExpanded ? "请在下方勾选作为依据的资料或章节" : "未选择资料与章节（点击展开选择）";
+    }
+    let wholeDocCount = 0;
+    let sectionCount = 0;
+    for (const [, sections] of selectedEntries) {
+      if (sections && sections.length > 0) {
+        sectionCount += sections.length;
+      } else {
+        wholeDocCount += 1;
+      }
+    }
+    const parts: string[] = [];
+    if (wholeDocCount > 0) parts.push(`${wholeDocCount} 份完整资料`);
+    if (sectionCount > 0) parts.push(`${sectionCount} 个具体章节`);
+    return `已选 ${parts.join("、")} · ${isPanelExpanded ? "可继续修改" : "点击展开修改"}`;
+  }, [sourceSelections]);
   // Chapter scope for question/paper generation. Defaults to all chapters (全选 =
   // whole course); uncheck to narrow. Empty is treated as whole course too.
   const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>(() => chapters.map((chapter) => chapter.id));
@@ -227,6 +248,8 @@ export function AiAppGenerator({
   const [recommendationLoading, setRecommendationLoading] = useState(false);
   const [recommendationError, setRecommendationError] = useState("");
   const [slideCountTouched, setSlideCountTouched] = useState(false);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [pptPageCount, setPptPageCount] = useState<number | null>(null);
   const actionLock = useRef(false);
   const recommendationRequestId = useRef(0);
   const recommendationResolvedSource = useRef("");
@@ -240,6 +263,28 @@ export function AiAppGenerator({
     () => artifacts.find((artifact) => artifact.id === selectedId) ?? artifacts[0],
     [artifacts, selectedId]
   );
+  const uniqueDocumentSources = useMemo(() => {
+    const seen = new Set<string>();
+    const result: typeof documentSources = [];
+    for (const doc of documentSources) {
+      const normalizedTitle = doc.title.trim().toLowerCase();
+      if (!seen.has(normalizedTitle) && !seen.has(doc.id)) {
+        seen.add(normalizedTitle);
+        seen.add(doc.id);
+        const seenSectionIds = new Set<string>();
+        const uniqueSections = doc.sections.filter((s) => {
+          if (seenSectionIds.has(s.id)) return false;
+          seenSectionIds.add(s.id);
+          return true;
+        });
+        result.push({
+          ...doc,
+          sections: uniqueSections
+        });
+      }
+    }
+    return result;
+  }, [documentSources]);
   const payload = selected ? parsePayload(selected) : null;
   const chapterTitle = (() => {
     if (!selectedChapterIds.length || selectedChapterIds.length === chapters.length) return "全课程";
@@ -257,6 +302,31 @@ export function AiAppGenerator({
   function toggleAllChapters() {
     setSelectedChapterIds(allChaptersSelected ? [] : chapters.map((chapter) => chapter.id));
   }
+
+  useEffect(() => {
+    if (app.appType !== "ppt_courseware" || !sourceArtifactId) {
+      setPptPageCount(null);
+      setCreditBalance(null);
+      return;
+    }
+    let cancelled = false;
+    void Promise.all([
+      getCourseAiArtifact(courseId, sourceArtifactId),
+      fetch("/api/billing/account", { cache: "no-store" }).then(async (response) => response.ok ? response.json() as Promise<{ account?: { available?: number } }> : null)
+    ]).then(([source, billing]) => {
+      if (cancelled) return;
+      try {
+        const parsed = source.payload ? JSON.parse(source.payload) as { slides?: unknown[] } : null;
+        setPptPageCount(Array.isArray(parsed?.slides) ? parsed.slides.length : null);
+      } catch {
+        setPptPageCount(null);
+      }
+      setCreditBalance(typeof billing?.account?.available === "number" ? billing.account.available : null);
+    }).catch(() => {
+      if (!cancelled) { setPptPageCount(null); setCreditBalance(null); }
+    });
+    return () => { cancelled = true; };
+  }, [app.appType, courseId, sourceArtifactId]);
 
   useEffect(() => {
     if (!selected || !isActiveAiArtifact(selected)) return;
@@ -402,7 +472,7 @@ export function AiAppGenerator({
   }
 
   function structuredPrompt() {
-    if (app.appType === "ppt_courseware") return "将已确认的 AI课件直接套用课程模板并导出为 PPTX";
+    if (app.appType === "ppt_courseware") return "使用 GPT Image 2 将已确认 AI课件逐页生成 16:9 整页视觉课件图；每页生成成功后扣除 1 积分，系统将叠加真实 Logo 并导出 PPTX。";
     const common = [`范围：${chapterTitle}`, `难度：${options.difficulty}`];
     if (app.appType === "question_generation") return [`题型：${options.questionType}`, `题量：${options.questionCount}`, `补充要求：${prompt || "无"}`].join("；");
     if (app.appType === "lesson_plan") return [...common, `课时：${options.lessonMinutes}`, `教法：${options.teachingMethod}`, `补充要求：${prompt || "无"}`].join("；");
@@ -589,7 +659,8 @@ export function AiAppGenerator({
   const missingApprovedQuestions = prerequisites.includes("approved_questions") && approvedQuestions.length < 3;
   const missingApprovedCourseware = (app.appType === "courseware" || prerequisites.includes("approved_courseware")) && !sourceArtifactId;
   const missingLessonPlanSources = (app.appType === "lesson_plan" || app.appType === "question_generation") && Object.keys(sourceSelections).length === 0;
-  const generationBlocked = missingCourseContent || missingApprovedQuestions || missingApprovedCourseware || missingLessonPlanSources;
+  const insufficientPptCredits = app.appType === "ppt_courseware" && pptPageCount !== null && creditBalance !== null && creditBalance < pptPageCount;
+  const generationBlocked = missingCourseContent || missingApprovedQuestions || missingApprovedCourseware || missingLessonPlanSources || insufficientPptCredits;
   const isEditing = Boolean(selected && editingId === selected.id);
   const hasPendingPublishedUpdate = Boolean(
     selected
@@ -631,14 +702,78 @@ export function AiAppGenerator({
           </p>
         ) : null}
         <form onSubmit={submit} className={app.appType === "html_courseware" ? "hidden" : "space-y-4"}>
-          {(app.appType === "lesson_plan" || app.appType === "question_generation") ? <fieldset className="space-y-3"><legend className="text-sm font-medium text-slate-700">资料与章节来源</legend>{documentSources.map((document) => {
-            const selected = sourceSelections[document.id];
-            const allIds = document.sections.map((section) => section.id);
-            const isExpanded = expandedDocumentIds.has(document.id);
-            const panelId = `lesson-source-${document.id}`;
-            const summary = selected === undefined ? "未选择" : selected.length === 0 ? "已选择整份资料" : `已选择 ${selected.length} 个章节`;
-            return <div key={document.id} className="rounded-xl border border-slate-200 p-3"><div className="flex items-center justify-between gap-2"><label className="flex items-center gap-2 text-sm font-medium text-slate-800"><input type="checkbox" checked={selected !== undefined && selected.length === 0} ref={(node) => { if (node) node.indeterminate = Boolean(selected?.length); }} onChange={() => toggleDocument(document.id)} /><span>{document.title}</span></label><button type="button" onClick={() => toggleDocumentExpanded(document.id)} aria-expanded={isExpanded} aria-controls={panelId} className="flex shrink-0 items-center gap-1 text-xs font-medium text-blue-600">{isExpanded ? "收起" : "展开"}{isExpanded ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}</button></div>{isExpanded ? <div id={panelId} className="ml-6 mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">{document.sections.map((section) => <label key={section.id} className="flex items-start gap-2 text-sm text-slate-600"><input type="checkbox" className="mt-0.5 shrink-0" checked={selected !== undefined && (selected.length === 0 || selected.includes(section.id))} onChange={() => toggleDocumentSection(document.id, section.id, allIds)} /><span className="min-w-0 break-words leading-5">{section.title}</span></label>)}</div> : <p className="ml-6 mt-1 text-xs text-slate-500">{summary}</p>}</div>;
-          })}{!documentSources.length ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">暂无解析成功的课程资料，请先导入并保存课程目录。</p> : null}{missingLessonPlanSources && documentSources.length ? <p className="text-xs text-amber-700">请选择整份资料或资料内具体章节。</p> : null}</fieldset> : null}
+          {(app.appType === "lesson_plan" || app.appType === "question_generation") ? (
+            <div className="space-y-2">
+              <CollapsibleSourcePanel
+                title="资料与章节来源"
+                panelId="lesson-source-selection-panel"
+                defaultExpanded={defaultSourcePanelExpanded}
+                summary={sourceSelectionSummary}
+              >
+                {uniqueDocumentSources.length ? (
+                  <div className="space-y-3">
+                    {uniqueDocumentSources.map((document) => {
+                      const selected = sourceSelections[document.id];
+                      const allIds = document.sections.map((section) => section.id);
+                      const isExpanded = expandedDocumentIds.has(document.id);
+                      const panelId = `lesson-source-${document.id}`;
+                      const summary = selected === undefined ? "未选择" : selected.length === 0 ? "已选择整份资料" : `已选择 ${selected.length} 个章节`;
+                      return (
+                        <div key={document.id} className="rounded-xl border border-slate-200 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <label className="flex min-w-0 flex-1 items-start gap-2 text-sm font-medium text-slate-800">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 shrink-0"
+                                checked={selected !== undefined && selected.length === 0}
+                                ref={(node) => { if (node) node.indeterminate = Boolean(selected?.length); }}
+                                onChange={() => toggleDocument(document.id)}
+                              />
+                              <span className="min-w-0 flex-1 break-words leading-5">{document.title}</span>
+                            </label>
+                            {document.sections.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleDocumentExpanded(document.id)}
+                                aria-expanded={isExpanded}
+                                aria-controls={panelId}
+                                className="mt-0.5 flex shrink-0 items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
+                              >
+                                {isExpanded ? "收起" : "展开"}
+                                {isExpanded ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+                              </button>
+                            ) : null}
+                          </div>
+                          {isExpanded && document.sections.length > 0 ? (
+                            <div id={panelId} className="ml-6 mt-2 max-h-48 space-y-2 overflow-y-auto pr-1">
+                              {document.sections.map((section) => (
+                                <label key={section.id} className="flex items-start gap-2 text-sm text-slate-600 hover:text-slate-900">
+                                  <input
+                                    type="checkbox"
+                                    className="mt-0.5 shrink-0"
+                                    checked={selected !== undefined && (selected.length === 0 || selected.includes(section.id))}
+                                    onChange={() => toggleDocumentSection(document.id, section.id, allIds)}
+                                  />
+                                  <span className="min-w-0 break-words leading-5">{section.title}</span>
+                                </label>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="ml-6 mt-1 text-xs text-slate-500">{summary}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">暂无解析成功的课程资料，请先导入并保存课程目录。</p>
+                )}
+              </CollapsibleSourcePanel>
+              {missingLessonPlanSources && uniqueDocumentSources.length ? (
+                <p className="text-xs text-amber-700">请选择整份资料或资料内具体章节。</p>
+              ) : null}
+            </div>
+          ) : null}
 
           {!(["lesson_plan", "courseware", "ppt_courseware", "question_generation"] as CourseAiAppType[]).includes(app.appType) ? <div className="space-y-3">
             <div className="space-y-2">
@@ -669,14 +804,14 @@ export function AiAppGenerator({
           {app.appType === "courseware" ? <div className="space-y-3">{sourceArtifactId ? <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3 text-sm">{recommendationLoading ? <p className="flex items-center gap-2 text-blue-800"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />AI正在分析教案并推荐课件页数……</p> : recommendationError ? <div className="space-y-2 text-amber-800"><p>AI页数建议暂不可用，你仍可以手动填写页数。</p><button type="button" onClick={retrySlideRecommendation} className="font-medium text-blue-700 underline underline-offset-4">重新分析</button></div> : recommendedSlideCount !== null ? <div className="space-y-2 text-blue-900"><p className="font-medium">AI分析建议：{recommendedSlideCount}页</p>{recommendationReason ? <p className="text-xs leading-5 text-blue-800">原因：{recommendationReason}</p> : null}<button type="button" onClick={adoptRecommendedSlideCount} className="inline-flex items-center rounded-lg bg-[var(--cx-blue)] px-3 py-1.5 text-xs font-medium text-white">采用{recommendedSlideCount}页</button></div> : <button type="button" onClick={requestSlideRecommendation} className="inline-flex items-center gap-1.5 font-medium text-blue-700 underline underline-offset-4"><Sparkles className="h-4 w-4" aria-hidden="true" />让 AI 分析教案并推荐课件页数</button>}</div> : null}<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1"><label className="space-y-1 text-sm font-medium text-slate-700"><span>课件页数</span><input type="number" min={SLIDE_COUNT_MIN} max={SLIDE_COUNT_MAX} value={options.slideCount} onChange={(event) => { slideCountTouchedRef.current = true; setSlideCountTouched(true); updateOption("slideCount", Number(event.target.value)); }} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="space-y-1 text-sm font-medium text-slate-700"><span>风格</span><select value={options.coursewareStyle} onChange={(event) => updateOption("coursewareStyle", event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option>课堂讲授</option><option>案例分析</option><option>实训操作</option><option>复习总结</option></select></label></div></div> : null}
           {app.appType === "paper_assembly" ? <label className="space-y-1 text-sm font-medium text-slate-700"><span>试卷总分</span><input type="number" min={30} max={150} value={options.paperScore} onChange={(event) => updateOption("paperScore", Number(event.target.value))} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label> : null}
           {app.appType === "paper_assembly" ? <div className={`rounded-xl p-3 text-sm ${missingApprovedQuestions ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-700"}`}><p>已审核题目 {approvedQuestions.length} 道</p>{missingApprovedQuestions ? <div className="mt-2"><p>请先生成并审核至少 3 道题目。</p><div className="mt-3 flex flex-wrap gap-3"><Link className="font-medium underline underline-offset-4" href={`/space/courses/${courseId}/ai-workbench/apps/question_generation`}>去 AI出题</Link><Link className="font-medium underline underline-offset-4" href={`/space/courses/${courseId}/question-bank`}>审核题库</Link></div></div> : null}</div> : null}
-          {app.appType === "courseware" || app.appType === "ppt_courseware" ? <div className="space-y-3"><div className="rounded-xl bg-blue-50 p-3 text-sm leading-6 text-blue-800"><p className="font-medium">{app.appType === "courseware" ? "只从已确认教案生成 AI课件" : "将已确认 AI课件生成可编辑 PPT"}</p><p className="mt-1">系统固定记录来源版本，上游修改不会静默覆盖当前产物。</p></div><CollapsibleSourcePanel title={app.appType === "courseware" ? "来源教案" : "来源AI课件"} panelId="ai-source-panel" summary={<>当前：{selectedCoursewareSource ? `${selectedCoursewareSource.title} · v${selectedCoursewareSource.version}` : "尚未选择"}<span className="mt-0.5 block">点击展开选择来源{app.appType === "courseware" ? "教案" : "AI课件"}</span></>}><label className="space-y-1 text-sm font-medium text-slate-700"><span>{app.appType === "courseware" ? "来源教案" : "来源AI课件"}</span><select value={sourceArtifactId} onChange={(event) => setSourceArtifactId(event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option value="">请选择已确认{app.appType === "courseware" ? "教案" : "AI课件"}</option>{coursewareSources.map((source) => <option key={source.id} value={source.id}>{source.title} · v{source.version}</option>)}</select></label></CollapsibleSourcePanel>{missingApprovedCourseware ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">还没有可用的已确认{app.appType === "courseware" ? "教案" : "AI课件"}。</p> : null}</div> : null}
+          {app.appType === "courseware" || app.appType === "ppt_courseware" ? <div className="space-y-3"><div className="rounded-xl bg-blue-50 p-3 text-sm leading-6 text-blue-800"><p className="font-medium">{app.appType === "courseware" ? "只从已确认教案生成 AI课件" : "将已确认 AI课件逐页生成整页视觉 PPT"}</p><p className="mt-1">{app.appType === "ppt_courseware" ? "每页生成成功后消耗 1 积分；供应商或系统失败时，未生成页面的积分会自动退回。" : "系统固定记录来源版本，上游修改不会静默覆盖当前产物。"}</p></div><CollapsibleSourcePanel title={app.appType === "courseware" ? "来源教案" : "来源AI课件"} panelId="ai-source-panel" summary={<>当前：{selectedCoursewareSource ? `${selectedCoursewareSource.title} · v${selectedCoursewareSource.version}` : "尚未选择"}<span className="mt-0.5 block">点击展开选择来源{app.appType === "courseware" ? "教案" : "AI课件"}</span></>}><label className="space-y-1 text-sm font-medium text-slate-700"><span>{app.appType === "courseware" ? "来源教案" : "来源AI课件"}</span><select value={sourceArtifactId} onChange={(event) => setSourceArtifactId(event.target.value)} className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"><option value="">请选择已确认{app.appType === "courseware" ? "教案" : "AI课件"}</option>{coursewareSources.map((source) => <option key={source.id} value={source.id}>{source.title} · v{source.version}</option>)}</select></label></CollapsibleSourcePanel>{app.appType === "ppt_courseware" && sourceArtifactId ? <div className={`rounded-xl p-3 text-sm ${insufficientPptCredits ? "bg-amber-50 text-amber-900" : "bg-slate-50 text-slate-700"}`}><p className="font-medium">本次生成预算：{pptPageCount ?? "正在读取"} 页 × 1 积分</p><p className="mt-1">当前可用：{creditBalance ?? "正在读取"} 积分</p>{insufficientPptCredits ? <Link href="/space/billing" className="mt-2 inline-block font-medium text-blue-700 underline underline-offset-4">积分不足，去充值</Link> : null}</div> : null}{missingApprovedCourseware ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">还没有可用的已确认{app.appType === "courseware" ? "教案" : "AI课件"}。</p> : null}</div> : null}
 
           {app.appType !== "ppt_courseware" ? <><div><label htmlFor="ai-app-prompt" className="text-sm font-medium text-slate-700">生成要求</label><textarea id="ai-app-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={`补充${app.title}要求`} className="mt-2 min-h-24 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-400" /></div><div className="rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-700">{structuredPrompt()}</div></> : null}
           {missingCourseContent ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p className="font-medium">当前课程还没有可用于 AI 生成的内容</p><p className="mt-1 leading-5">先导入课程文档或添加课程资料，系统才知道应该依据什么生成。</p><div className="mt-3 flex flex-wrap gap-3"><Link className="font-medium underline underline-offset-4" href={`/space/courses/${courseId}/ai-workbench/content`}>导入课程文档</Link><Link className="font-medium underline underline-offset-4" href={`/space/courses/${courseId}/resources`}>查看课程资料库</Link></div></div> : null}
           {error ? <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-          <Button type="submit" className="w-full" disabled={isBusy || generationBlocked}>
+          <Button type="submit" data-teacher-onboarding={app.appType === "ppt_courseware" ? "generate-ppt-courseware" : app.appType === "courseware" ? "generate-courseware" : undefined} className="w-full" disabled={isBusy || generationBlocked}>
             {creating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : app.appType === "ppt_courseware" ? <Download className="h-4 w-4" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
-            {creating ? (app.appType === "ppt_courseware" ? "正在生成 PPT" : "正在创建 AI 任务") : (app.appType === "ppt_courseware" ? "生成PPT" : "开始 AI 生成")}
+            {creating ? (app.appType === "ppt_courseware" ? "正在创建图像课件任务" : "正在创建 AI 任务") : (app.appType === "ppt_courseware" ? `生成整页PPT（${pptPageCount ?? "…"} 积分）` : "开始 AI 生成")}
           </Button>
         </form>
 
@@ -781,7 +916,13 @@ export function AiAppGenerator({
 
             <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               {selected.appType === "ppt_courseware" ? (
-                <PptCoursewarePreview key={selected.id} title={selected.title} version={selected.version} slides={pptSlides} sourceLabel={pptSourceLabel} />
+                <PptCoursewarePreview key={selected.id} title={selected.title} version={selected.version} slides={pptSlides} sourceLabel={pptSourceLabel} onRegenerateSlide={async (pageNo) => {
+                  const response = await fetch(`/api/courses/${courseId}/ai-artifacts/${selected.id}/pages/${pageNo}/regenerate`, { method: "POST" });
+                  const body = await response.json().catch(() => null) as { error?: string } | null;
+                  if (!response.ok) throw new Error(body?.error ?? "重新生成请求失败");
+                  const next = await getCourseAiArtifact(courseId, selected.id);
+                  setArtifacts((current) => mergeArtifactHistory(current, next));
+                }} />
               ) : payload ? <AiArtifactEditor key={`${selected.id}-${isEditing ? "edit" : "read"}`} appType={selected.appType} title={selected.title} payload={payload} approvedQuestions={approvedQuestions} busy={busyAction === "save"} editable={isEditing} formId={artifactFormId} showFooterSave={!usesTopSave} onDirtyChange={setEditorDirty} onSave={async (body) => {
                 const saved = await runAction("save", () => saveCourseAiArtifactRevision(courseId, selected.id, {
                   ...body,

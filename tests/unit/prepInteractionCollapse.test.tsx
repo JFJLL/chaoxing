@@ -107,6 +107,7 @@ describe("AI source panels collapse by default", () => {
         coursewareSources={[]}
         documentSources={[{ id: "doc-1", title: "文化市场营销.pptx", sections: [{ id: "s1", title: "导言" }, { id: "s2", title: "第一章" }] }]}
         initialArtifacts={[]}
+        defaultSourcePanelExpanded={true}
       />
     );
     expect(markup).toContain("文化市场营销.pptx");

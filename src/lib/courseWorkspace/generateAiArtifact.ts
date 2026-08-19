@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { AiServiceError, toSafeAiError } from "@/lib/ai/errors";
-import { createJsonCompletion, createTextCompletion, resolveAiModelConfig } from "@/lib/ai/modelClient";
+import {
+  createJsonCompletionWithUsage,
+  createTextCompletionWithUsage,
+  resolveAiModelConfig,
+  type ProviderTokenUsage
+} from "@/lib/ai/modelClient";
 import type { CourseAiContext } from "@/lib/courseWorkspace/buildAiContext";
 import {
   aiCoursewarePayloadSchema,
@@ -53,9 +58,9 @@ const outputInstructions: Record<CourseAiAppType, string> = {
   lesson_plan:
     '输出 {"objectives":["..."],"keyPoints":["..."],"teachingProcess":[{"phase":"...","minutes":10,"activity":"..."}],"assessment":["..."]}。',
   courseware:
-    '输出 {"slides":[{"title":"...","bullets":["..."],"speakerNotes":"..."}]}，页数不超过 50。每页必须恰好输出 3 个 bullets；每个 bullet 是不超过 28 个汉字的单句短标题，不得换行；解释、案例和补充细节全部放入 speakerNotes。',
+    '输出 {"slides":[{"title":"...","bullets":["..."],"speakerNotes":"..."}]}，页数不超过 50。第一张必须是正式章节首页：title 为“第X章 + 章节名称”或等价的正式章节标题；三个 bullets 必须依次概括“课程名称”“本章要点”“学习目标”，内容只能来自课程资料，不得编造。其余页面按教学逻辑依次展开概念、机制、案例、活动、总结。每页必须恰好输出 3 个 bullets；每个 bullet 是不超过 28 个汉字的单句短标题，不得换行；解释、案例和补充细节全部放入 speakerNotes。不得在 title、bullets 或 speakerNotes 中添加“第几页”“页码”“X/Y”等页面序号。',
   ppt_courseware:
-    '输出 {"slides":[{"title":"...","bullets":["..."],"speakerNotes":"..."}]}，页数不超过 50。每页必须恰好输出 3 个 bullets；每个 bullet 是不超过 28 个汉字的单句短标题，不得换行；解释、案例和补充细节全部放入 speakerNotes。',
+    '输出 {"slides":[{"title":"...","bullets":["..."],"speakerNotes":"..."}]}，页数不超过 50。第一张必须是正式章节首页：title 为“第X章 + 章节名称”或等价的正式章节标题；三个 bullets 必须依次概括“课程名称”“本章要点”“学习目标”，内容只能来自课程资料，不得编造。其余页面按教学逻辑依次展开概念、机制、案例、活动、总结。每页必须恰好输出 3 个 bullets；每个 bullet 是不超过 28 个汉字的单句短标题，不得换行；解释、案例和补充细节全部放入 speakerNotes。不得添加任何页码或“X/Y”标记。',
   paper_assembly:
     '输出 {"title":"...","sections":[{"name":"...","score":20,"questionIds":["..."]}]}。questionIds 只能使用课程数据中 approvedQuestions 的 id，不得发明题目。',
   html_courseware:
@@ -378,7 +383,23 @@ export function buildCourseAiArtifactPrompt(input: GenerateCourseAiArtifactInput
     .join("\n");
 }
 
-export async function generateCourseAiArtifact(input: GenerateCourseAiArtifactInput): Promise<CourseAiArtifactPayload> {
+export type CourseAiUsageCapture = {
+  tokenUsage: ProviderTokenUsage[];
+  /** True only when every completed provider response for this job returned usage. */
+  tokenUsageComplete: boolean;
+};
+
+export type GeneratedCourseAiArtifact = CourseAiUsageCapture & {
+  payload: CourseAiArtifactPayload;
+};
+
+export class CourseAiArtifactGenerationError extends AiServiceError {
+  constructor(error: AiServiceError, readonly usageCapture: CourseAiUsageCapture) {
+    super(error.code, error.message);
+  }
+}
+
+export async function generateCourseAiArtifactWithUsage(input: GenerateCourseAiArtifactInput): Promise<GeneratedCourseAiArtifact> {
   if (input.appType === "html_courseware" && !input.sourceCourseware) {
     throw invalidOutput("必须提供已审核的来源课件");
   }
@@ -387,10 +408,12 @@ export async function generateCourseAiArtifact(input: GenerateCourseAiArtifactIn
   if (!config) throw new AiServiceError("MODEL_NOT_CONFIGURED", "AI 模型未配置，请先联系管理员完成配置");
 
   const prompt = buildCourseAiArtifactPrompt(input);
+  const tokenUsage: ProviderTokenUsage[] = [];
+  let completedRequests = 0;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const completion = input.appType === "html_courseware" ? createTextCompletion : createJsonCompletion;
-      const raw = await completion({
+      const complete = input.appType === "html_courseware" ? createTextCompletionWithUsage : createJsonCompletionWithUsage;
+      const completion = await complete({
         model: config.model,
         system: input.appType === "html_courseware"
           ? "你是互动课件前端生成助手。你必须严格遵守 HTML 输出契约和输入数据边界。"
@@ -401,14 +424,30 @@ export async function generateCourseAiArtifact(input: GenerateCourseAiArtifactIn
             ? `${prompt}\n上一次输出未通过 HTML 契约校验。请重新生成完整文档，逐项核对全部占位符、标签闭合和安全限制。`
             : `${prompt}\n上一次输出未通过 JSON 契约校验。请重新生成完整 JSON，逐项核对必填字段、字段类型和结尾括号。`
       });
-      return parsePayload(input, raw);
+      if (!completion) throw new AiServiceError("MODEL_NOT_CONFIGURED", "AI 模型未配置，请先联系管理员完成配置");
+      completedRequests += 1;
+      if (completion.usage) tokenUsage.push(completion.usage);
+      return {
+        payload: parsePayload(input, completion.content),
+        tokenUsage,
+        tokenUsageComplete: completedRequests === tokenUsage.length
+      };
     } catch (error) {
       const safe = toSafeAiError(error);
-      if (safe.code !== "MODEL_INVALID_OUTPUT" || attempt === 1) throw safe;
+      if (safe.code === "MODEL_INVALID_OUTPUT" && attempt === 0) continue;
+      throw new CourseAiArtifactGenerationError(safe, {
+        tokenUsage,
+        tokenUsageComplete: completedRequests === tokenUsage.length
+      });
     }
   }
 
   throw new AiServiceError("MODEL_INVALID_OUTPUT", "AI 返回内容无效，请重试");
+}
+
+/** Compatibility wrapper for callers that only need the generated payload. */
+export async function generateCourseAiArtifact(input: GenerateCourseAiArtifactInput): Promise<CourseAiArtifactPayload> {
+  return (await generateCourseAiArtifactWithUsage(input)).payload;
 }
 
 export async function generateHtmlCoursewareWithAi(input: GenerateCourseAiArtifactInput): Promise<HtmlCoursewarePayload> {

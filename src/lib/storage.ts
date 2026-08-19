@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomUUID } from "crypto";
-import { mkdir, unlink, writeFile } from "fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import { basename, extname, join } from "path";
 
 const SUPPORTED_EXTENSIONS = new Set([".docx", ".pdf", ".pptx", ".txt", ".md"]);
@@ -239,4 +239,44 @@ export async function withImportFilePath<T>(filePath: string, callback: (localPa
   } finally {
     await unlink(localPath).catch(() => undefined);
   }
+}
+
+const INBOX_IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+const INBOX_DOCUMENT_EXTENSIONS = new Set([".pdf", ".docx", ".pptx", ".txt", ".md"]);
+
+export function assertInboxAttachment(fileName: string, mimeType: string | null | undefined, size: number) {
+  const extension = extname(fileName).toLowerCase();
+  const isImage = INBOX_IMAGE_EXTENSIONS.has(extension) && Boolean(mimeType?.startsWith("image/"));
+  const isDocument = INBOX_DOCUMENT_EXTENSIONS.has(extension);
+  if (!isImage && !isDocument) throw new Error("附件仅支持 JPG、PNG、WEBP、PDF、DOCX、PPTX、TXT、Markdown 文件");
+  const maxBytes = 15 * 1024 * 1024;
+  if (size <= 0 || size > maxBytes) throw new Error("单个收信箱附件需小于 15MB");
+  return { kind: isImage ? "IMAGE" : "FILE", extension } as const;
+}
+
+export async function storeInboxAttachment(input: { messageId: string; fileName: string; bytes: Buffer }) {
+  const safeName = basename(input.fileName).replace(/[^\w.\-\u4e00-\u9fff]/g, "_").slice(-120) || "attachment";
+  const root = join(getUploadDir(), "inbox", input.messageId);
+  await mkdir(root, { recursive: true });
+  const filePath = join(root, `${randomUUID()}-${safeName}`);
+  await writeFile(filePath, input.bytes);
+  return filePath;
+}
+
+export async function readInboxAttachment(storagePath: string) {
+  const root = join(getUploadDir(), "inbox");
+  if (!storagePath.startsWith(root)) throw new Error("附件路径无效");
+  return readFile(storagePath);
+}
+
+export async function storeGeneratedCoursewareImage(input: {
+  artifactId: string;
+  pageNo: number;
+  bytes: Buffer;
+}) {
+  const root = join(getUploadDir(), "generated-courseware", input.artifactId);
+  await mkdir(root, { recursive: true });
+  const filePath = join(root, `slide-${input.pageNo}.png`);
+  await writeFile(filePath, input.bytes);
+  return filePath;
 }

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { createSessionCookieValue, getSessionCookieOptions, SESSION_COOKIE } from "@/lib/auth";
 import { hashPassword } from "@/lib/passwords";
 import { registerSchema } from "@/lib/validation/auth";
+import { grantInitialTeacherCreditsInTransaction } from "@/lib/billing/credit-service";
 
 const EMAIL_EXISTS_MESSAGE = "该邮箱已被注册";
 
@@ -94,20 +95,24 @@ export async function POST(request: NextRequest) {
 
   const passwordHash = await hashPassword(parsed.data.password);
 
-  const user = await db.user.create({
-    data: {
-      name: parsed.data.name,
-      email: parsed.data.email,
-      passwordHash,
-      role: parsed.data.role,
-      institutionId: institution.id
-    },
-    select: {
-      id: true,
-      name: true,
-      role: true,
-      institutionId: true
-    }
+  const user = await db.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: {
+        name: parsed.data.name,
+        email: parsed.data.email,
+        passwordHash,
+        role: parsed.data.role,
+        institutionId: institution.id
+      },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        institutionId: true
+      }
+    });
+    await grantInitialTeacherCreditsInTransaction(tx, created.id, created.role);
+    return created;
   });
 
   const sessionUser = {

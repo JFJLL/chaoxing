@@ -103,11 +103,12 @@ async function generateBytes(input: {
   format: "DOCX" | "PPTX";
   variant: "DEFAULT" | "STUDENT" | "TEACHER";
   courseId: string;
+  imagePaths?: Array<string | null>;
 }) {
   if (input.format === "PPTX") {
     // Export mirrors the on-screen preview (plain title + bullets + logo) rather
     // than nesting content into the decorated template.
-    return generatePlainCoursewarePptx({ payload: input.payload as AiCoursewarePayload });
+    return generatePlainCoursewarePptx({ payload: input.payload as AiCoursewarePayload, imagePaths: input.imagePaths });
   }
 
   const variant = input.variant.toLowerCase() as "default" | "student" | "teacher";
@@ -320,6 +321,16 @@ export async function POST(request: Request, context: RouteContext) {
 
   try {
     const payload = parseStoredArtifactPayload(artifact.appType, artifact.payload);
+    const imagePages = artifact.appType === "ppt_courseware"
+      ? await db.imageGenerationPage.findMany({
+          where: { batch: { artifactId: artifact.id } },
+          orderBy: { pageNo: "asc" },
+          select: { pageNo: true, status: true, imagePath: true }
+        })
+      : [];
+    if (imagePages.length && imagePages.some((page) => page.status !== "SUCCEEDED" || !page.imagePath)) {
+      return NextResponse.json({ code: "PPT_IMAGE_PAGES_INCOMPLETE", error: "课件图片尚未全部生成完成，暂不能导出" }, { status: 409 });
+    }
     const bytes = await generateBytes({
       appType: artifact.appType,
       title: artifact.title,
@@ -327,7 +338,8 @@ export async function POST(request: Request, context: RouteContext) {
       payload,
       format: parsed.data.format,
       variant: parsed.data.variant,
-      courseId
+      courseId,
+      imagePaths: imagePages.length ? imagePages.map((page) => page.imagePath) : undefined
     });
     const folder = await ensureCoursePurposeFolder(user, courseId, descriptor.purpose);
     const fileName = `${fileBaseName(artifact.title)}${descriptor.suffix}.${descriptor.extension}`;

@@ -23,13 +23,14 @@ type NavItem = {
   icon: typeof Home;
   hidden?: boolean;
   teacherOnly?: boolean;
+  normalUserOnly?: boolean;
 };
 
 const navItems: NavItem[] = [
   { href: "/space", label: "首页", icon: Home },
   { href: "/space/topics", label: "专题创作", icon: Lightbulb, hidden: true },
   { href: "/space/courses", label: "课程", icon: BookOpen },
-  { href: "/space/inbox", label: "收件箱", icon: Inbox },
+  { href: "/space/inbox", label: "收件箱", icon: Inbox, normalUserOnly: true },
   { href: "/space/groups", label: "小组", icon: Users, hidden: true },
   { href: "/space/notes", label: "笔记", icon: NotebookPen },
   { href: "/space/contacts", label: "通讯录", icon: Contact, hidden: true },
@@ -40,7 +41,7 @@ const navItems: NavItem[] = [
 
 export function SpaceSidebar({ user, unreadCount = 0 }: { user: SessionUser; unreadCount?: number }) {
   const pathname = usePathname();
-  const visibleNavItems = navItems.filter((item) => !item.hidden && (!item.teacherOnly || user.role === "TEACHER" || user.role === "ADMIN"));
+  const visibleNavItems = navItems.filter((item) => !item.hidden && (!item.teacherOnly || user.role === "TEACHER" || user.role === "ADMIN") && (!item.normalUserOnly || user.role !== "ADMIN"));
 
   return (
     <>
@@ -52,7 +53,7 @@ export function SpaceSidebar({ user, unreadCount = 0 }: { user: SessionUser; unr
             </span>
             <div className="min-w-0">
               <p className="truncate font-medium">{user.name}</p>
-              <p className="text-xs text-white/70">{user.role === "TEACHER" ? "教师空间" : "学习空间"}</p>
+              <p className="text-xs text-white/70">{user.role === "ADMIN" ? "管理员空间" : user.role === "TEACHER" ? "教师空间" : "学习空间"}</p>
             </div>
           </div>
         </div>

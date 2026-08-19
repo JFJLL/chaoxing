@@ -9,6 +9,10 @@ const workflowIcons = {
   courseware: Presentation
 } satisfies Record<TeacherPrepWorkflowIcon, typeof BrainCircuit>;
 
+export function getTeacherPrepWorkflowOnboardingTarget(workflowId: string) {
+  return workflowId === "course-content" ? "start-document-import" : undefined;
+}
+
 export function TeacherPrepWorkbench({ courseId }: { courseId: string }) {
   return (
     <section className="rounded-3xl border border-white/80 bg-white p-5 shadow-panel sm:p-6 lg:p-7">
@@ -23,6 +27,7 @@ export function TeacherPrepWorkbench({ courseId }: { courseId: string }) {
             <Link
               key={workflow.id}
               data-workflow-id={workflow.id}
+              data-teacher-onboarding={getTeacherPrepWorkflowOnboardingTarget(workflow.id)}
               href={workflow.route(courseId)}
               prefetch={false}
               className="cx-focus-ring cx-tactile group flex min-h-48 flex-col rounded-2xl border border-[var(--cx-border)] bg-slate-50/80 p-5 hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-[var(--cx-blue-soft)] hover:shadow-floating"

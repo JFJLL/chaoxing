@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -8,6 +8,7 @@ export type SessionUser = {
   name: string;
   role: "STUDENT" | "TEACHER" | "ADMIN";
   institutionId: string;
+  sessionId?: string;
 };
 
 export const SESSION_COOKIE = "cx_session";
@@ -26,7 +27,8 @@ function sign(payload: string) {
 }
 
 function encodeSession(user: SessionUser) {
-  const payload = Buffer.from(JSON.stringify(user), "utf8").toString("base64url");
+  const session = { ...user, sessionId: user.sessionId ?? randomUUID() };
+  const payload = Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
   return `${payload}.${sign(payload)}`;
 }
 

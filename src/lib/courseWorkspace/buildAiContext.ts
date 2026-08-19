@@ -671,10 +671,19 @@ export async function buildCourseAiContext(input: {
   ]);
 
   if (!course) throw new Error("课程不存在");
+  const seenImportNames = new Set<string>();
+  const uniqueImports: typeof imports = [];
+  for (const item of imports) {
+    const key = item.originalName.trim().toLowerCase();
+    if (!seenImportNames.has(key)) {
+      seenImportNames.add(key);
+      uniqueImports.push(item);
+    }
+  }
   const data: CourseAiContextData = {
     course: { id: course.id, title: course.title, description: course.description },
     chapters: course.chapters,
-    imports: imports.map((source) => {
+    imports: uniqueImports.map((source) => {
       const selection = input.sourceSelections?.find((item) => item.documentId === source.id);
       let extractedText = source.extractedText!;
       if (selection?.sectionIds.length) {

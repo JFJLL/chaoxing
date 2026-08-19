@@ -88,7 +88,8 @@ export const aiCoursewarePayloadSchema = z
           .object({
             title: nonEmptyText.max(300),
             bullets: z.array(nonEmptyText).min(1).max(20),
-            speakerNotes: nonEmptyText
+            speakerNotes: nonEmptyText,
+            imagePath: z.string().trim().min(1).max(2_000).optional()
           })
           .strict()
       )

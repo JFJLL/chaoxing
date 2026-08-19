@@ -52,7 +52,7 @@ export function CourseResourceUpload({ courseId, folderConfigured }: { courseId:
           if (file) void upload(file);
         }}
       />
-      <Button type="button" disabled={busy} onClick={() => inputRef.current?.click()}>
+      <Button type="button" data-teacher-onboarding="upload-course-resource" disabled={busy} onClick={() => inputRef.current?.click()}>
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
         {busy ? "正在上传" : "选择并上传"}
       </Button>

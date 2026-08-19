@@ -9,6 +9,49 @@ export type AiModelConfig = {
   model: string;
 };
 
+/**
+ * Token quantities returned directly by the model provider for a completed
+ * request. A missing provider usage object remains null; it must never be
+ * replaced with a local estimate in the operational usage ledger.
+ */
+export type ProviderTokenUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  provider: AiProvider;
+  model: string;
+};
+
+export type CompletionWithUsage = {
+  content: string;
+  usage: ProviderTokenUsage | null;
+};
+
+export type TextCompletionStream = AsyncIterable<string> & {
+  usage: Promise<ProviderTokenUsage | null>;
+};
+
+function asNonNegativeInteger(value: unknown) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+/** Extracts only complete token figures returned by the configured provider. */
+export function parseProviderTokenUsage(provider: AiProvider, model: string, body: unknown): ProviderTokenUsage | null {
+  if (!body || typeof body !== "object") return null;
+  const record = body as Record<string, unknown>;
+  const source = provider === "gemini"
+    ? (record.usageMetadata as Record<string, unknown> | undefined)
+    : (record.usage as Record<string, unknown> | undefined);
+  if (!source) return null;
+
+  const promptTokens = asNonNegativeInteger(provider === "gemini" ? source.promptTokenCount : source.prompt_tokens);
+  const completionTokens = asNonNegativeInteger(provider === "gemini" ? source.candidatesTokenCount : source.completion_tokens);
+  const totalTokens = asNonNegativeInteger(provider === "gemini" ? source.totalTokenCount : source.total_tokens);
+  if (promptTokens === null || completionTokens === null || totalTokens === null) return null;
+
+  return { promptTokens, completionTokens, totalTokens, provider, model };
+}
+
 type CompletionInput = {
   system: string;
   user: string;
@@ -208,7 +251,10 @@ async function createOpenAiCompatibleJsonCompletion(config: AiModelConfig, input
     response_format: { type: "json_object" }
   }, { signal: input.signal });
 
-  return completion.choices[0]?.message.content || "";
+    return {
+    content: completion.choices[0]?.message.content || "",
+    usage: parseProviderTokenUsage(config.provider, config.model, completion)
+  };
 }
 
 async function createOpenAiCompatibleTextCompletion(config: AiModelConfig, input: CompletionInput) {
@@ -224,7 +270,10 @@ async function createOpenAiCompatibleTextCompletion(config: AiModelConfig, input
     ]
   });
 
-  return completion.choices[0]?.message.content || "";
+    return {
+    content: completion.choices[0]?.message.content || "",
+    usage: parseProviderTokenUsage(config.provider, config.model, completion)
+  };
 }
 
 async function createGeminiJsonCompletion(config: AiModelConfig, input: JsonCompletionInput) {
@@ -257,10 +306,13 @@ async function createGeminiJsonCompletion(config: AiModelConfig, input: JsonComp
     throw new Error(`Gemini API failed: ${response.status} ${message.slice(0, 300)}`);
   }
 
-  const body = (await response.json()) as {
+    const body = (await response.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   };
-  return body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+  return {
+    content: body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "",
+    usage: parseProviderTokenUsage(config.provider, config.model, body)
+  };
 }
 
 async function createGeminiTextCompletion(config: AiModelConfig, input: CompletionInput) {
@@ -285,10 +337,13 @@ async function createGeminiTextCompletion(config: AiModelConfig, input: Completi
     throw new Error(`Gemini API failed: ${response.status} ${message.slice(0, 300)}`);
   }
 
-  const body = (await response.json()) as {
+    const body = (await response.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   };
-  return body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+  return {
+    content: body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "",
+    usage: parseProviderTokenUsage(config.provider, config.model, body)
+  };
 }
 
 export type GeminiUploadedFile = { uri: string; mimeType: string };
@@ -447,26 +502,32 @@ export async function createFileJsonCompletion(input: GeminiFileCompletionInput)
   return createGeminiFileJsonCompletion(config, input);
 }
 
-export async function createJsonCompletion(input: JsonCompletionInput) {
+export async function createJsonCompletionWithUsage(input: JsonCompletionInput): Promise<CompletionWithUsage | null> {
   const config = resolveAiModelConfig(input.model);
   if (!config) return null;
-
-  if (config.provider === "gemini") {
-    return createGeminiJsonCompletion(config, input);
-  }
-
-  return createOpenAiCompatibleJsonCompletion(config, input);
+  return config.provider === "gemini"
+    ? createGeminiJsonCompletion(config, input)
+    : createOpenAiCompatibleJsonCompletion(config, input);
 }
 
-export async function createTextCompletion(input: CompletionInput) {
+/** Legacy text-only helper. New accounting-sensitive code must use the WithUsage variant. */
+export async function createJsonCompletion(input: JsonCompletionInput) {
+  const completion = await createJsonCompletionWithUsage(input);
+  return completion?.content ?? null;
+}
+
+export async function createTextCompletionWithUsage(input: CompletionInput): Promise<CompletionWithUsage | null> {
   const config = resolveAiModelConfig(input.model);
   if (!config) return null;
+  return config.provider === "gemini"
+    ? createGeminiTextCompletion(config, input)
+    : createOpenAiCompatibleTextCompletion(config, input);
+}
 
-  if (config.provider === "gemini") {
-    return createGeminiTextCompletion(config, input);
-  }
-
-  return createOpenAiCompatibleTextCompletion(config, input);
+/** Legacy text-only helper. New accounting-sensitive code must use the WithUsage variant. */
+export async function createTextCompletion(input: CompletionInput) {
+  const completion = await createTextCompletionWithUsage(input);
+  return completion?.content ?? null;
 }
 
 /**
@@ -476,17 +537,20 @@ export async function createTextCompletion(input: CompletionInput) {
 export async function createTranslationCompletion(input: CompletionInput) {
   const config = resolveTranslationModelConfig();
   if (!config) return null;
-  if (config.provider === "gemini") {
-    return createGeminiTextCompletion(config, input);
-  }
-  return createOpenAiCompatibleTextCompletion(config, input);
+  const completion = config.provider === "gemini"
+    ? await createGeminiTextCompletion(config, input)
+    : await createOpenAiCompatibleTextCompletion(config, input);
+  return completion.content;
 }
 
-async function* createOpenAiCompatibleTextStream(config: AiModelConfig, input: TextCompletionStreamInput) {
-  const client = new OpenAI({
-    apiKey: config.apiKey,
-    baseURL: config.baseURL
-  });
+function usageDeferred() {
+  let resolve!: (usage: ProviderTokenUsage | null) => void;
+  const promise = new Promise<ProviderTokenUsage | null>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+async function createOpenAiCompatibleTextStream(config: AiModelConfig, input: TextCompletionStreamInput): Promise<TextCompletionStream> {
+  const client = new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL });
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: input.system },
     ...input.messages.map((message): OpenAI.Chat.Completions.ChatCompletionMessageParam => {
@@ -508,39 +572,57 @@ async function* createOpenAiCompatibleTextStream(config: AiModelConfig, input: T
   const completion = await client.chat.completions.create({
     model: config.model,
     stream: true,
+    stream_options: { include_usage: true },
     messages
   }, { signal: input.signal });
-
-  for await (const chunk of completion) {
-    const text = chunk.choices[0]?.delta.content;
-    if (text) yield text;
-  }
+  const deferred = usageDeferred();
+  const stream = (async function* () {
+    let usage: ProviderTokenUsage | null = null;
+    try {
+      for await (const chunk of completion) {
+        usage = parseProviderTokenUsage(config.provider, config.model, (chunk as unknown as { usage?: unknown }).usage ? chunk : null) ?? usage;
+        const text = chunk.choices[0]?.delta.content;
+        if (text) yield text;
+      }
+    } finally {
+      deferred.resolve(usage);
+    }
+  })();
+  return {
+    usage: deferred.promise,
+    [Symbol.asyncIterator]: () => stream[Symbol.asyncIterator]()
+  };
 }
 
-function parseGeminiStreamFrame(frame: string) {
+function parseGeminiStreamFrame(frame: string): { text: string; body: unknown } | null {
   const data = frame
     .split(/\r?\n/)
     .filter((line) => line.startsWith("data:"))
     .map((line) => line.slice(5).trimStart())
     .join("\n")
     .trim();
-  if (!data || data === "[DONE]") return "";
+  if (!data || data === "[DONE]") return null;
 
   try {
-    const body = JSON.parse(data) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    return body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+    const body = JSON.parse(data) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    return { text: body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "", body };
   } catch {
     throw new Error("AI stream returned invalid data");
   }
 }
 
-async function* readGeminiSse(response: Response) {
+async function* readGeminiSse(response: Response, onUsage: (usage: ProviderTokenUsage) => void, config: AiModelConfig) {
   if (!response.body) throw new Error("AI stream returned no body");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  const consumeFrame = (frame: string) => {
+    const parsed = parseGeminiStreamFrame(frame);
+    if (!parsed) return "";
+    const usage = parseProviderTokenUsage(config.provider, config.model, parsed.body);
+    if (usage) onUsage(usage);
+    return parsed.text;
+  };
 
   while (true) {
     const { value, done } = await reader.read();
@@ -548,55 +630,55 @@ async function* readGeminiSse(response: Response) {
     const frames = buffer.split(/\r?\n\r?\n/);
     buffer = frames.pop() ?? "";
     for (const frame of frames) {
-      const text = parseGeminiStreamFrame(frame);
+      const text = consumeFrame(frame);
       if (text) yield text;
     }
     if (done) break;
   }
 
   if (buffer.trim()) {
-    const text = parseGeminiStreamFrame(buffer);
+    const text = consumeFrame(buffer);
     if (text) yield text;
   }
 }
 
-async function createGeminiTextStream(config: AiModelConfig, input: TextCompletionStreamInput) {
+async function createGeminiTextStream(config: AiModelConfig, input: TextCompletionStreamInput): Promise<TextCompletionStream> {
   const response = await fetch(buildGeminiStreamContentUrl(config), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": config.apiKey
-    },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": config.apiKey },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: input.system }] },
       contents: input.messages.map((message) => ({
         role: message.role === "assistant" ? "model" : "user",
-        parts: [
-          { text: message.content },
-          ...(message.images ?? []).map((image) => ({
-            inlineData: { mimeType: image.mimeType, data: image.data }
-          }))
-        ]
+        parts: [{ text: message.content }, ...(message.images ?? []).map((image) => ({ inlineData: { mimeType: image.mimeType, data: image.data } }))]
       }))
     }),
     signal: input.signal
   });
-
   if (!response.ok) {
     const message = await response.text();
     throw new Error(`Gemini API failed: ${response.status} ${message.slice(0, 300)}`);
   }
 
-  return readGeminiSse(response);
+  const deferred = usageDeferred();
+  const stream = (async function* () {
+    let usage: ProviderTokenUsage | null = null;
+    try {
+      for await (const text of readGeminiSse(response, (value) => { usage = value; }, config)) yield text;
+    } finally {
+      deferred.resolve(usage);
+    }
+  })();
+  return {
+    usage: deferred.promise,
+    [Symbol.asyncIterator]: () => stream[Symbol.asyncIterator]()
+  };
 }
 
-export async function createTextCompletionStream(input: TextCompletionStreamInput): Promise<AsyncIterable<string> | null> {
+export async function createTextCompletionStream(input: TextCompletionStreamInput): Promise<TextCompletionStream | null> {
   const config = resolveAiModelConfig(input.model);
   if (!config) return null;
-
-  if (config.provider === "gemini") {
-    return createGeminiTextStream(config, input);
-  }
-
-  return createOpenAiCompatibleTextStream(config, input);
+  return config.provider === "gemini"
+    ? createGeminiTextStream(config, input)
+    : createOpenAiCompatibleTextStream(config, input);
 }

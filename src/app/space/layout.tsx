@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { SpaceChrome } from "@/components/shell/SpaceChrome";
+import { TeacherOnboarding } from "@/components/onboarding/TeacherOnboarding";
 
 export default async function SpaceLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
@@ -18,8 +19,11 @@ export default async function SpaceLayout({ children }: { children: ReactNode })
   ]);
 
   return (
-    <SpaceChrome user={user} institutionName={institution?.name ?? "个人空间"} unreadCount={unreadCount}>
-      {children}
-    </SpaceChrome>
+    <>
+      <TeacherOnboarding enabled={user.role === "TEACHER"} />
+      <SpaceChrome user={user} institutionName={institution?.name ?? "个人空间"} unreadCount={unreadCount}>
+        {children}
+      </SpaceChrome>
+    </>
   );
 }

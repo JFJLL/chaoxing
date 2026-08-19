@@ -152,7 +152,14 @@ const defaultDependencies: CourseKnowledgeSourceDependencies = {
         select: { id: true, stem: true, answer: true, explanation: true, status: true }
       })
     ]);
-    return { imports, questions };
+    const seenNames = new Set<string>();
+    const uniqueImports = imports.filter((item) => {
+      const key = item.originalName.trim().toLowerCase();
+      if (seenNames.has(key)) return false;
+      seenNames.add(key);
+      return true;
+    });
+    return { imports: uniqueImports, questions };
   }
 };
 

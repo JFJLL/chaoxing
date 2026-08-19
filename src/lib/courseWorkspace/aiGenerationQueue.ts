@@ -17,6 +17,7 @@ const appTypeSchema = z.enum([
   "lesson_plan",
   "courseware",
   "paper_assembly",
+  "ppt_courseware",
   "html_courseware"
 ]);
 const approvedQuestionSchema = z.object({
@@ -70,6 +71,12 @@ const generationSnapshotSchema = z.discriminatedUnion("appType", [
     approvedQuestions: z.array(approvedQuestionSchema).min(1).max(500)
   }).strict(),
   z.object({
+    appType: z.literal("ppt_courseware"),
+    sourceCourseware: aiCoursewarePayloadSchema,
+    sourceArtifactId: z.string().trim().min(1).max(200),
+    sourceArtifactVersion: z.number().int().min(1)
+  }).strict(),
+  z.object({
     appType: z.literal("html_courseware"),
     sourceCourseware: aiCoursewarePayloadSchema,
     prompt: z.string().max(2_000).optional()
@@ -100,7 +107,7 @@ export function parseAiGenerationInputSnapshot(
         approvedQuestions: parsed.approvedQuestions as ApprovedQuestionInput[]
       };
     }
-    if (parsed.appType === "html_courseware") {
+    if (parsed.appType === "html_courseware" || parsed.appType === "ppt_courseware") {
       return parsed;
     }
     if (parsed.appType === "courseware") {
@@ -464,5 +471,6 @@ export function isSupportedQueuedAppType(appType: CourseAiAppType) {
     || appType === "lesson_plan"
     || appType === "courseware"
     || appType === "paper_assembly"
+    || appType === "ppt_courseware"
     || appType === "html_courseware";
 }

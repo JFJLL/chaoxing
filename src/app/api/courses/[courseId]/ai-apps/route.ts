@@ -25,6 +25,8 @@ import {
 import { parseAiGenerationInputSnapshot } from "@/lib/courseWorkspace/aiGenerationQueue";
 import { aiCoursewarePayloadSchema, aiLessonPlanPayloadSchema } from "@/types/courseWorkspace";
 import { parseStoredDocumentSections } from "@/lib/imports/documentSections";
+import { CreditError } from "@/lib/billing/credit-service";
+import { createPptImageBatch } from "@/lib/courseWorkspace/createPptImageBatch";
 
 type RouteContext = {
   params: Promise<{ courseId: string }>;
@@ -274,6 +276,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const aiContext = await buildCourseAiContext({ courseId, scope, prompt: parsed.data.prompt });
       artifactInput = { appType: parsed.data.appType, context: aiContext, approvedQuestions } as const;
     } else if (parsed.data.appType === "ppt_courseware") {
+      if (user.role !== "TEACHER") {
+        return NextResponse.json({ code: "BILLING_TEACHER_REQUIRED", error: "仅教师账户可以生成积分课件" }, { status: 403 });
+      }
       const source = await db.courseAiArtifact.findFirst({
         where: { id: parsed.data.sourceArtifactId!, courseId, deletedAt: null },
         select: { id: true, appType: true, status: true, version: true, payload: true }
@@ -291,32 +296,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }, { status: 409 });
       }
       sourceArtifactId = source.id;
-      const artifact = await db.courseAiArtifact.create({
-        data: {
-          courseId,
-          userId: user.id,
-          appType: "ppt_courseware",
-          title: parsed.data.title ?? `${app.title} ${new Date().toLocaleString("zh-CN", { hour12: false })}`,
-          prompt: parsed.data.prompt,
-          payload: JSON.stringify(sourceCourseware),
-          inputSnapshot: JSON.stringify({
-            sourceArtifactId: source.id,
-            sourceArtifactVersion: source.version,
-            sourcePayloadHash: createHash("sha256").update(source.payload!).digest("hex")
-          }),
-          runToken: null,
-          scope: null,
-          sourceArtifactId,
-          status: "APPROVED",
-          version: 1,
-          approvedAt: new Date(),
-          finishedAt: new Date()
-        },
-        select: safeAiArtifactSelect
+      const created = await createPptImageBatch({
+        courseId,
+        userId: user.id,
+        title: parsed.data.title ?? `${app.title} ${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+        prompt: parsed.data.prompt,
+        sourceArtifactId: source.id,
+        sourceArtifactVersion: source.version,
+        sourceCourseware
       });
+      const artifact = await db.courseAiArtifact.findUniqueOrThrow({ where: { id: created.id }, select: safeAiArtifactSelect });
+      enqueueAiGenerationJob(artifact.id);
       return NextResponse.json({
-        artifact: toSafeAiArtifactDto(artifact, { canManage: true, jobsAhead: null })
-      }, { status: 201 });
+        artifact: toSafeAiArtifactDto(artifact, { canManage: true, jobsAhead: getAiGenerationJobsAhead(artifact.id) })
+      }, { status: 202 });
     } else {
       const aiContext = await buildCourseAiContext({ courseId, scope, prompt: parsed.data.prompt });
       artifactInput = { appType: parsed.data.appType, context: aiContext } as const;
@@ -362,6 +355,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       })
     }, { status: 202 });
   } catch (error) {
+    if (error instanceof CreditError) {
+      return NextResponse.json({ code: error.code, error: error.message }, { status: 402 });
+    }
     if (error instanceof AiContextTooLargeError) {
       return NextResponse.json({ code: error.code, error: error.message }, { status: 413 });
     }

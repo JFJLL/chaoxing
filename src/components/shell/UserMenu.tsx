@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, KeyRound, LogOut } from "lucide-react";
+import { Compass, ChevronDown, KeyRound, LogOut, ShieldCheck, WalletCards } from "lucide-react";
 import type { FormEvent } from "react";
 import type { SessionUser } from "@/lib/auth";
 import { Button } from "@/components/ui/Button";
@@ -99,6 +100,28 @@ export function UserMenu({ user }: { user: SessionUser }) {
         <ChevronDown className="h-4 w-4 text-slate-400" />
       </button>
       <div className="invisible absolute right-0 top-12 z-40 w-48 translate-y-1 rounded-xl border border-[var(--cx-border)] bg-white py-2 opacity-0 shadow-floating transition group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
+        {user.role === "TEACHER" ? (
+          <>
+            <Link href="/space/billing" className="cx-focus-ring flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+              <WalletCards className="h-4 w-4" />
+              积分中心
+            </Link>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("teacher-onboarding:restart"))}
+              className="cx-focus-ring flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <Compass className="h-4 w-4" />
+              重新查看新手引导
+            </button>
+          </>
+        ) : null}
+        {user.role === "ADMIN" ? (
+          <Link href="/space/admin" className="cx-focus-ring flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
+            <ShieldCheck className="h-4 w-4" />
+            管理员控制台
+          </Link>
+        ) : null}
         <button
           type="button"
           onClick={() => {

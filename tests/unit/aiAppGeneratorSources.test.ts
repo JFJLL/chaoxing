@@ -21,4 +21,15 @@ describe("AI app document source loading (lesson_plan + question_generation)", (
   it("submits sourceSelections and blocks generation for question_generation", () => {
     expect(component).toContain('(app.appType === "lesson_plan" || app.appType === "question_generation")');
   });
+
+  it("deduplicates document rows by name in the page loader", () => {
+    expect(page).toContain("seenDocumentNames");
+    expect(page).toContain("uniqueDocumentRows");
+  });
+
+  it("renders 资料与章节来源 in a collapsible panel with deduplicated sources", () => {
+    expect(component).toContain("uniqueDocumentSources");
+    expect(component).toContain("CollapsibleSourcePanel");
+    expect(component).toContain('panelId="lesson-source-selection-panel"');
+  });
 });

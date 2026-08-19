@@ -40,6 +40,7 @@ export function NewCourseDialog() {
     const body = (await response.json()) as { course?: { id: string } };
     setOpen(false);
     if (body.course?.id) {
+      window.dispatchEvent(new CustomEvent("teacher-onboarding:course-created", { detail: { courseId: body.course.id } }));
       router.push(`/space/courses/${body.course.id}`);
       return;
     }
@@ -48,7 +49,7 @@ export function NewCourseDialog() {
 
   return (
     <>
-      <Button type="button" onClick={() => { setMode("create"); setOpen(true); }}>
+      <Button type="button" data-teacher-onboarding="create-course" onClick={() => { setMode("create"); setOpen(true); }}>
         <Plus className="h-4 w-4" />
         新建课程
       </Button>

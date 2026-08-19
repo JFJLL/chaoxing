@@ -17,12 +17,13 @@ export function CollapsibleSourcePanel({
   defaultExpanded = false
 }: {
   title: string;
-  summary: ReactNode;
+  summary: ReactNode | ((expanded: boolean) => ReactNode);
   panelId: string;
   children: ReactNode;
   defaultExpanded?: boolean;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const renderedSummary = typeof summary === "function" ? summary(expanded) : summary;
   return (
     <div className="rounded-xl border border-slate-200">
       <button
@@ -34,7 +35,7 @@ export function CollapsibleSourcePanel({
       >
         <span className="min-w-0">
           <span className="block text-sm font-medium text-slate-800">{title}</span>
-          <span className="mt-0.5 block text-xs text-slate-500">{summary}</span>
+          <span className="mt-0.5 block text-xs text-slate-500">{renderedSummary}</span>
         </span>
         <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-blue-600">
           {expanded ? "收起" : "展开"}

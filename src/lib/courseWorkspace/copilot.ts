@@ -1,9 +1,10 @@
 import { randomUUID } from "crypto";
 import { z } from "zod";
+
 import type { SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isCourseManagerRecord, requireCourseAccess, requireCourseManager } from "@/lib/permissions";
-import type { TextCompletionMessage } from "@/lib/ai/modelClient";
+import type { ProviderTokenUsage, TextCompletionMessage } from "@/lib/ai/modelClient";
 import {
   assertCourseCopilotReferences,
   buildCopilotFileContext,
@@ -389,6 +390,7 @@ export async function prepareCopilotTurn(input: {
         skillId: skill?.id ?? null,
         fileCount: resolvedFiles.length,
         imageCount: context.images.length,
+        tokenUsageSource: "UNAVAILABLE",
         status: canManage ? "TEST_STARTED" : "STARTED"
       }
     });
@@ -430,6 +432,7 @@ export async function completeCopilotTurn(input: {
   usageEventId: string;
   testRun: boolean;
   content: string;
+  usage: ProviderTokenUsage | null;
 }) {
   if (!input.content.trim()) throw new CopilotError("MODEL_EMPTY_RESPONSE", "AI 未返回有效内容，请重试", 502);
   const assistantId = randomUUID();
@@ -445,7 +448,16 @@ export async function completeCopilotTurn(input: {
     });
     await tx.copilotUsageEvent.update({
       where: { id: input.usageEventId },
-      data: { status: input.testRun ? "TEST_SUCCESS" : "SUCCESS", completedAt: createdAt }
+      data: {
+        status: input.testRun ? "TEST_SUCCESS" : "SUCCESS",
+        tokenUsageSource: input.usage ? "PROVIDER" : "UNAVAILABLE",
+        tokenUsageProvider: input.usage?.provider ?? null,
+        tokenUsageModel: input.usage?.model ?? null,
+        promptTokensActual: input.usage?.promptTokens ?? 0,
+        completionTokensActual: input.usage?.completionTokens ?? 0,
+        totalTokensActual: input.usage?.totalTokens ?? 0,
+        completedAt: createdAt
+      }
     });
   });
   return { id: assistantId, role: "assistant" as const, content: input.content.slice(0, 100_000), citations: [], createdAt: createdAt.toISOString() };

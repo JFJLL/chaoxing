@@ -16,6 +16,7 @@ import {
   createPrismaMutableArtifactStore
 } from "@/lib/courseWorkspace/prismaArtifactStores";
 import { ArtifactWorkflowError, deleteArtifact } from "@/lib/courseWorkspace/artifactWorkflow";
+import { releaseReservedCredits } from "@/lib/billing/credit-service";
 
 type RouteContext = {
   params: Promise<{ courseId: string; artifactId: string }>;
@@ -175,11 +176,35 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   }
 
   try {
+    // A PPT task is cancellable only while it is still queued. The queue claim
+    // additionally filters deletedAt, so a successful soft-delete prevents any
+    // outbound image request after this point.
+    const cancellablePpt = await db.courseAiArtifact.findFirst({
+      where: { id: artifactId, courseId, appType: "ppt_courseware", status: "QUEUED", deletedAt: null, lockVersion },
+      select: { id: true, userId: true }
+    });
     const result = await deleteArtifact(createPrismaArtifactWorkflowStore(), {
       courseId,
       artifactId,
       expectedLockVersion: lockVersion
     });
+    if (cancellablePpt) {
+      const pendingPages = await db.imageGenerationPage.findMany({
+        where: { batch: { artifactId: cancellablePpt.id }, status: "QUEUED", consumedAt: null },
+        select: { pageNo: true, creditReferenceId: true }
+      });
+      for (const page of pendingPages) {
+        await releaseReservedCredits({
+          userId: cancellablePpt.userId,
+          amount: 1,
+          referenceType: "PPT_PAGE",
+          referenceId: page.creditReferenceId,
+          description: "课件在请求发送前已取消，积分已退回",
+          metadata: { artifactId: cancellablePpt.id, pageNo: page.pageNo }
+        });
+      }
+      await db.imageGenerationBatch.updateMany({ where: { artifactId: cancellablePpt.id }, data: { status: "CANCELLED" } });
+    }
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof ArtifactWorkflowError) {

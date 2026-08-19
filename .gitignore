@@ -12,6 +12,8 @@ tsconfig.tsbuildinfo
 .next-dev.log
 .next-dev-*.log
 *.docx
+# 使用说明文档的本地截图（DOCX 已内嵌图片，不需要入库）
+docs/usage/images/
 .codegraph/
 .superpowers/
 .workflow/

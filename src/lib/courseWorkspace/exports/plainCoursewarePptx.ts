@@ -54,18 +54,26 @@ const SLIDE_LAYOUT = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 const SLIDE_LAYOUT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>`;
 
-function slideRels(hasLogo: boolean) {
-  const logoRel = hasLogo ? `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/logo.png"/>` : "";
+function slideRels(hasLogo: boolean, imageName: string | null) {
+  const pageImageRel = imageName ? `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${imageName}"/>` : "";
+  const logoRel = hasLogo ? `<Relationship Id="rId${imageName ? 3 : 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/logo.png"/>` : "";
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>${logoRel}</Relationships>`;
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>${pageImageRel}${logoRel}</Relationships>`;
 }
 
-function slideXml(slide: AiCoursewarePayload["slides"][number], logo: { cx: number; cy: number } | null) {
-  const logoPic = logo
-    ? `<p:pic><p:nvPicPr><p:cNvPr id="2" name="logo"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="457200" y="320000"/><a:ext cx="${logo.cx}" cy="${logo.cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`
+function slideXml(slide: AiCoursewarePayload["slides"][number], logo: { cx: number; cy: number } | null, hasPageImage: boolean) {
+  const pageImage = hasPageImage
+    ? `<p:pic><p:nvPicPr><p:cNvPr id="2" name="generated-page"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${SLIDE_CX}" cy="${SLIDE_CY}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`
     : "";
+  const logoPic = logo
+    ? `<p:pic><p:nvPicPr><p:cNvPr id="${hasPageImage ? 3 : 2}" name="logo"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rId${hasPageImage ? 3 : 2}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="10250000" y="360000"/><a:ext cx="${logo.cx}" cy="${logo.cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`
+    : "";
+  if (hasPageImage) {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${pageImage}${logoPic}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
+  }
   const title = `<p:sp><p:nvSpPr><p:cNvPr id="3" name="title"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="1000000"/><a:ext cx="11277600" cy="900000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr wrap="square" rtlCol="0"><a:normAutofit/></a:bodyPr><a:lstStyle/><a:p><a:r><a:rPr lang="zh-CN" altLang="en-US" sz="3200" b="1"><a:solidFill><a:srgbClr val="1F2937"/></a:solidFill></a:rPr><a:t>${escapeXml(slide.title)}</a:t></a:r></a:p></p:txBody></p:sp>`;
-  const bullets = (slide.bullets.length ? slide.bullets : [""]).map((bullet) => `<a:p><a:pPr marL="342900" indent="-342900"><a:buFont typeface="Arial"/><a:buChar char="\u2022"/></a:pPr><a:r><a:rPr lang="zh-CN" altLang="en-US" sz="1800"><a:solidFill><a:srgbClr val="334155"/></a:solidFill></a:rPr><a:t>${escapeXml(bullet)}</a:t></a:r></a:p>`).join("");
+  const bullets = (slide.bullets.length ? slide.bullets : [""]).map((bullet) => `<a:p><a:pPr marL="342900" indent="-342900"><a:buFont typeface="Arial"/><a:buChar char="•"/></a:pPr><a:r><a:rPr lang="zh-CN" altLang="en-US" sz="1800"><a:solidFill><a:srgbClr val="334155"/></a:solidFill></a:rPr><a:t>${escapeXml(bullet)}</a:t></a:r></a:p>`).join("");
   const body = `<p:sp><p:nvSpPr><p:cNvPr id="4" name="body"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="2050000"/><a:ext cx="11277600" cy="4500000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr wrap="square" rtlCol="0"><a:normAutofit/></a:bodyPr><a:lstStyle/>${bullets}</p:txBody></p:sp>`;
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${logoPic}${title}${body}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
@@ -73,7 +81,7 @@ function slideXml(slide: AiCoursewarePayload["slides"][number], logo: { cx: numb
 
 async function loadLogo(): Promise<{ bytes: Buffer; cx: number; cy: number } | null> {
   const custom = process.env.PPT_COURSEWARE_LOGO_PATH?.trim();
-  const path = custom || join(process.cwd(), "public", "ppt-template", "school-logo.png");
+  const path = custom || join(process.cwd(), "public", "logo.png");
   try {
     const bytes = await readFile(path);
     // Preserve the logo's real aspect ratio: fix the height and derive the
@@ -91,11 +99,17 @@ async function loadLogo(): Promise<{ bytes: Buffer; cx: number; cy: number } | n
 
 export async function generatePlainCoursewarePptx(input: {
   payload: AiCoursewarePayload;
+  imagePaths?: Array<string | null | undefined>;
 }): Promise<Buffer> {
   const slides = input.payload.slides.length ? input.payload.slides : [{ title: "课件", bullets: [], speakerNotes: "" }];
   const logo = await loadLogo();
   const hasLogo = Boolean(logo);
   const logoExt = logo ? { cx: logo.cx, cy: logo.cy } : null;
+  const pageImages = await Promise.all(slides.map(async (_slide, index) => {
+    const path = input.imagePaths?.[index];
+    if (!path) return null;
+    try { return await sharp(await readFile(path)).png().toBuffer(); } catch { return null; }
+  }));
 
   const zip = new JSZip();
   zip.file("[Content_Types].xml", CONTENT_TYPES(slides.length));
@@ -109,8 +123,10 @@ export async function generatePlainCoursewarePptx(input: {
   zip.file("ppt/slideLayouts/_rels/slideLayout1.xml.rels", SLIDE_LAYOUT_RELS);
   if (logo) zip.file("ppt/media/logo.png", logo.bytes);
   slides.forEach((slide, index) => {
-    zip.file(`ppt/slides/slide${index + 1}.xml`, slideXml(slide, logoExt));
-    zip.file(`ppt/slides/_rels/slide${index + 1}.xml.rels`, slideRels(hasLogo));
+    const imageName = pageImages[index] ? `slide-${index + 1}.png` : null;
+    if (imageName && pageImages[index]) zip.file(`ppt/media/${imageName}`, pageImages[index]!);
+    zip.file(`ppt/slides/slide${index + 1}.xml`, slideXml(slide, logoExt, Boolean(imageName)));
+    zip.file(`ppt/slides/_rels/slide${index + 1}.xml.rels`, slideRels(hasLogo, imageName));
   });
 
   return Buffer.from(await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } }));

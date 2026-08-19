@@ -74,12 +74,14 @@ export async function POST(request: Request, context: RouteContext) {
           if (content.length > 100_000) throw new AiServiceError("MODEL_INVALID_OUTPUT", "AI 回复过长，请缩小问题范围");
           send({ type: "delta", text });
         }
+        const usage = await modelStream.usage;
         const assistantMessage = await completeCopilotTurn({
           conversationId: turn.conversationId,
           generationToken: turn.generationToken,
           usageEventId: turn.usageEventId,
           testRun: turn.testRun,
-          content
+          content,
+          usage
         });
         send({ type: "done", assistantMessage });
       } catch (error) {

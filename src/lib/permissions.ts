@@ -2,8 +2,16 @@ import { cache } from "react";
 import { db } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth";
 
+export function isAdministrator(user: SessionUser) {
+  return user.role === "ADMIN";
+}
+
+export function requireAdministrator(user: SessionUser) {
+  if (!isAdministrator(user)) throw new Error("需要管理员权限");
+}
+
 export function isTeacher(user: SessionUser) {
-  return user.role === "TEACHER" || user.role === "ADMIN";
+  return user.role === "TEACHER" || isAdministrator(user);
 }
 
 export function requireTeacher(user: SessionUser) {

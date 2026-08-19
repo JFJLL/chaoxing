@@ -55,6 +55,8 @@ function render(
     approvedQuestions?: Array<{ id: string; stem: string }>;
     coursewareSources?: Array<{ id: string; title: string; version: number; status: string }>;
     hasCourseContent?: boolean;
+    documentSources?: Array<{ id: string; title: string; sections: Array<{ id: string; title: string }> }>;
+    defaultSourcePanelExpanded?: boolean;
   } = {}
 ) {
   return renderToStaticMarkup(
@@ -64,6 +66,8 @@ function render(
       chapters={[{ id: "chapter-1", title: "第一章" }]}
       approvedQuestions={options.approvedQuestions ?? []}
       coursewareSources={options.coursewareSources ?? []}
+      documentSources={options.documentSources}
+      defaultSourcePanelExpanded={options.defaultSourcePanelExpanded}
       initialArtifacts={[artifact]}
       hasCourseContent={options.hasCourseContent}
     />
@@ -197,6 +201,30 @@ describe("AI artifact status presentation", () => {
     expect(markup.indexOf("资料与章节来源")).toBeLessThan(markup.indexOf(">题型<"));
   });
 
+  it("deduplicates duplicate document sources and renders a collapsed source panel for 资料与章节来源", () => {
+    const duplicateSources = [
+      { id: "doc-1", title: "计算机网络.docx", sections: [{ id: "s-1", title: "第1节 体系结构" }] },
+      { id: "doc-2", title: "计算机网络.docx", sections: [{ id: "s-2", title: "第2节 协议" }] },
+      { id: "doc-3", title: "操作系统.pdf", sections: [{ id: "s-3", title: "第1节 进程管理" }] }
+    ];
+    const collapsedMarkup = render(baseArtifact, app, { documentSources: duplicateSources });
+    expect(collapsedMarkup).toContain("资料与章节来源");
+    expect(collapsedMarkup).toContain('aria-expanded="false"');
+    expect(collapsedMarkup).toContain("未选择资料与章节（点击展开选择）");
+
+    const markup = render(baseArtifact, app, { documentSources: duplicateSources, defaultSourcePanelExpanded: true });
+    expect(markup).toContain("资料与章节来源");
+    expect(markup).toContain('aria-expanded="true"');
+    // Only one instance of 计算机网络.docx is rendered
+    const firstIndex = markup.indexOf("计算机网络.docx");
+    const secondIndex = markup.indexOf("计算机网络.docx", firstIndex + 1);
+    expect(firstIndex).toBeGreaterThan(-1);
+    // The label and span both have the title for the single item; verify no second document box
+    expect(markup.match(/lesson-source-doc-2/)).toBeNull();
+    expect(markup).toContain("lesson-source-doc-1");
+    expect(markup).toContain("lesson-source-doc-3");
+  });
+
   it("keeps the content scope for paper assembly", () => {
     const markup = render({ ...baseArtifact, appType: "paper_assembly" }, {
       ...app,
@@ -275,9 +303,9 @@ describe("AI artifact status presentation", () => {
       coursewareSources: [{ id: "courseware-1", title: "第一章课件", version: 2, status: "APPROVED" }]
     });
 
-    expect(markup).toContain("将已确认 AI课件生成可编辑 PPT");
-    expect(markup).toContain("上游修改不会静默覆盖当前产物");
-    expect(markup).toContain("生成PPT");
+    expect(markup).toContain("将已确认 AI课件逐页生成整页视觉 PPT");
+    expect(markup).toContain("每页生成成功后消耗 1 积分");
+    expect(markup).toContain("生成整页PPT");
     expect(markup).not.toContain("生成要求");
     expect(markup).not.toContain("开始 AI 生成");
     expect(markup).not.toContain("内容范围");

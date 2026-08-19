@@ -67,6 +67,17 @@ model User {
   helpTickets             HelpTicket[]
   createdAuditLogs        AuditLog[]
   updatedDriveAccessRules CourseDriveAccessRule[] @relation("CourseDriveAccessRuleUpdater")
+  creditAccount           CreditAccount?
+  paymentOrders           PaymentOrder[]
+  imageGenerationBatches  ImageGenerationBatch[]
+  onboardingState         String?
+  onboardingVersion       Int                     @default(0)
+  onboardingStep          Int                     @default(0)
+  onboardingCourseId      String?
+  onboardingPromptCount   Int                     @default(0)
+  onboardingLastPromptAt  DateTime?
+  onboardingLastSessionId String?
+  onboardingCompletedAt   DateTime?
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
 }
@@ -274,6 +285,7 @@ model CourseAiArtifact {
   deletedAt        DateTime?
   lockVersion      Int                      @default(0)
   exports          CourseAiArtifactExport[]
+  imageBatch       ImageGenerationBatch?
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
@@ -282,6 +294,115 @@ model CourseAiArtifact {
   @@index([status, createdAt])
   @@index([status, runToken])
   @@index([sourceArtifactId])
+}
+
+model CreditAccount {
+  id        String         @id @default(cuid())
+  userId    String         @unique
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  available Int            @default(0)
+  reserved  Int            @default(0)
+  version   Int            @default(0)
+  ledgers   CreditLedger[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model CreditLedger {
+  id             String        @id @default(cuid())
+  accountId      String
+  account        CreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type           String
+  availableDelta Int           @default(0)
+  reservedDelta  Int           @default(0)
+  referenceType  String
+  referenceId    String
+  description    String?
+  metadata       String?
+  createdAt      DateTime      @default(now())
+
+  @@unique([referenceType, referenceId, type])
+  @@index([accountId, createdAt])
+}
+
+model PaymentOrder {
+  id             String         @id @default(cuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  outTradeNo     String         @unique
+  idempotencyKey String
+  planId         String
+  planName       String
+  planCredits    Int
+  planBaseCredits Int
+  planBonusCredits Int @default(0)
+  amountFen      Int
+  provider       String
+  status         String         @default("CREATED")
+  providerTradeNo String?
+  paymentPayload String?
+  expiresAt      DateTime
+  paidAt         DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  events         PaymentEvent[]
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+  @@index([status, expiresAt])
+}
+
+model PaymentEvent {
+  id             String        @id @default(cuid())
+  orderId        String?
+  order          PaymentOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  provider       String
+  providerEventId String
+  verified       Boolean       @default(false)
+  payload        String
+  createdAt      DateTime      @default(now())
+
+  @@unique([provider, providerEventId])
+  @@index([orderId, createdAt])
+}
+
+model ImageGenerationBatch {
+  id           String                @id @default(cuid())
+  artifactId   String                @unique
+  artifact     CourseAiArtifact      @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plannedPages Int
+  status       String                @default("QUEUED")
+  pages        ImageGenerationPage[]
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model ImageGenerationPage {
+  id            String               @id @default(cuid())
+  batchId       String
+  batch         ImageGenerationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  pageNo        Int
+  title         String
+  content       String
+  prompt        String
+  status        String               @default("QUEUED")
+  providerTaskId String?
+  imagePath     String?
+  errorCode     String?
+  errorMessage  String?
+  creditReferenceId String             @unique
+  consumedAt    DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@unique([batchId, pageNo])
+  @@index([batchId, status, pageNo])
 }
 
 model CourseQuestion {
@@ -397,6 +518,17 @@ model CopilotUsageEvent {
   status      String        @default("STARTED")
   fileCount   Int           @default(0)
   imageCount  Int           @default(0)
+  // Legacy estimate fields are retained only for migration compatibility and are no longer used by the admin dashboard.
+  promptTokensEstimate     Int           @default(0)
+  completionTokensEstimate Int           @default(0)
+  totalTokensEstimate      Int           @default(0)
+  // Provider-returned figures only. UNAVAILABLE is explicitly not an estimate.
+  tokenUsageSource         String        @default("UNAVAILABLE")
+  tokenUsageProvider       String?
+  tokenUsageModel          String?
+  promptTokensActual       Int           @default(0)
+  completionTokensActual   Int           @default(0)
+  totalTokensActual        Int           @default(0)
   errorCode   String?
   completedAt DateTime?
   createdAt   DateTime      @default(now())
@@ -543,6 +675,23 @@ model Message {
   deletedByReceiverAt DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
+  attachments         MessageAttachment[]
+}
+
+model MessageAttachment {
+  id          String   @id @default(cuid())
+  messageId   String
+  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  kind        String
+  fileName    String
+  mimeType    String?
+  byteSize    Int      @default(0)
+  storagePath String?
+  driveFileId String?
+  createdAt   DateTime @default(now())
+
+  @@index([messageId, createdAt])
+  @@index([driveFileId])
 }
 
 model Group {

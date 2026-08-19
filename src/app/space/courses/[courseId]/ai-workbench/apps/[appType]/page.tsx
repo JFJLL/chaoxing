@@ -148,7 +148,7 @@ async function AiAppGeneratorContent({
             extractedText: { not: null }
           },
           orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-          take: 20,
+          take: 50,
           select: { id: true, originalName: true, parsedSections: true }
         })
       : Promise.resolve([]),
@@ -172,7 +172,17 @@ async function AiAppGeneratorContent({
     updatedAt: artifact.updatedAt.toISOString()
   }));
   const hasCourseContent = !needsCourseContent || chapters.length > 0 || Boolean(resourcePresence) || Boolean(importPresence);
-  const documentSources = documentRows.map((document) => ({
+  const seenDocumentNames = new Set<string>();
+  const uniqueDocumentRows: Array<{ id: string; originalName: string; parsedSections: string | null }> = [];
+  for (const document of documentRows) {
+    const key = document.originalName.trim().toLowerCase();
+    if (!seenDocumentNames.has(key)) {
+      seenDocumentNames.add(key);
+      uniqueDocumentRows.push(document);
+      if (uniqueDocumentRows.length >= 20) break;
+    }
+  }
+  const documentSources = uniqueDocumentRows.map((document) => ({
     id: document.id,
     title: document.originalName,
     sections: parseStoredDocumentSections(document.parsedSections).map((section) => ({

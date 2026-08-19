@@ -5,7 +5,11 @@ export type AiErrorCode =
   | "MODEL_RATE_LIMITED"
   | "MODEL_INVALID_OUTPUT"
   | "MODEL_REQUEST_FAILED"
-  | "PDF_TOO_LARGE";
+  | "PDF_TOO_LARGE"
+  | "IMAGE_PROVIDER_NOT_CONFIGURED"
+  | "IMAGE_PROVIDER_NETWORK_ERROR"
+  | "IMAGE_PROVIDER_INVALID_RESPONSE"
+  | "IMAGE_PROVIDER_REQUEST_FAILED";
 
 export class AiServiceError extends Error {
   constructor(public readonly code: AiErrorCode, message: string) {
