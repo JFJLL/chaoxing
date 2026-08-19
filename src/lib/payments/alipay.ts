@@ -64,12 +64,23 @@ function signedParams(input: {
     biz_content: JSON.stringify(input.bizContent)
   };
   params.sign = sign(params, config.privateKey);
-  return params as Record<string, string>;
+  // 传输参数必须与待签名参数完全一致。URLSearchParams 会把 undefined 序列化为字符串
+  // "undefined"；若签名时省略、发送时保留，网关将无法通过验签。
+  const requestParams: Record<string, string> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string" && value !== "") requestParams[key] = value;
+  }
+  return requestParams;
 }
 
-async function callAlipay(method: string, bizContent: Record<string, unknown>) {
+async function callAlipay(input: {
+  method: string;
+  bizContent: Record<string, unknown>;
+  notifyUrl?: string;
+  returnUrl?: string;
+}) {
   const config = getPaymentConfiguration().alipay;
-  const params = signedParams({ method, bizContent });
+  const params = signedParams(input);
   const response = await fetch(config.gateway, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded;charset=utf-8" },
@@ -85,21 +96,25 @@ async function callAlipay(method: string, bizContent: Record<string, unknown>) {
   }
 }
 
-export function createAlipayPaymentUrl(input: { outTradeNo: string; subject: string; amountFen: number }) {
+export async function createAlipayNativePayment(input: { outTradeNo: string; subject: string; amountFen: number }) {
   const config = getPaymentConfiguration().alipay;
-  const params = signedParams({
-    method: "alipay.trade.page.pay",
+  const payload = await callAlipay({
+    method: "alipay.trade.precreate",
     notifyUrl: config.notifyUrl,
-    returnUrl: config.returnUrl || undefined,
     bizContent: {
       out_trade_no: input.outTradeNo,
-      product_code: "FAST_INSTANT_TRADE_PAY",
+      product_code: "QR_CODE_OFFLINE",
       total_amount: (input.amountFen / 100).toFixed(2),
       subject: input.subject,
-      timeout_express: "30m"
+      timeout_express: "30m",
+      ...(config.sellerId ? { seller_id: config.sellerId } : {})
     }
   });
-  return `${config.gateway}?${new URLSearchParams(params).toString()}`;
+  const response = payload.alipay_trade_precreate_response as Record<string, unknown> | undefined;
+  if (String(response?.code ?? "") !== "10000" || typeof response?.qr_code !== "string" || !response.qr_code) {
+    throw new Error(String(response?.sub_msg ?? response?.msg ?? "支付宝未返回有效付款二维码"));
+  }
+  return response.qr_code;
 }
 
 export function verifyAlipayNotification(params: Record<string, string>) {
@@ -112,11 +127,11 @@ export function verifyAlipayNotification(params: Record<string, string>) {
 }
 
 export async function queryAlipayOrder(outTradeNo: string) {
-  const payload = await callAlipay("alipay.trade.query", { out_trade_no: outTradeNo });
+  const payload = await callAlipay({ method: "alipay.trade.query", bizContent: { out_trade_no: outTradeNo } });
   return payload.alipay_trade_query_response as Record<string, unknown> | undefined;
 }
 
 export async function closeAlipayOrder(outTradeNo: string) {
-  const payload = await callAlipay("alipay.trade.close", { out_trade_no: outTradeNo });
+  const payload = await callAlipay({ method: "alipay.trade.close", bizContent: { out_trade_no: outTradeNo } });
   return payload.alipay_trade_close_response as Record<string, unknown> | undefined;
 }

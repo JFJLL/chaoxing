@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { creditRechargeInTransaction } from "@/lib/billing/credit-service";
-import { closeAlipayOrder, createAlipayPaymentUrl } from "@/lib/payments/alipay";
+import { closeAlipayOrder, createAlipayNativePayment } from "@/lib/payments/alipay";
 import { getRechargePlan, isPaymentProvider, type PaymentProvider } from "@/lib/payments/config";
 import { closeWxpayOrder, createWxpayNativePayment } from "@/lib/payments/wxpay";
 
@@ -99,7 +99,7 @@ export async function createRechargeOrder(input: {
 
   try {
     const access = input.provider === "ALIPAY"
-      ? { kind: "REDIRECT" as const, paymentUrl: createAlipayPaymentUrl({ outTradeNo: order.outTradeNo, subject: `Chaoxing ${plan.name}`, amountFen: plan.amountFen }) }
+      ? { kind: "QRCODE" as const, qrCode: await createAlipayNativePayment({ outTradeNo: order.outTradeNo, subject: `Chaoxing ${plan.name}`, amountFen: plan.amountFen }) }
       : { kind: "QRCODE" as const, qrCode: await createWxpayNativePayment({ outTradeNo: order.outTradeNo, description: `Chaoxing ${plan.name}`, amountFen: plan.amountFen }) };
     order = await db.paymentOrder.update({
       where: { id: order.id },
