@@ -41,7 +41,8 @@ export function NewCourseDialog() {
     setOpen(false);
     if (body.course?.id) {
       window.dispatchEvent(new CustomEvent("teacher-onboarding:course-created", { detail: { courseId: body.course.id } }));
-      router.push(`/space/courses/${body.course.id}`);
+      // 新手引导的第三步锚点在 AI 工作台；直接进入目标页面，避免先加载默认课程页再重定向。
+      router.push(`/space/courses/${body.course.id}/ai-workbench`);
       return;
     }
     router.refresh();

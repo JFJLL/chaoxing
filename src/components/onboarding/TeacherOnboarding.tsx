@@ -98,6 +98,8 @@ export function TeacherOnboarding({ enabled }: { enabled: boolean }) {
   const pathname = usePathname();
   const panelRef = useRef<HTMLElement>(null);
   const targetRef = useRef<HTMLElement | null>(null);
+  const pathnameRef = useRef(pathname);
+  const sessionStartedRef = useRef(false);
   const [tour, setTour] = useState<TourState | null>(null);
   const [position, setPosition] = useState<TargetPosition | null>(null);
   const [saving, setSaving] = useState(false);
@@ -129,7 +131,12 @@ export function TeacherOnboarding({ enabled }: { enabled: boolean }) {
   }, [pathname, persist, routeFor, router]);
 
   useEffect(() => {
-    if (!enabled) return;
+    pathnameRef.current = pathname;
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!enabled || sessionStartedRef.current) return;
+    sessionStartedRef.current = true;
     let cancelled = false;
     void persist({ action: "START_SESSION" }).then((response) => {
       if (cancelled || !response.show) return;
@@ -137,16 +144,19 @@ export function TeacherOnboarding({ enabled }: { enabled: boolean }) {
       setTour(next);
       if (next.step > 0) {
         const route = routeFor(next.step, next.courseId);
-        if (pathname !== route) router.replace(route);
+        if (pathnameRef.current !== route) router.replace(route);
       }
     }).catch(() => undefined);
     return () => { cancelled = true; };
-  }, [enabled, pathname, persist, routeFor, router]);
+  }, [enabled, persist, routeFor, router]);
 
   useEffect(() => {
     function onCourseCreated(event: Event) {
       const courseId = (event as CustomEvent<{ courseId?: string }>).detail?.courseId;
       if (!courseId) return;
+      // 先乐观进入第三步；课程创建已成功，不能再让一次轻量状态写入阻塞目标气泡。
+      setTour({ step: 2, courseId });
+      setTargetReady(false);
       void persist({ action: "SET_COURSE", courseId, step: 2 }).then((response) => {
         setTour({ step: response.onboardingStep, courseId: response.onboardingCourseId ?? courseId });
       }).catch(() => undefined);
@@ -182,6 +192,9 @@ export function TeacherOnboarding({ enabled }: { enabled: boolean }) {
     let cancelled = false;
     let attempts = 0;
     let restoreTarget: (() => void) | undefined;
+    // 路由切换期间先保留一个安全位置并隐藏面板，目标节点挂载后再展示，避免气泡消失。
+    setPosition((current) => current ?? getWelcomePosition());
+    setTargetReady(false);
     const update = () => {
       const target = findTarget(targetName);
       if (!target) {
@@ -209,10 +222,17 @@ export function TeacherOnboarding({ enabled }: { enabled: boolean }) {
       setTargetReady(true);
     };
     update();
+    // 页面内容在路由流式加载后才会挂载。与其最多轮询 2.4 秒，不如观察 DOM，
+    // 这样第三步的工作台卡片一出现便立即定位气泡。
+    const observer = new MutationObserver(() => {
+      if (!targetRef.current) update();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
     return () => {
       cancelled = true;
+      observer.disconnect();
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
       restoreTarget?.();
