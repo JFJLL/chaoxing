@@ -64,7 +64,7 @@ export function ZoviiCredentialDialogContent({
                 readOnly
                 value={field.value}
                 aria-label={`Zovii ${field.label}`}
-                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm font-normal text-slate-900 outline-none selection:bg-indigo-200"
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm font-normal text-slate-900 outline-none selection:bg-[#F0C8BE]"
               />
               <Button
                 type="button"

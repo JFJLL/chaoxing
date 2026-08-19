@@ -24,8 +24,8 @@ type CourseCardProps = {
 const coverStyles: Record<string, string> = {
   document: "from-sky-500 to-cyan-400",
   tool: "from-emerald-500 to-teal-400",
-  ai: "from-[#5669c9] to-[#7b6bd8]",
-  plain: "from-[#5264bd] to-[#7a70d6]"
+  ai: "from-[#A8402F] to-[#C97B5E]",
+  plain: "from-[#A8402F] to-[#C97B5E]"
 };
 
 function getCoverStyle(cover?: string | null) {
@@ -37,7 +37,7 @@ export function CourseCard({ course, mode }: CourseCardProps) {
   const progress = Math.max(0, Math.min(course.progress ?? 0, 100));
 
   return (
-    <article className="group overflow-hidden rounded-2xl border border-[var(--cx-border)] bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-floating">
+    <article className="group overflow-hidden rounded-2xl border border-[var(--cx-border)] bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#C97B5E] hover:shadow-floating">
       <Link href={`/space/courses/${course.id}`} className={`cx-focus-ring relative flex h-36 bg-gradient-to-br ${getCoverStyle(course.cover)} p-4 text-white`}>
         <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.25),transparent_44%)]" aria-hidden="true" />
         <div className="relative mt-auto">
@@ -80,7 +80,7 @@ export function CourseCard({ course, mode }: CourseCardProps) {
               aria-valuenow={progress}
               className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"
             >
-              <div className="h-2 rounded-full bg-gradient-to-r from-[var(--cx-blue)] to-[#8770df] transition-[width]" style={{ width: `${progress}%` }} />
+              <div className="h-2 rounded-full bg-gradient-to-r from-[var(--cx-blue)] to-[#C97B5E] transition-[width]" style={{ width: `${progress}%` }} />
             </div>
           </div>
         ) : (

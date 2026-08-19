@@ -43,7 +43,7 @@ export function CourseDriveRootSetup({
   }
 
   return (
-    <section className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/50 p-6">
+    <section className="rounded-2xl border border-dashed border-[#F0C8BE] bg-[#FDF3F0]/50 p-6">
       <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-[var(--cx-blue)] shadow-sm">
         <FolderCog className="h-6 w-6" aria-hidden="true" />
       </span>
@@ -52,7 +52,7 @@ export function CourseDriveRootSetup({
         为这门课程创建专属根文件夹，或绑定你云盘中已有的文件夹。学生不会看到完整云盘。
       </p>
       {showBind ? (
-        <div className="mt-5 max-w-xl space-y-3 rounded-xl border border-indigo-100 bg-white p-4">
+        <div className="mt-5 max-w-xl space-y-3 rounded-xl border border-[#F9ECE7] bg-white p-4">
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-slate-700">已有文件夹</span>
             <Select value={folderId} onChange={(event) => setFolderId(event.target.value)}>

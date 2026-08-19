@@ -14,10 +14,10 @@ type Props = {
 type CourseNavItem = (typeof courseWorkspaceNav)[number];
 
 function coverClass(cover?: string | null) {
-  if (cover?.startsWith("cover:ai")) return "from-indigo-500 to-blue-400";
+  if (cover?.startsWith("cover:ai")) return "from-[#BC5B47] to-[#D07865]";
   if (cover?.startsWith("cover:tool")) return "from-emerald-500 to-teal-400";
   if (cover?.startsWith("cover:document")) return "from-sky-500 to-cyan-400";
-  return "from-[#5669c9] to-[#7b6bd8]";
+  return "from-[#A8402F] to-[#C97B5E]";
 }
 
 function getNavigationLabel(item: CourseNavItem, canManage: boolean) {
@@ -56,7 +56,7 @@ function CourseNavLink({
         className={clsx(
           "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
           active
-            ? "bg-gradient-to-br from-[#5669c9] to-[#8b6de0] text-white shadow-sm"
+            ? "bg-gradient-to-br from-[#A8402F] to-[#C97B5E] text-white shadow-sm"
             : "bg-slate-100 text-slate-500"
         )}
       >

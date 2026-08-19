@@ -12,7 +12,7 @@ export type CourseResourceCardData = {
 export function CourseResourceCard({ resource }: { resource: CourseResourceCardData }) {
   const content = (
     <>
-      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FDF3F0] text-[#A8402F]">
         <FileText className="h-5 w-5" aria-hidden="true" />
       </span>
       <div className="min-w-0">
@@ -23,7 +23,7 @@ export function CourseResourceCard({ resource }: { resource: CourseResourceCardD
       </div>
     </>
   );
-  const className = "flex items-center gap-4 rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50/40";
+  const className = "flex items-center gap-4 rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:border-[#F0C8BE] hover:bg-[#FDF3F0]/40";
   if (resource.driveFile) {
     return (
       <a

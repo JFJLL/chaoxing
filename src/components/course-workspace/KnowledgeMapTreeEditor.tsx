@@ -240,13 +240,13 @@ export function KnowledgeMapTreeEditor({ nodes, edges, onSerializedChange, onPre
     ghost.className = "pointer-events-none fixed left-0 top-0 z-50";
     ghost.style.width = `${rect.width}px`;
     const clone = unit.cloneNode(true) as HTMLElement;
-    clone.classList.add("rounded-xl", "shadow-xl", "ring-2", "ring-blue-400", "opacity-95", "bg-white");
+    clone.classList.add("rounded-xl", "shadow-xl", "ring-2", "ring-[#D07865]", "opacity-95", "bg-white");
     ghost.appendChild(clone);
     document.body.appendChild(ghost);
     ghostRef.current = ghost;
 
     const indicator = document.createElement("div");
-    indicator.className = "pointer-events-none absolute left-1 right-1 z-30 h-0.5 rounded-full bg-blue-500";
+    indicator.className = "pointer-events-none absolute left-1 right-1 z-30 h-0.5 rounded-full bg-[#BC5B47]";
     list.appendChild(indicator);
     indicatorRef.current = indicator;
 
@@ -283,10 +283,10 @@ export function KnowledgeMapTreeEditor({ nodes, edges, onSerializedChange, onPre
       ? [{ type: "objective" as const, label: "综合目标" }, { type: "document" as const, label: "文档" }]
       : outlineContentTypes;
     return (
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-xl border border-blue-100 bg-blue-50/70 p-2">
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-xl border border-[#F9ECE7] bg-[#FDF3F0]/70 p-2">
         <span className="px-1 text-xs text-slate-500">添加下级：</span>
         {types.map((item) => (
-          <button key={item.type} type="button" onClick={() => addChild(node.id, item.type)} className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-blue-700 shadow-sm transition hover:bg-blue-100">
+          <button key={item.type} type="button" onClick={() => addChild(node.id, item.type)} className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-[#8E3425] shadow-sm transition hover:bg-[#F9ECE7]">
             {item.label}
           </button>
         ))}
@@ -309,7 +309,7 @@ export function KnowledgeMapTreeEditor({ nodes, edges, onSerializedChange, onPre
               data-cx-no-pending="true"
               title={collapsed ? "展开" : "收起"}
               aria-label={`${collapsed ? "展开" : "收起"}${outlineTypeLabels[node.type] ?? "节点"}：${node.label}`}
-              className="shrink-0 rounded-lg p-0.5 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600"
+              className="shrink-0 rounded-lg p-0.5 text-slate-500 transition hover:bg-slate-100 hover:text-[#A8402F]"
               onClick={() => toggleCollapsed(node.id)}
             >
               {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -331,7 +331,7 @@ export function KnowledgeMapTreeEditor({ nodes, edges, onSerializedChange, onPre
               <GripVertical className="h-4 w-4" />
             </button>
           ) : null}
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${isRoot ? "bg-blue-600 text-white" : node.type === "objective" ? "bg-emerald-100 text-emerald-700" : node.type === "document" ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-600"}`}>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${isRoot ? "bg-[#A8402F] text-white" : node.type === "objective" ? "bg-emerald-100 text-emerald-700" : node.type === "document" ? "bg-[#F9ECE7] text-[#8E3425]" : "bg-slate-100 text-slate-600"}`}>
             {outlineTypeLabels[node.type] ?? node.type}
           </span>
           <input
@@ -340,7 +340,7 @@ export function KnowledgeMapTreeEditor({ nodes, edges, onSerializedChange, onPre
             autoFocus={focusedId === node.id}
             onChange={(event) => setLabel(node.id, event.target.value)}
             placeholder={outlineTypeLabels[node.type] ?? "节点名称"}
-            className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-1.5 py-1 text-sm text-slate-800 outline-none transition focus:border-blue-300 focus:bg-blue-50/40"
+            className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-1.5 py-1 text-sm text-slate-800 outline-none transition focus:border-[#E5A597] focus:bg-[#FDF3F0]/40"
           />
           <div className="flex shrink-0 items-center gap-0.5">
             {canHaveChildren ? (
@@ -348,14 +348,14 @@ export function KnowledgeMapTreeEditor({ nodes, edges, onSerializedChange, onPre
                 type="button"
                 title={`为${outlineTypeLabels[node.type] ?? "节点"}添加下级`}
                 aria-label={`为${outlineTypeLabels[node.type] ?? "节点"}添加下级`}
-                className="rounded-lg p-1 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
+                className="rounded-lg p-1 text-slate-400 transition hover:bg-[#FDF3F0] hover:text-[#A8402F]"
                 onClick={() => setAddingChildFor(addingChildFor === node.id ? null : node.id)}
               >
                 {addingChildFor === node.id ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
               </button>
             ) : null}
             {!isRoot ? (
-              <button type="button" title="添加同级" aria-label="添加同级" className="rounded-lg p-1 text-slate-400 transition hover:bg-blue-50 hover:text-blue-600" onClick={() => addSibling(node.id)}>
+              <button type="button" title="添加同级" aria-label="添加同级" className="rounded-lg p-1 text-slate-400 transition hover:bg-[#FDF3F0] hover:text-[#A8402F]" onClick={() => addSibling(node.id)}>
                 <Plus className="h-3.5 w-3.5" />
               </button>
             ) : null}
@@ -408,8 +408,8 @@ export function KnowledgeMapTreeEditor({ nodes, edges, onSerializedChange, onPre
       ) : null}
       {documents.length ? (
         <div className="mt-3">
-          <p className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold text-indigo-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />文档
+          <p className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold text-[#8E3425]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#D07865]" />文档
           </p>
           <div className="relative space-y-1.5" data-drag-list={root.id} data-drag-filter="document">
             {documents.map((child) => renderRow(child))}

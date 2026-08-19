@@ -14,8 +14,8 @@ export function CopilotMarkdown({ content }: { content: string }) {
         ul: ({ children }) => <ul className="my-3 list-disc space-y-1 pl-6 marker:text-slate-400">{children}</ul>,
         ol: ({ children }) => <ol className="my-3 list-decimal space-y-1 pl-6 marker:text-slate-500">{children}</ol>,
         li: ({ children }) => <li className="pl-1 leading-7">{children}</li>,
-        blockquote: ({ children }) => <blockquote className="my-4 border-l-4 border-blue-200 bg-blue-50/60 px-4 py-2 text-slate-700">{children}</blockquote>,
-        a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline decoration-blue-200 underline-offset-4 hover:decoration-blue-500">{children}</a>,
+        blockquote: ({ children }) => <blockquote className="my-4 border-l-4 border-[#F0C8BE] bg-[#FDF3F0]/60 px-4 py-2 text-slate-700">{children}</blockquote>,
+        a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer" className="font-medium text-[#A8402F] underline decoration-[#F0C8BE] underline-offset-4 hover:decoration-[#BC5B47]">{children}</a>,
         strong: ({ children }) => <strong className="font-semibold text-slate-950">{children}</strong>,
         code: ({ children, className }) => <code className={`${className ?? ""} rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.9em] text-slate-800`}>{children}</code>,
         pre: ({ children }) => <pre className="my-4 overflow-x-auto rounded-xl bg-slate-950 p-4 text-[13px] leading-6 text-slate-100 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-inherit">{children}</pre>,
@@ -38,14 +38,14 @@ export function CopilotAssistantReply({ content, pending = false }: { content: s
       aria-live={pending ? "polite" : undefined}
       aria-label={pending ? "AI智能体正在回复" : "AI智能体回复"}
     >
-      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FDF3F0] text-[#A8402F]">
         <Bot className="h-4 w-4" aria-hidden="true" />
       </span>
       <div className="min-w-0 flex-1 pt-0.5">
         {content ? <CopilotMarkdown content={content} /> : null}
         {pending ? (
           <span className={`inline-flex items-center gap-2 text-sm text-slate-500 ${content ? "mt-2" : "min-h-7"}`}>
-            <Loader2 className="h-4 w-4 animate-spin text-blue-600" aria-hidden="true" />
+            <Loader2 className="h-4 w-4 animate-spin text-[#A8402F]" aria-hidden="true" />
             {content ? "正在生成" : "正在思考"}
           </span>
         ) : null}

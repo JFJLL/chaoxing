@@ -17,7 +17,7 @@ export const FilePicker = forwardRef<HTMLInputElement, FilePickerProps>(function
       <input ref={ref} type="file" className="peer sr-only" {...props} />
       <label
         htmlFor={props.id}
-        className="cx-tactile flex min-h-16 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-left hover:border-indigo-300 hover:bg-[var(--cx-blue-soft)] peer-focus-visible:border-[var(--cx-blue)] peer-focus-visible:ring-4 peer-focus-visible:ring-[var(--cx-focus)]"
+        className="cx-tactile flex min-h-16 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-left hover:border-[#C97B5E] hover:bg-[var(--cx-blue-soft)] peer-focus-visible:border-[var(--cx-blue)] peer-focus-visible:ring-4 peer-focus-visible:ring-[var(--cx-focus)]"
       >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--cx-blue-soft)] text-[var(--cx-blue)] shadow-sm">
           <UploadCloud className="h-5 w-5" aria-hidden="true" />

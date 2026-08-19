@@ -163,7 +163,7 @@ export function AiCourseSearchView({
           type="submit"
           disabled={loading || !query.trim()}
           aria-label={loading ? "正在搜索课程资料" : "搜索课程资料"}
-          className="cx-focus-ring cx-tactile flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--cx-blue)] text-white shadow-sm hover:bg-[var(--cx-blue-dark)] disabled:cursor-not-allowed disabled:bg-indigo-300 sm:rounded-full"
+          className="cx-focus-ring cx-tactile flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--cx-blue)] text-white shadow-sm hover:bg-[var(--cx-blue-dark)] disabled:cursor-not-allowed disabled:bg-[#C97B5E] sm:rounded-full"
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Wand2 className="h-4 w-4" aria-hidden="true" />}
         </button>
@@ -174,7 +174,7 @@ export function AiCourseSearchView({
           <button type="button" onClick={onDismiss} aria-label="关闭搜索结果并清除关键词" className="cx-focus-ring cx-tactile absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700">
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
-          {loading ? <p role="status" className="flex items-center gap-2 pr-9 text-sm text-blue-700"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />正在搜索课程资料</p> : null}
+          {loading ? <p role="status" className="flex items-center gap-2 pr-9 text-sm text-[#8E3425]"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />正在搜索课程资料</p> : null}
           {state.status === "error" ? (
             <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
               <p>{state.error}</p>
@@ -190,8 +190,8 @@ export function AiCourseSearchView({
             <div className="max-h-[420px] space-y-2 overflow-y-auto">
               <p className="px-1 pr-9 text-xs font-medium text-slate-400">找到 {state.results.length} 条相关课程资料</p>
               {state.results.map((result) => (
-                <Link key={result.id} href={result.href} className="cx-focus-ring cx-tactile block rounded-xl border border-slate-100 p-3 hover:border-indigo-200 hover:bg-[var(--cx-blue-soft)]">
-                  <span className="flex items-center gap-2 text-xs text-blue-700"><FileSearch className="h-3.5 w-3.5" aria-hidden="true" />{sourceTypeLabels[result.type]}</span>
+                <Link key={result.id} href={result.href} className="cx-focus-ring cx-tactile block rounded-xl border border-slate-100 p-3 hover:border-[#F0C8BE] hover:bg-[var(--cx-blue-soft)]">
+                  <span className="flex items-center gap-2 text-xs text-[#8E3425]"><FileSearch className="h-3.5 w-3.5" aria-hidden="true" />{sourceTypeLabels[result.type]}</span>
                   <span className="mt-1 block text-sm font-medium text-slate-900">{result.label}</span>
                   <span className="mt-1 line-clamp-3 block whitespace-pre-wrap text-xs leading-5 text-slate-600">{result.snippet}</span>
                 </Link>

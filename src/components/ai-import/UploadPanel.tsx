@@ -42,7 +42,7 @@ export function UploadPanel({ courseId }: { courseId: string }) {
   return (
     <form data-teacher-onboarding="import-course-document" onSubmit={onSubmit} className="rounded-md border border-[var(--cx-border)] bg-white p-5">
       <div className="flex items-start gap-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-md bg-blue-50 text-[var(--cx-blue)]">
+        <div className="flex h-12 w-12 items-center justify-center rounded-md bg-[#FDF3F0] text-[var(--cx-blue)]">
           <FileUp className="h-6 w-6" />
         </div>
         <div className="flex-1">

@@ -149,9 +149,9 @@ export function CourseDriveReferencePicker({
                 const checked = pending.some((reference) => reference.driveFileId === target.id);
                 const Icon = target.referenceType === "FOLDER" ? Folder : FileText;
                 return (
-                  <label key={target.id} className={`flex items-center gap-3 rounded-xl border p-3 ${target.contextSelectable ? "cursor-pointer border-slate-100 hover:border-blue-200" : "cursor-not-allowed border-slate-100 bg-slate-50 opacity-60"}`}>
+                  <label key={target.id} className={`flex items-center gap-3 rounded-xl border p-3 ${target.contextSelectable ? "cursor-pointer border-slate-100 hover:border-[#F0C8BE]" : "cursor-not-allowed border-slate-100 bg-slate-50 opacity-60"}`}>
                     <input type="checkbox" checked={checked} disabled={!target.contextSelectable} onChange={() => toggle(target)} />
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#FDF3F0] text-[#A8402F]">
                       <Icon className="h-4 w-4" />
                     </span>
                     <span className="min-w-0 flex-1">
@@ -161,7 +161,7 @@ export function CourseDriveReferencePicker({
                       </span>
                     </span>
                     {target.referenceType === "FILE" ? (
-                      <a href={`/api/drive/${target.id}?preview=1`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="text-xs font-medium text-blue-600">查看</a>
+                      <a href={`/api/drive/${target.id}?preview=1`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="text-xs font-medium text-[#A8402F]">查看</a>
                     ) : null}
                   </label>
                 );

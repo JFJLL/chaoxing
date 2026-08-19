@@ -117,7 +117,7 @@ export function CourseResourceLibraries({ courseId }: { courseId: string }) {
           return (
             <article key={definition.kind} className="flex min-h-56 flex-col rounded-2xl border border-slate-100 bg-slate-50 p-5">
               <div className="flex items-start justify-between gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#A8402F] shadow-sm">
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
                 {loading ? (

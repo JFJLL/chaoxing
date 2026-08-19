@@ -17,7 +17,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
       : null;
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+    <main className="flex min-h-screen items-center justify-center bg-white px-4">
       <section className="w-full max-w-md rounded-lg bg-white p-8 shadow-panel">
         <img src="/logo.png" alt="平台 Logo" className="h-12 w-auto object-contain" />
         <p className="mt-6 text-sm text-slate-500">账号登录</p>
@@ -33,7 +33,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
               name="email"
               type="email"
               autoComplete="email"
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-[#F9ECE7]"
               placeholder="name@example.local"
               required
             />
@@ -47,7 +47,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
               name="password"
               type="password"
               autoComplete="current-password"
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-[#F9ECE7]"
               placeholder="请输入密码"
               required
             />
@@ -59,14 +59,14 @@ export default async function LoginPage({ searchParams }: PageProps) {
           ) : null}
           <button
             type="submit"
-            className="w-full rounded-md bg-yimei-sidebar px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700"
+            className="w-full rounded-md bg-yimei-sidebar px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#8E3425]"
           >
             登录
           </button>
         </form>
         <div className="mt-6 text-center text-sm text-slate-500">
           还没有账号？{" "}
-          <Link href="/register" className="font-medium text-blue-600 hover:underline">
+          <Link href="/register" className="font-medium text-[#A8402F] hover:underline">
             立即注册
           </Link>
         </div>

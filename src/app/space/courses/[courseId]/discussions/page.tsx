@@ -20,7 +20,7 @@ export default async function DiscussionsPage({ params }: PageProps) {
         <div className="space-y-3">
           {topics.map((topic) => (
             <article key={topic.title} className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
-              <MessageCircle className="h-6 w-6 text-blue-600" />
+              <MessageCircle className="h-6 w-6 text-[#A8402F]" />
               <h2 className="mt-3 font-semibold text-slate-900">{topic.title}</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">{topic.body}</p>
             </article>

@@ -37,7 +37,7 @@ export async function FanyaCourseShell({
             email: account?.email ?? undefined
           })}
         />
-        <main className="min-w-0 flex-1 bg-[radial-gradient(circle_at_top_right,rgba(86,105,201,0.08),transparent_34%),var(--cx-course-page)] p-4 sm:p-5 lg:p-8 xl:p-10">{children}</main>
+        <main className="min-w-0 flex-1 bg-[var(--cx-course-page)] p-4 sm:p-5 lg:p-8 xl:p-10">{children}</main>
       </div>
     </div>
   );

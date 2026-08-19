@@ -30,7 +30,7 @@ export function TeacherPrepWorkbench({ courseId }: { courseId: string }) {
               data-teacher-onboarding={getTeacherPrepWorkflowOnboardingTarget(workflow.id)}
               href={workflow.route(courseId)}
               prefetch={false}
-              className="cx-focus-ring cx-tactile group flex min-h-48 flex-col rounded-2xl border border-[var(--cx-border)] bg-slate-50/80 p-5 hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-[var(--cx-blue-soft)] hover:shadow-floating"
+              className="cx-focus-ring cx-tactile group flex min-h-48 flex-col rounded-2xl border border-[var(--cx-border)] bg-slate-50/80 p-5 hover:-translate-y-0.5 hover:border-[#F0C8BE] hover:bg-[var(--cx-blue-soft)] hover:shadow-floating"
             >
               <div className="flex items-start justify-between gap-3">
                 <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-[var(--cx-blue)] shadow-sm transition group-hover:shadow-md">

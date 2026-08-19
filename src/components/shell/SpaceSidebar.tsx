@@ -45,15 +45,15 @@ export function SpaceSidebar({ user, unreadCount = 0 }: { user: SessionUser; unr
 
   return (
     <>
-      <aside className="fixed bottom-0 left-0 top-20 z-20 hidden w-[220px] overflow-hidden bg-[var(--cx-blue)] text-white shadow-xl md:block">
-        <div className="border-b border-white/10 p-5">
+      <aside className="fixed bottom-0 left-0 top-20 z-20 hidden w-[220px] overflow-hidden border-r border-[var(--cx-border)] bg-white text-[var(--cx-text)] shadow-sm md:block">
+        <div className="border-b border-[var(--cx-border)] p-5">
           <div className="flex items-center gap-3">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/10 text-lg font-semibold shadow-inner">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--cx-border)] bg-[var(--cx-blue-soft)] text-lg font-semibold text-[var(--cx-blue)] shadow-sm">
               {user.name.slice(0, 1)}
             </span>
             <div className="min-w-0">
-              <p className="truncate font-medium">{user.name}</p>
-              <p className="text-xs text-white/70">{user.role === "ADMIN" ? "管理员空间" : user.role === "TEACHER" ? "教师空间" : "学习空间"}</p>
+              <p className="truncate font-medium text-[var(--cx-text)]">{user.name}</p>
+              <p className="text-xs text-[var(--cx-muted)]">{user.role === "ADMIN" ? "管理员空间" : user.role === "TEACHER" ? "教师空间" : "学习空间"}</p>
             </div>
           </div>
         </div>
@@ -61,13 +61,13 @@ export function SpaceSidebar({ user, unreadCount = 0 }: { user: SessionUser; unr
           {visibleNavItems.map((item) => {
             const active = pathname === item.href || (item.href !== "/space" && pathname.startsWith(item.href));
             const Icon = item.icon;
-            const content = <><span className={clsx("absolute inset-y-3 left-0 w-1 rounded-r-full bg-indigo-300 transition", active ? "scale-y-100" : "scale-y-0")} /><Icon className={clsx("h-4 w-4", active ? "text-indigo-200" : "text-white/60")} aria-hidden="true" /><span className="flex-1">{item.label}</span>{item.label === "收件箱" && unreadCount > 0 ? <span className="rounded-full bg-red-500 px-1.5 text-[10px] leading-5 text-white shadow-sm">{unreadCount}</span> : null}</>;
-            const className = clsx("cx-focus-ring cx-tactile relative flex h-11 items-center gap-3 rounded-lg px-3 text-sm", active ? "bg-[var(--cx-active)] font-medium text-white" : "text-white/80 hover:bg-white/10 hover:text-white");
+            const content = <><span className={clsx("absolute inset-y-3 left-0 w-1 rounded-r-full bg-[var(--cx-blue)] transition", active ? "scale-y-100" : "scale-y-0")} /><Icon className={clsx("h-4 w-4", active ? "text-[var(--cx-blue)]" : "text-slate-400")} aria-hidden="true" /><span className="flex-1">{item.label}</span>{item.label === "收件箱" && unreadCount > 0 ? <span className="rounded-full bg-red-500 px-1.5 text-[10px] leading-5 text-white shadow-sm">{unreadCount}</span> : null}</>;
+            const className = clsx("cx-focus-ring cx-tactile relative flex h-11 items-center gap-3 rounded-lg px-3 text-sm", active ? "bg-[var(--cx-blue-soft)] font-medium text-[var(--cx-blue)]" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900");
             return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={className}>{content}</Link>;
           })}
         </nav>
       </aside>
-      <nav aria-label="个人空间移动导航" className="fixed bottom-0 left-0 right-0 z-30 flex h-[72px] items-center gap-1 border-t border-[var(--cx-border)] bg-white/95 px-2 shadow-[0_-10px_30px_rgba(43,54,105,0.08)] backdrop-blur-xl md:hidden">
+      <nav aria-label="个人空间移动导航" className="fixed bottom-0 left-0 right-0 z-30 flex h-[72px] items-center gap-1 border-t border-[var(--cx-border)] bg-white/95 px-2 shadow-[0_-10px_30px_rgba(39, 35, 31, 0.08)] backdrop-blur-xl md:hidden">
         {visibleNavItems.map((item) => {
           const active = pathname === item.href || (item.href !== "/space" && pathname.startsWith(item.href));
           const Icon = item.icon;

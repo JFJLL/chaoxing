@@ -239,7 +239,7 @@ export function AiTutor({
           </button>
           <div role="group" aria-label="历史对话" className="cx-hide-scrollbar mt-3 flex gap-2 overflow-x-auto lg:mt-4 lg:block lg:space-y-2 lg:overflow-visible">
             {conversations.map((conversation) => (
-              <div key={conversation.id} className={`flex w-48 shrink-0 items-center rounded-xl border lg:w-full ${selectedId === conversation.id ? "border-indigo-100 bg-white shadow-sm" : "border-transparent hover:border-slate-200 hover:bg-white/70"}`}>
+              <div key={conversation.id} className={`flex w-48 shrink-0 items-center rounded-xl border lg:w-full ${selectedId === conversation.id ? "border-[#F9ECE7] bg-white shadow-sm" : "border-transparent hover:border-slate-200 hover:bg-white/70"}`}>
                 <button type="button" aria-pressed={selectedId === conversation.id} onClick={() => { if (!streaming) { setSelectedId(conversation.id); setDraft(""); } }} className={`cx-focus-ring min-w-0 flex-1 rounded-xl px-3 py-3 text-left text-sm ${selectedId === conversation.id ? "font-medium text-[var(--cx-blue)]" : "text-slate-600"}`}>
                   <span className="line-clamp-1">{conversation.title || "课程问答"}</span>
                   <span className="mt-1 block text-xs font-normal text-slate-400">{conversation.messages.length} 条消息</span>
@@ -272,7 +272,7 @@ export function AiTutor({
             {selected?.attachments?.length ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 {selected.attachments.map((reference) => (
-                  <span key={reference.id ?? reference.name} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ${reference.available ? "bg-blue-50 text-blue-700" : "bg-red-50 text-red-700"}`}>
+                  <span key={reference.id ?? reference.name} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ${reference.available ? "bg-[#FDF3F0] text-[#8E3425]" : "bg-red-50 text-red-700"}`}>
                     {reference.referenceType === "FOLDER" ? <Folder className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
                     {reference.name}
                     <button type="button" aria-label={`移除 ${reference.name}`} disabled={streaming} onClick={() => void removeReference(reference.id)}>
@@ -319,10 +319,10 @@ function MessageBubble({ assistant, content, citations, streaming = false }: { a
     <div className={`flex ${assistant ? "justify-start" : "justify-end"}`}>
       <div aria-busy={streaming || undefined} className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-6 sm:max-w-[86%] ${assistant ? "rounded-tl-md border border-slate-100 bg-slate-50 text-slate-700" : "rounded-tr-md bg-[var(--cx-blue)] text-white shadow-sm"}`}>
         {assistant ? <CopilotMarkdown content={content} /> : <p className="whitespace-pre-wrap">{content}</p>}
-        {streaming ? <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-blue-500 align-middle" aria-label="正在生成" /> : null}
+        {streaming ? <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-[#BC5B47] align-middle" aria-label="正在生成" /> : null}
         {assistant && citations.length ? (
           <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
-            {citations.map((citation, index) => <Link key={citation.id} href={citation.href} className="cx-focus-ring cx-tactile rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-[var(--cx-blue)] shadow-sm hover:border-indigo-200 hover:bg-[var(--cx-blue-soft)]" title={citation.snippet}>[{index + 1}] {citation.label}</Link>)}
+            {citations.map((citation, index) => <Link key={citation.id} href={citation.href} className="cx-focus-ring cx-tactile rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-[var(--cx-blue)] shadow-sm hover:border-[#F0C8BE] hover:bg-[var(--cx-blue-soft)]" title={citation.snippet}>[{index + 1}] {citation.label}</Link>)}
           </div>
         ) : null}
       </div>

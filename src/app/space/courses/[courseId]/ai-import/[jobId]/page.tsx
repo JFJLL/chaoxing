@@ -104,7 +104,7 @@ export default async function AiImportReviewPage({ params }: PageProps) {
             retryHref={`/space/courses/${courseId}/ai-import`}
           />
           {job.warning ? <p className="rounded-md bg-orange-50 p-3 text-sm text-orange-700">{job.warning}</p> : null}
-          {batchIsCombining ? <p id="outline-review" className="rounded-xl bg-blue-50 p-4 text-sm text-blue-800">正在综合分析多份资料</p> : null}
+          {batchIsCombining ? <p id="outline-review" className="rounded-xl bg-[#FDF3F0] p-4 text-sm text-[#6F281D]">正在综合分析多份资料</p> : null}
           {job.batch?.status === "FAILED" ? <p id="outline-review" role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-800">本批次存在失败资料，无法保存综合课程目录。请修复失败资料后重新导入。</p> : null}
           <ImportJobManager
             courseId={courseId}

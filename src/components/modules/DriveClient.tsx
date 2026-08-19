@@ -74,7 +74,7 @@ export function MoveDestinationBrowser({
           type="button"
           disabled={disabled}
           onClick={() => onNavigate(rootParentId)}
-          className={`cx-focus-ring shrink-0 rounded-md px-2 py-1 font-medium ${currentParentId === rootParentId ? "bg-blue-100 text-blue-800" : "text-slate-600 hover:bg-white hover:text-blue-700"}`}
+          className={`cx-focus-ring shrink-0 rounded-md px-2 py-1 font-medium ${currentParentId === rootParentId ? "bg-[#F9ECE7] text-[#6F281D]" : "text-slate-600 hover:bg-white hover:text-[#8E3425]"}`}
         >
           {rootLabel}
         </button>
@@ -85,7 +85,7 @@ export function MoveDestinationBrowser({
               type="button"
               disabled={disabled}
               onClick={() => onNavigate(folder.id)}
-              className={`cx-focus-ring rounded-md px-2 py-1 ${folder.id === currentParentId ? "bg-blue-100 font-medium text-blue-800" : "text-slate-600 hover:bg-white hover:text-blue-700"}`}
+              className={`cx-focus-ring rounded-md px-2 py-1 ${folder.id === currentParentId ? "bg-[#F9ECE7] font-medium text-[#6F281D]" : "text-slate-600 hover:bg-white hover:text-[#8E3425]"}`}
             >
               {folder.name}
             </button>
@@ -112,7 +112,7 @@ export function MoveDestinationBrowser({
             role="listitem"
             disabled={disabled}
             onClick={() => onNavigate(folder.id)}
-            className="cx-focus-ring flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 transition hover:bg-blue-50 hover:text-blue-800"
+            className="cx-focus-ring flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 transition hover:bg-[#FDF3F0] hover:text-[#6F281D]"
             aria-label={`打开文件夹 ${folder.name}`}
           >
             <Folder className="h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />
@@ -596,7 +596,7 @@ export function DriveClient({
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {visibleFiles.map((file) => (
-          <article key={file.id} className="relative flex min-w-0 items-center gap-2 rounded-2xl border border-[var(--cx-border)] bg-white p-3 shadow-sm transition hover:border-blue-200 hover:shadow-md sm:p-4">
+          <article key={file.id} className="relative flex min-w-0 items-center gap-2 rounded-2xl border border-[var(--cx-border)] bg-white p-3 shadow-sm transition hover:border-[#F0C8BE] hover:shadow-md sm:p-4">
             {file.kind === "folder" ? (
               <Link href={folderHref(file.id)} className="cx-focus-ring flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 transition hover:bg-slate-50">{fileSummary(file)}</Link>
             ) : <div className="flex min-w-0 flex-1 items-center gap-3 p-1">{fileSummary(file)}</div>}
@@ -640,34 +640,34 @@ export function DriveClient({
         <form onSubmit={(event) => { event.preventDefault(); void upload(); }} className="space-y-4">
           <p className="text-sm leading-6 text-slate-600">可一次选择多个文件，或选择整个文件夹（保留子文件夹结构，同名文件夹会自动重命名）。上传完成前请保持页面打开。</p>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <label className="cx-tactile flex min-h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-[var(--cx-blue-soft)]">
+            <label className="cx-tactile flex min-h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-[#C97B5E] hover:bg-[var(--cx-blue-soft)]">
               <input type="file" multiple className="sr-only" onChange={handleFilesChange} disabled={pendingAction !== null} />
               <UploadCloud className="h-4 w-4" aria-hidden="true" />
               上传文件
             </label>
-            <label className="cx-tactile flex min-h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-[var(--cx-blue-soft)]">
+            <label className="cx-tactile flex min-h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-[#C97B5E] hover:bg-[var(--cx-blue-soft)]">
               <input type="file" {...({ webkitdirectory: "" } as any)} className="sr-only" onChange={handleFolderChange} disabled={pendingAction !== null} />
               <Folder className="h-4 w-4" aria-hidden="true" />
               上传文件夹
             </label>
           </div>
           {uploadSelection ? (
-            <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-900">
+            <div className="rounded-xl border border-[#F9ECE7] bg-[#FDF3F0] px-3 py-3 text-sm text-[#522017]">
               <p className="font-medium">
                 {uploadSelection.kind === "folder"
                   ? `已选择文件夹“${uploadSelection.folderName}”，共 ${uploadSelection.files.length} 个文件`
                   : `已选择 ${uploadSelection.files.length} 个文件`}
               </p>
-              <p className="mt-1 line-clamp-2 break-all text-xs text-blue-700">
+              <p className="mt-1 line-clamp-2 break-all text-xs text-[#8E3425]">
                 {uploadSelection.files.slice(0, 8).map((file) => file.name).join("、")}
                 {uploadSelection.files.length > 8 ? ` 等 ${uploadSelection.files.length} 个文件` : ""}
               </p>
             </div>
           ) : null}
           {uploadState ? (
-            <div role="status" aria-live="polite" className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-800">
+            <div role="status" aria-live="polite" className="rounded-xl border border-[#F9ECE7] bg-[#FDF3F0] px-3 py-3 text-sm text-[#6F281D]">
               <div className="flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /><span className="min-w-0 truncate font-medium">{uploadState.phase === "uploading" ? uploadState.label : "已传输完成，正在保存文件"}</span><span className="ml-auto shrink-0 text-xs">{uploadState.percent}%</span></div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-[var(--cx-blue)] transition-[width]" style={{ width: `${uploadState.percent}%` }} /></div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#F9ECE7]"><div className="h-full rounded-full bg-[var(--cx-blue)] transition-[width]" style={{ width: `${uploadState.percent}%` }} /></div>
             </div>
           ) : null}
           <div className="flex justify-end gap-2">

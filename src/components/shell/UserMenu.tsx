@@ -117,7 +117,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
           </>
         ) : null}
         {user.role === "ADMIN" ? (
-          <Link href="/space/admin" className="cx-focus-ring flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
+          <Link href="/space/admin" className="cx-focus-ring flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#8E3425] hover:bg-[#F9ECE7]">
             <ShieldCheck className="h-4 w-4" />
             管理员控制台
           </Link>
@@ -165,7 +165,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
               type="password"
               autoComplete="current-password"
               required
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-[#F9ECE7]"
               placeholder="请输入当前密码"
             />
           </div>
@@ -181,7 +181,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
               minLength={6}
               maxLength={72}
               required
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-[#F9ECE7]"
               placeholder="至少 6 位"
             />
           </div>
@@ -197,7 +197,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
               minLength={6}
               maxLength={72}
               required
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-slate-900 outline-none transition focus:border-yimei-sidebar focus:ring-2 focus:ring-[#F9ECE7]"
               placeholder="再次输入新密码"
             />
           </div>

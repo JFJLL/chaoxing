@@ -146,7 +146,7 @@ export function PptCoursewarePreview({
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />上一页
             </button>
             <span className="text-sm text-slate-500">第 {index + 1} / {slides.length} 页</span>
-            {onRegenerateSlide ? <button type="button" disabled={regenerating} onClick={() => void regenerateCurrentSlide()} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50">{regenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}重新生成（1 积分）</button> : null}
+            {onRegenerateSlide ? <button type="button" disabled={regenerating} onClick={() => void regenerateCurrentSlide()} className="inline-flex items-center gap-1 rounded-lg border border-[#F0C8BE] px-3 py-1.5 text-sm font-medium text-[#8E3425] hover:bg-[#FDF3F0] disabled:opacity-50">{regenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}重新生成（1 积分）</button> : null}
             <button
               type="button"
               onClick={() => setCurrent((value) => Math.min(slides.length - 1, value + 1))}

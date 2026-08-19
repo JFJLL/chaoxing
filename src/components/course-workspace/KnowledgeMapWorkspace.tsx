@@ -189,19 +189,19 @@ export function KnowledgeMapWorkspace({
             <h2 className="font-semibold text-slate-900">选择课程文档</h2>
             <p className="mt-1 text-xs text-slate-500">可多选；预览会智能去重共同目标，保存组合时进一步语义归纳，右侧按文档分别展开。</p>
           </div>
-          <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-blue-700">已选 {selectedIds.length} 份</span>
+          <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-[#8E3425]">已选 {selectedIds.length} 份</span>
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {documents.map((document) => (
-            <div key={document.mapId} className={`flex items-start gap-3 rounded-xl border p-3 transition ${selectedIds.includes(document.mapId) ? "border-blue-200 bg-white shadow-sm" : "border-transparent bg-white/60 hover:border-slate-200"}`}>
+            <div key={document.mapId} className={`flex items-start gap-3 rounded-xl border p-3 transition ${selectedIds.includes(document.mapId) ? "border-[#F0C8BE] bg-white shadow-sm" : "border-transparent bg-white/60 hover:border-slate-200"}`}>
               <input type="checkbox" className="mt-1" checked={selectedIds.includes(document.mapId)} onChange={() => toggleDocument(document.mapId)} />
-              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[#A8402F]" />
               <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800">{document.name}</span><span className="mt-1 block text-xs text-slate-400">v{document.version} · {new Date(document.publishedAt).toLocaleString("zh-CN")}</span></span>
               {canManage ? <button type="button" aria-label={`删除知识图谱：${document.name}`} className="mt-0.5 shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600" disabled={deleting} onClick={() => void removeMap(document.mapId, [document.mapId], false)}><Trash2 className="h-4 w-4" /></button> : null}
             </div>
           ))}
         </div>
-        {savedComposites.length ? <div className="mt-4 border-t border-slate-200 pt-4"><div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-slate-800">已保存组合</h3><span className="text-xs text-slate-500">可再次打开、编辑或删除</span></div><div className="mt-2 grid gap-2 md:grid-cols-2">{savedComposites.map((composite) => <div key={composite.mapId} className="flex items-center gap-3 rounded-xl border border-violet-100 bg-violet-50/70 p-3"><button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setSelectedIds(composite.sourceMapIds); void loadSelection(composite.sourceMapIds, false); }}><span className="block truncate text-sm font-medium text-slate-800">{composite.title}</span><span className="mt-1 block text-xs text-slate-500">v{composite.version} · {new Date(composite.publishedAt).toLocaleString("zh-CN")}</span></button>{canManage ? <button type="button" aria-label={`删除组合：${composite.title}`} className="shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600" disabled={deleting} onClick={() => void removeMap(composite.mapId, composite.sourceMapIds, true)}><Trash2 className="h-4 w-4" /></button> : null}</div>)}</div></div> : null}
+        {savedComposites.length ? <div className="mt-4 border-t border-slate-200 pt-4"><div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-slate-800">已保存组合</h3><span className="text-xs text-slate-500">可再次打开、编辑或删除</span></div><div className="mt-2 grid gap-2 md:grid-cols-2">{savedComposites.map((composite) => <div key={composite.mapId} className="flex items-center gap-3 rounded-xl border border-[#F9ECE7] bg-[#FDF3F0]/70 p-3"><button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setSelectedIds(composite.sourceMapIds); void loadSelection(composite.sourceMapIds, false); }}><span className="block truncate text-sm font-medium text-slate-800">{composite.title}</span><span className="mt-1 block text-xs text-slate-500">v{composite.version} · {new Date(composite.publishedAt).toLocaleString("zh-CN")}</span></button>{canManage ? <button type="button" aria-label={`删除组合：${composite.title}`} className="shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600" disabled={deleting} onClick={() => void removeMap(composite.mapId, composite.sourceMapIds, true)}><Trash2 className="h-4 w-4" /></button> : null}</div>)}</div></div> : null}
       </section>
 
       {error ? <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
@@ -209,13 +209,13 @@ export function KnowledgeMapWorkspace({
         {loading ? <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[28px] bg-white/70 backdrop-blur-sm"><span className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm text-slate-600 shadow"><Loader2 className="h-4 w-4 animate-spin" />正在归纳共同目标</span></div> : null}
         <KnowledgeMapGraph key={editing ? `preview-${map.id}` : map.id} nodes={editing && previewGraph ? previewGraph.nodes : map.nodes} edges={editing && previewGraph ? previewGraph.edges : map.edges} />
         {editing ? (
-          <aside className="flex min-w-0 flex-col rounded-2xl border border-blue-200 bg-blue-50/40 p-4">
+          <aside className="flex min-w-0 flex-col rounded-2xl border border-[#F0C8BE] bg-[#FDF3F0]/40 p-4">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h2 className="font-semibold text-slate-900">文本编辑</h2>
                 <p className="mt-1 text-xs leading-5 text-slate-500">左侧实时预览编辑结果；保存后发布为新版本并更新图谱。</p>
               </div>
-              <Pencil className="h-5 w-5 shrink-0 text-blue-600" />
+              <Pencil className="h-5 w-5 shrink-0 text-[#A8402F]" />
             </div>
             <KnowledgeMapTreeEditor
               key={map.id}
@@ -235,7 +235,7 @@ export function KnowledgeMapWorkspace({
           <aside className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <div className="flex items-start justify-between gap-2">
               <div><h2 className="font-semibold text-slate-900">{map.title}</h2><p className="mt-1 text-xs text-slate-400">已发布版本 v{map.version}</p></div>
-              <Network className="h-5 w-5 shrink-0 text-blue-600" />
+              <Network className="h-5 w-5 shrink-0 text-[#A8402F]" />
             </div>
             <p className="mt-3 text-sm leading-6 text-slate-600">{map.summary ?? "课程知识关系。"}</p>
             {canManage ? <div className="mt-4"><Button type="button" variant="secondary" className="h-9 w-full" disabled={loading} onClick={() => void beginEditing()}><Pencil className="h-4 w-4" />{editTargetId ? "文本编辑" : "保存组合并编辑"}</Button></div> : null}

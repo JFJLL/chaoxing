@@ -187,7 +187,7 @@ export function CourseDocumentImportSources({ courseId }: { courseId: string }) 
           className="flex w-full items-start justify-between gap-3 text-left"
         >
           <span className="flex items-start gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#FDF3F0] text-[#A8402F]">
               <CheckSquare2 className="h-5 w-5" aria-hidden="true" />
             </span>
             <span className="block">
@@ -197,7 +197,7 @@ export function CourseDocumentImportSources({ courseId }: { courseId: string }) 
               </span>
             </span>
           </span>
-          <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-blue-600">
+          <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-[#A8402F]">
             {drivePickerExpanded ? "收起" : "展开"}
             {drivePickerExpanded ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
           </span>
@@ -214,14 +214,14 @@ export function CourseDocumentImportSources({ courseId }: { courseId: string }) 
                 {items.map((item) => {
                   const selected = selectedIds.includes(item.id);
                   return (
-                    <label key={item.id} className="flex cursor-pointer items-center gap-3 rounded-lg bg-white px-3 py-3 transition hover:bg-blue-50">
+                    <label key={item.id} className="flex cursor-pointer items-center gap-3 rounded-lg bg-white px-3 py-3 transition hover:bg-[#FDF3F0]">
                       <input
                         type="checkbox"
                         checked={selected}
                         onChange={() => toggleItem(item.id)}
-                        className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                        className="h-4 w-4 rounded border-slate-300 text-[#A8402F]"
                       />
-                      <FileText className="h-4 w-4 shrink-0 text-blue-500" aria-hidden="true" />
+                      <FileText className="h-4 w-4 shrink-0 text-[#BC5B47]" aria-hidden="true" />
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium text-slate-800">{item.name}</span>
                         <span className="block truncate text-xs text-slate-500">{item.path}</span>

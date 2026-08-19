@@ -654,7 +654,7 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
           <p className="mt-1 text-xs text-slate-500">点击节点左侧按钮展开或收起；拖动画布，使用 Ctrl/⌘ + 滚轮缩放。</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {hiddenNodeCount > 0 ? <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{hiddenNodeCount} 个下级节点已收起</span> : null}
+          {hiddenNodeCount > 0 ? <span className="rounded-full bg-[#FDF3F0] px-3 py-1 text-xs font-medium text-[#8E3425]">{hiddenNodeCount} 个下级节点已收起</span> : null}
           {hierarchy.secondaryEdgeCount > 0 ? <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">{hierarchy.secondaryEdgeCount} 条交叉关系已收起</span> : null}
           <div className="flex items-center rounded-xl border border-slate-200 bg-white p-1 shadow-sm" aria-label="思维导图缩放控制">
             <button type="button" data-cx-no-pending="true" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100" aria-label="缩小思维导图" title="缩小" onClick={() => zoomAt(viewRef.current.scale / (1 + ZOOM_STEP))}>
@@ -674,7 +674,7 @@ export function KnowledgeMapGraph({ nodes, edges }: { nodes: KnowledgeNode[]; ed
       </div>
       <div
         ref={viewportRef}
-        className="relative h-[560px] cursor-grab touch-none select-none overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50/60 lg:h-[680px]"
+        className="relative h-[560px] cursor-grab touch-none select-none overflow-hidden bg-gradient-to-br from-slate-50 via-white to-[#FDF3F0]/60 lg:h-[680px]"
         aria-label="思维导图画布，可拖动和缩放"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

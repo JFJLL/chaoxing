@@ -6,15 +6,15 @@ const config: Config = {
     extend: {
       colors: {
         yimei: {
-          sidebar: "#5669c9",
-          sidebarActive: "#485ab7",
-          shell: "#f4f6fb",
-          border: "#e7eaf3"
+          sidebar: "#24282D",
+          sidebarActive: "#3A3F46",
+          shell: "#ffffff",
+          border: "#EAE5DF"
         }
       },
       boxShadow: {
-        panel: "0 10px 30px rgba(43, 54, 105, 0.08)",
-        floating: "0 18px 40px -18px rgba(43, 54, 105, 0.28)"
+        panel: "0 10px 30px rgba(39, 35, 31, 0.08)",
+        floating: "0 18px 40px -18px rgba(39, 35, 31, 0.28)"
       }
     }
   },

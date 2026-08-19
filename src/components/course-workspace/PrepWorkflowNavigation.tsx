@@ -40,8 +40,8 @@ export function PrepWorkflowNavigation({
             prefetch={false}
             aria-current={selected ? "step" : undefined}
             className={clsx(
-              "rounded-full px-3.5 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
-              selected ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+              "rounded-full px-3.5 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#BC5B47] focus-visible:ring-offset-2",
+              selected ? "bg-[#A8402F] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-[#FDF3F0] hover:text-[#8E3425]"
             )}
           >
             {step.label}

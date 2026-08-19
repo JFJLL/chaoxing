@@ -82,7 +82,7 @@ export function AssessmentQuestionEditor({
           <p className="px-2 text-xs font-medium text-slate-500">共 {questions.length} 题</p>
           <div className="mt-2 max-h-[520px] space-y-2 overflow-auto">
             {questions.map((question, index) => (
-              <button key={question.id} type="button" onClick={() => setActiveIndex(index)} className={`w-full rounded-xl border px-3 py-3 text-left text-sm transition ${index === activeIndex ? "border-blue-300 bg-white text-blue-800 shadow-sm" : "border-transparent text-slate-600 hover:bg-white"}`}>
+              <button key={question.id} type="button" onClick={() => setActiveIndex(index)} className={`w-full rounded-xl border px-3 py-3 text-left text-sm transition ${index === activeIndex ? "border-[#E5A597] bg-white text-[#6F281D] shadow-sm" : "border-transparent text-slate-600 hover:bg-white"}`}>
                 <span className="block text-xs text-slate-400">第 {index + 1} 题 · {question.points} 分</span>
                 <span className="mt-1 block truncate font-medium">{summary(question, index)}</span>
               </button>

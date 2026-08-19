@@ -79,7 +79,7 @@ export function ImportJobManager({
         <div className="grid gap-3">
           <div className="rounded-md bg-slate-50 p-4">
             <div className="flex items-center gap-2">
-              <Network className="h-4 w-4 text-blue-600" />
+              <Network className="h-4 w-4 text-[#A8402F]" />
               <h3 className="font-medium text-slate-900">{map.title}</h3>
               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${map.status === "PUBLISHED" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{map.status === "PUBLISHED" ? "已自动发布" : "历史草稿，未发布"}</span>
             </div>

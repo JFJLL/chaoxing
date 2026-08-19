@@ -61,9 +61,9 @@ export function ImportTimeline({
       ) : showProcessingNotice ? (
         <div role="status" aria-live="polite" className="space-y-3">
           {currentStage || showQueueLabel ? (
-            <div className="rounded-md border border-blue-100 bg-blue-50 px-4 py-3">
-              {currentStage ? <p className="text-sm font-medium text-blue-900">{currentStage}</p> : null}
-              {showQueueLabel ? <p className="mt-1 text-xs text-blue-700">{getQueueLabel(jobsAhead ?? null)}</p> : null}
+            <div className="rounded-md border border-[#F9ECE7] bg-[#FDF3F0] px-4 py-3">
+              {currentStage ? <p className="text-sm font-medium text-[#522017]">{currentStage}</p> : null}
+              {showQueueLabel ? <p className="mt-1 text-xs text-[#8E3425]">{getQueueLabel(jobsAhead ?? null)}</p> : null}
             </div>
           ) : null}
           {pollError ? <p className="rounded-md border border-orange-100 bg-orange-50 px-4 py-3 text-sm text-orange-700">{pollError}</p> : null}
@@ -81,7 +81,7 @@ export function ImportTimeline({
             {step.state === "complete" ? (
               <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-emerald-600" />
             ) : step.state === "active" ? (
-              <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-blue-600" />
+              <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-[#A8402F]" />
             ) : step.state === "attention" ? (
               <CircleAlert aria-hidden="true" className="h-4 w-4 text-orange-600" />
             ) : (

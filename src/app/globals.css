@@ -4,18 +4,18 @@
 
 :root {
   color-scheme: light;
-  --cx-blue: #5669c9;
-  --cx-blue-dark: #485ab7;
-  --cx-blue-soft: #eef0ff;
-  --cx-active: #6376db;
-  --cx-page: #f4f6fb;
-  --cx-course-page: #f3f6fc;
+  --cx-blue: #A8402F;
+  --cx-blue-dark: #8E3425;
+  --cx-blue-soft: #F9ECE7;
+  --cx-active: #BC5B47;
+  --cx-page: #ffffff;
+  --cx-course-page: #ffffff;
   --cx-surface: #ffffff;
-  --cx-border: #e7eaf3;
-  --cx-border-strong: #d9deeb;
-  --cx-text: #1f2937;
-  --cx-muted: #7b8190;
-  --cx-focus: rgba(86, 105, 201, 0.2);
+  --cx-border: #EAE5DF;
+  --cx-border-strong: #DBD3C9;
+  --cx-text: #27231F;
+  --cx-muted: #7A746C;
+  --cx-focus: rgba(168, 64, 47, 0.2);
   --background: var(--cx-page);
   --foreground: var(--cx-text);
 }
@@ -57,7 +57,7 @@ a {
 }
 
 ::selection {
-  background: rgba(86, 105, 201, 0.18);
+  background: rgba(168, 64, 47, 0.18);
 }
 
 .cx-tactile {
@@ -99,8 +99,8 @@ a {
   opacity: 0;
   transform: scaleX(0.18);
   transform-origin: left center;
-  background: linear-gradient(90deg, var(--cx-blue), #20b486, #60a5fa);
-  box-shadow: 0 0 18px rgba(86, 105, 201, 0.38);
+  background: linear-gradient(90deg, #A8402F, #C97B5E, #E8B9A5);
+  box-shadow: 0 0 18px rgba(168, 64, 47, 0.38);
   transition:
     opacity 120ms ease,
     transform 900ms cubic-bezier(0.2, 0.72, 0.2, 1);

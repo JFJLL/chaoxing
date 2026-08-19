@@ -32,8 +32,8 @@ export function CourseResourceUpload({ courseId, folderConfigured }: { courseId:
 
   if (!folderConfigured) return <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">上传课程资料前，请先设置课程云盘根文件夹。</p>;
   return (
-    <article className="flex flex-wrap items-center gap-4 rounded-2xl border border-dashed border-blue-200 bg-blue-50/40 p-4">
-      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
+    <article className="flex flex-wrap items-center gap-4 rounded-2xl border border-dashed border-[#F0C8BE] bg-[#FDF3F0]/40 p-4">
+      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#A8402F] shadow-sm">
         <UploadCloud className="h-5 w-5" aria-hidden="true" />
       </span>
       <div className="min-w-0 flex-1">

@@ -37,7 +37,7 @@ export function CollapsibleSourcePanel({
           <span className="block text-sm font-medium text-slate-800">{title}</span>
           <span className="mt-0.5 block text-xs text-slate-500">{renderedSummary}</span>
         </span>
-        <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-blue-600">
+        <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-[#A8402F]">
           {expanded ? "收起" : "展开"}
           {expanded ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
         </span>

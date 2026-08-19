@@ -75,8 +75,8 @@ type Props = {
   showFooterSave?: boolean;
 };
 
-const inputClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-default disabled:bg-slate-50/60 disabled:text-slate-600";
-const textareaClass = "min-h-20 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-default disabled:bg-slate-50/60 disabled:text-slate-600";
+const inputClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#D07865] focus:ring-4 focus:ring-[#BC5B47]/10 disabled:cursor-default disabled:bg-slate-50/60 disabled:text-slate-600";
+const textareaClass = "min-h-20 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#D07865] focus:ring-4 focus:ring-[#BC5B47]/10 disabled:cursor-default disabled:bg-slate-50/60 disabled:text-slate-600";
 
 function cloneDraft(draft: ArtifactEditorDraft) {
   return structuredClone(draft);

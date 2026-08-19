@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 export const courseModuleLinkCardClassName =
-  "cx-focus-ring cx-tactile group flex min-h-44 flex-col rounded-2xl border border-[var(--cx-border)] bg-slate-50/80 p-5 hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-[var(--cx-blue-soft)] hover:shadow-floating";
+  "cx-focus-ring cx-tactile group flex min-h-44 flex-col rounded-2xl border border-[var(--cx-border)] bg-slate-50/80 p-5 hover:-translate-y-0.5 hover:border-[#F0C8BE] hover:bg-[var(--cx-blue-soft)] hover:shadow-floating";
 
 export function CourseModulePanel({
   title,

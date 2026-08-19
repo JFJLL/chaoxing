@@ -32,9 +32,9 @@ export default async function AiWorkbenchContentPage({ params }: PageProps) {
           </div>
           <PrepWorkflowNavigation courseId={course.id} workflow="content" active="import" />
         </header>
-        <section className="rounded-2xl border border-blue-100 bg-blue-50/70 p-5">
-          <h2 className="font-semibold text-blue-950">一次导入，形成完整课程上下文</h2>
-          <p className="mt-1 text-sm leading-6 text-blue-800">系统会提炼课程目标、章节课时和知识关系；确认后可直接用于生成教案、题目和课件。</p>
+        <section className="rounded-2xl border border-[#F9ECE7] bg-[#FDF3F0]/70 p-5">
+          <h2 className="font-semibold text-[#34130F]">一次导入，形成完整课程上下文</h2>
+          <p className="mt-1 text-sm leading-6 text-[#6F281D]">系统会提炼课程目标、章节课时和知识关系；确认后可直接用于生成教案、题目和课件。</p>
         </section>
         <CourseDocumentImportSources courseId={courseId} />
         {recentImports}
