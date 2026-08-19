@@ -161,6 +161,10 @@ export async function settleRechargeOrder(input: {
   });
 }
 
+function isAlipayTradeNotExist(result: Record<string, unknown> | undefined) {
+  return String(result?.sub_code ?? "") === "ACQ.TRADE_NOT_EXIST";
+}
+
 export async function cancelRechargeOrder(userId: string, orderId: string) {
   const order = await getRechargeOrderForUser(userId, orderId);
   if (order.status === "PAID") throw new PaymentError("PAYMENT_ORDER_CANNOT_CANCEL", "订单已支付，不能取消；如余额未到账请稍后刷新");
@@ -175,9 +179,11 @@ export async function cancelRechargeOrder(userId: string, orderId: string) {
     if (order.status === "PENDING") {
       if (order.provider === "ALIPAY") {
         const result = await closeAlipayOrder(order.outTradeNo);
-        if (String(result?.code ?? "") !== "10000") {
+        if (String(result?.code ?? "") !== "10000" && !isAlipayTradeNotExist(result)) {
           throw new Error(String(result?.sub_msg ?? result?.msg ?? "支付宝未确认订单关闭"));
         }
+        // 订单码支付的预创建二维码在用户尚未扫码形成支付宝交易时，关闭接口会返回
+        // ACQ.TRADE_NOT_EXIST。此时二维码已无法继续支付，可安全结束本地待付款订单。
       } else {
         await closeWxpayOrder(order.outTradeNo);
       }
