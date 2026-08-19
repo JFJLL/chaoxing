@@ -1,10 +1,10 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, CheckCheck, ImageIcon, Inbox, Loader2, Mail, Paperclip, Reply, Search, Send, Trash2, X } from "lucide-react";
+import { Archive, ArrowLeft, CheckCheck, FileText, Folder, ImageIcon, Inbox, Loader2, Mail, Paperclip, Reply, Search, Send, Trash2, X } from "lucide-react";
 import { MessageAttachmentCards } from "@/components/modules/MessageAttachmentCards";
 
 type Attachment = { id: string; kind: string; fileName: string; mimeType: string | null; byteSize: number; driveFileId: string | null };
@@ -19,8 +19,10 @@ type Message = {
   attachments: Attachment[];
 };
 type Contact = { id: string; name: string; role: string };
-type ReferenceFile = { id: string; name: string; mimeType: string | null; size: number };
+type ReferenceDriveNode = { id: string; name: string; mimeType: string | null; size: number; kind: string; parentId: string | null };
 type Box = "inbox" | "sent" | "archived";
+
+const MAX_MESSAGE_ATTACHMENTS = 10;
 
 function formatTime(value: Date) {
   const date = new Date(value);
@@ -33,7 +35,7 @@ function formatTime(value: Date) {
 export function InboxClient({ messages, contacts, referenceFiles, activeBox, initialReceiverId }: {
   messages: Message[];
   contacts: Contact[];
-  referenceFiles: ReferenceFile[];
+  referenceFiles: ReferenceDriveNode[];
   activeBox: Box;
   initialReceiverId?: string;
 }) {
@@ -45,6 +47,8 @@ export function InboxClient({ messages, contacts, referenceFiles, activeBox, ini
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [selectedReferenceIds, setSelectedReferenceIds] = useState<string[]>([]);
+  const [referencePickerOpen, setReferencePickerOpen] = useState(false);
+  const [activeReferenceFolderId, setActiveReferenceFolderId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
@@ -55,6 +59,33 @@ export function InboxClient({ messages, contacts, referenceFiles, activeBox, ini
     if (!keyword) return messages;
     return messages.filter((message) => `${message.subject} ${message.body} ${message.sender.name} ${message.receiver.name}`.toLowerCase().includes(keyword));
   }, [messages, query]);
+  const referenceFoldersById = useMemo(
+    () => new Map(referenceFiles.filter((item) => item.kind === "folder").map((item) => [item.id, item])),
+    [referenceFiles]
+  );
+  const activeReferenceFolder = activeReferenceFolderId ? referenceFoldersById.get(activeReferenceFolderId) ?? null : null;
+  const referenceBreadcrumbs = useMemo(() => {
+    const folders: ReferenceDriveNode[] = [];
+    const visited = new Set<string>();
+    let current = activeReferenceFolder;
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+      folders.unshift(current);
+      current = current.parentId ? referenceFoldersById.get(current.parentId) ?? null : null;
+    }
+    return folders;
+  }, [activeReferenceFolder, referenceFoldersById]);
+  const visibleReferenceItems = useMemo(() => referenceFiles
+    .filter((item) => item.parentId === activeReferenceFolderId)
+    .sort((left, right) => {
+      if (left.kind === "folder" && right.kind !== "folder") return -1;
+      if (left.kind !== "folder" && right.kind === "folder") return 1;
+      return left.name.localeCompare(right.name, "zh-CN");
+    }), [activeReferenceFolderId, referenceFiles]);
+  const selectedReferenceFiles = useMemo(
+    () => referenceFiles.filter((file) => file.kind === "file" && selectedReferenceIds.includes(file.id)),
+    [referenceFiles, selectedReferenceIds]
+  );
 
   async function update(id: string, payload: object, method = "PUT") {
     setBusyId(id);
@@ -78,11 +109,44 @@ export function InboxClient({ messages, contacts, referenceFiles, activeBox, ini
     setComposeOpen(true);
   }
 
+  function handleLocalFiles(event: ChangeEvent<HTMLInputElement>) {
+    if (event.currentTarget.files && event.currentTarget.files.length > MAX_MESSAGE_ATTACHMENTS) {
+      event.currentTarget.value = "";
+      setError(`每条消息最多选择 ${MAX_MESSAGE_ATTACHMENTS} 个本地附件`);
+      return;
+    }
+    setError("");
+  }
+
+  function openReferencePicker() {
+    setActiveReferenceFolderId(null);
+    setReferencePickerOpen(true);
+    setError("");
+  }
+
+  function toggleReferenceFile(fileId: string) {
+    if (selectedReferenceIds.includes(fileId)) {
+      setSelectedReferenceIds((current) => current.filter((id) => id !== fileId));
+      setError("");
+      return;
+    }
+    if (selectedReferenceIds.length >= MAX_MESSAGE_ATTACHMENTS) {
+      setError(`每条消息最多选择 ${MAX_MESSAGE_ATTACHMENTS} 个云盘引用文件`);
+      return;
+    }
+    setSelectedReferenceIds((current) => [...current, fileId]);
+    setError("");
+  }
+
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     if (!receiverId || !subject.trim() || !body.trim()) {
       setError("请填写收件人、主题和消息内容");
+      return;
+    }
+    if (selectedReferenceIds.length > MAX_MESSAGE_ATTACHMENTS) {
+      setError(`每条消息最多选择 ${MAX_MESSAGE_ATTACHMENTS} 个云盘引用文件`);
       return;
     }
     setSending(true);
@@ -100,6 +164,8 @@ export function InboxClient({ messages, contacts, referenceFiles, activeBox, ini
       setSubject("");
       setBody("");
       setSelectedReferenceIds([]);
+      setActiveReferenceFolderId(null);
+      setReferencePickerOpen(false);
       setComposeOpen(false);
       router.refresh();
     } catch (cause) {
@@ -129,7 +195,7 @@ export function InboxClient({ messages, contacts, referenceFiles, activeBox, ini
             const Icon = tab.icon;
             return <Link key={tab.key} href={`/space/inbox?box=${tab.key}`} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${activeBox === tab.key ? "bg-[#A8402F] text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-slate-900"}`}><Icon className="h-4 w-4" />{tab.label}</Link>;
           })}</div>
-          <div className="mt-6 border-t border-slate-200 pt-5"><p className="px-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">写信提醒</p><p className="mt-2 px-2 text-xs leading-5 text-slate-500">每条消息最多添加 5 个本地附件和 5 个云盘引用文件。图片会在对话中直接预览。</p></div>
+          <div className="mt-6 border-t border-slate-200 pt-5"><p className="px-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">写信提醒</p><p className="mt-2 px-2 text-xs leading-5 text-slate-500">每条消息最多添加 10 个本地附件和 10 个云盘引用文件。图片会在对话中直接预览。</p></div>
         </aside>
 
         <section className="border-b border-slate-100 xl:border-b-0 xl:border-r">
@@ -143,6 +209,8 @@ export function InboxClient({ messages, contacts, referenceFiles, activeBox, ini
       </div>
     </section>
 
-    {composeOpen ? <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"><form onSubmit={send} className="w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-100 px-6 py-5"><div><h2 className="text-lg font-semibold text-slate-900">新建消息</h2><p className="mt-1 text-sm text-slate-500">可附带图片、文档或引用自己的云盘文件。</p></div><button type="button" disabled={sending} onClick={() => setComposeOpen(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button></header><div className="space-y-4 p-6"><label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">收件人</span><select value={receiverId} onChange={(event) => setReceiverId(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-[#D07865]">{contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name} · {contact.role === "TEACHER" ? "教师" : "学生"}</option>)}</select></label><label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">主题</span><input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={120} placeholder="概括这次沟通的主题" className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-[#D07865]" /></label><label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">消息内容</span><textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={10000} rows={6} placeholder="清楚描述问题、背景或回复内容" className="w-full resize-y rounded-xl border border-slate-200 p-3 text-sm leading-6 outline-none focus:border-[#D07865]" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="block"><span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700"><ImageIcon className="h-4 w-4" />图片或本地文件</span><input name="attachments" type="file" multiple accept="image/jpeg,image/png,image/webp,.pdf,.docx,.pptx,.txt,.md" className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-[#FDF3F0] file:px-3 file:py-2 file:text-xs file:font-medium file:text-[#8E3425]" /><p className="mt-1 text-xs text-slate-500">最多 5 个，每个不超过 15MB。</p></label><label className="block"><span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700"><Paperclip className="h-4 w-4" />引用我的云盘文件</span><select multiple value={selectedReferenceIds} onChange={(event) => setSelectedReferenceIds(Array.from(event.currentTarget.selectedOptions, (option) => option.value))} className="h-24 w-full rounded-xl border border-slate-200 p-2 text-sm outline-none focus:border-[#D07865]">{referenceFiles.map((file) => <option key={file.id} value={file.id}>{file.name}</option>)}</select><p className="mt-1 text-xs text-slate-500">按住 Ctrl 或 ⌘ 可多选，最多 5 个。</p></label></div></div><footer className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4"><button type="button" disabled={sending} onClick={() => setComposeOpen(false)} className="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100">取消</button><button type="submit" disabled={sending || !contacts.length} className="inline-flex items-center gap-2 rounded-xl bg-[#A8402F] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#8E3425] disabled:opacity-60">{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}{sending ? "发送中…" : "发送消息"}</button></footer></form></div> : null}
+    {composeOpen ? <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"><form onSubmit={send} className="w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-100 px-6 py-5"><div><h2 className="text-lg font-semibold text-slate-900">新建消息</h2><p className="mt-1 text-sm text-slate-500">可附带图片、文档或引用自己的云盘文件。</p></div><button type="button" disabled={sending} onClick={() => { setReferencePickerOpen(false); setComposeOpen(false); }} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button></header><div className="space-y-4 p-6"><label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">收件人</span><select value={receiverId} onChange={(event) => setReceiverId(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-[#D07865]">{contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name} · {contact.role === "TEACHER" ? "教师" : "学生"}</option>)}</select></label><label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">主题</span><input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={120} placeholder="概括这次沟通的主题" className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-[#D07865]" /></label><label className="block"><span className="mb-1.5 block text-sm font-medium text-slate-700">消息内容</span><textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={10000} rows={6} placeholder="清楚描述问题、背景或回复内容" className="w-full resize-y rounded-xl border border-slate-200 p-3 text-sm leading-6 outline-none focus:border-[#D07865]" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="block"><span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700"><ImageIcon className="h-4 w-4" />图片或本地文件</span><input name="attachments" type="file" multiple accept="image/jpeg,image/png,image/webp,.pdf,.docx,.pptx,.txt,.md" onChange={handleLocalFiles} className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-[#FDF3F0] file:px-3 file:py-2 file:text-xs file:font-medium file:text-[#8E3425]" /><p className="mt-1 text-xs text-slate-500">最多 10 个，每个不超过 15MB。</p></label><div className="block"><span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700"><Paperclip className="h-4 w-4" />引用我的云盘文件</span><button type="button" onClick={openReferencePicker} className="flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-left text-sm text-slate-600 transition hover:border-[#D07865] hover:bg-[#FDF3F0] focus:outline-none focus:ring-2 focus:ring-[#E7AD9E]"><span>{selectedReferenceIds.length ? `已选择 ${selectedReferenceIds.length} 个云盘文件` : "选择云盘文件"}</span><Folder className="h-4 w-4 text-[#A8402F]" /></button><p className="mt-1 text-xs text-slate-500">最多 10 个，点击按钮按云盘文件夹选择。</p></div></div>{selectedReferenceFiles.length ? <div className="rounded-xl border border-[#F0D8D1] bg-[#FFF9F7] p-3"><p className="text-xs font-medium text-slate-600">已引用 {selectedReferenceFiles.length} 个云盘文件</p><div className="mt-2 flex flex-wrap gap-2">{selectedReferenceFiles.map((file) => <span key={file.id} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-white px-2 py-1 text-xs text-slate-600 shadow-sm"><span className="truncate">{file.name}</span><button type="button" aria-label={`移除 ${file.name}`} onClick={() => toggleReferenceFile(file.id)} className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-[#A8402F]"><X className="h-3 w-3" /></button></span>)}</div></div> : null}</div><footer className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4"><button type="button" disabled={sending} onClick={() => { setReferencePickerOpen(false); setComposeOpen(false); }} className="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100">取消</button><button type="submit" disabled={sending || !contacts.length} className="inline-flex items-center gap-2 rounded-xl bg-[#A8402F] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#8E3425] disabled:opacity-60">{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}{sending ? "发送中…" : "发送消息"}</button></footer></form></div> : null}
+
+    {referencePickerOpen ? <div role="dialog" aria-modal="true" aria-labelledby="message-drive-picker-title" className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 p-4"><section className="flex max-h-[82vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"><header className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4"><div><h2 id="message-drive-picker-title" className="text-lg font-semibold text-slate-900">选择云盘文件</h2><p className="mt-1 text-sm text-slate-500">按文件夹浏览自己的云盘，并多选文件作为消息引用。</p></div><button type="button" aria-label="关闭云盘文件选择" onClick={() => setReferencePickerOpen(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button></header><nav aria-label="个人云盘路径" className="flex min-h-12 items-center gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50 px-4 py-2 text-sm"><button type="button" onClick={() => setActiveReferenceFolderId(null)} className={`shrink-0 rounded-md px-2 py-1 font-medium ${activeReferenceFolderId === null ? "bg-[#F9ECE7] text-[#6F281D]" : "text-slate-600 hover:bg-white hover:text-[#8E3425]"}`}>我的云盘</button>{referenceBreadcrumbs.map((folder) => <span key={folder.id} className="flex shrink-0 items-center gap-1"><span className="text-slate-300">/</span><button type="button" onClick={() => setActiveReferenceFolderId(folder.id)} className={`rounded-md px-2 py-1 ${folder.id === activeReferenceFolderId ? "bg-[#F9ECE7] font-medium text-[#6F281D]" : "text-slate-600 hover:bg-white hover:text-[#8E3425]"}`}>{folder.name}</button></span>)}</nav><div className="min-h-0 flex-1 overflow-y-auto p-4">{activeReferenceFolder ? <button type="button" onClick={() => setActiveReferenceFolderId(activeReferenceFolder.parentId)} className="mb-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"><ArrowLeft className="h-4 w-4" />上一级</button> : null}{visibleReferenceItems.length ? <div className="space-y-2">{visibleReferenceItems.map((item) => { if (item.kind === "folder") return <button key={item.id} type="button" onClick={() => setActiveReferenceFolderId(item.id)} className="flex w-full items-center gap-3 rounded-xl border border-slate-100 bg-white p-3 text-left transition hover:border-[#F0C8BE] hover:bg-[#FFF9F7]"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600"><Folder className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800">{item.name}</span><span className="mt-0.5 block text-xs text-slate-400">文件夹 · 点击浏览</span></span><span className="text-xs font-medium text-[#A8402F]">打开</span></button>; const checked = selectedReferenceIds.includes(item.id); return <label key={item.id} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${checked ? "border-[#D07865] bg-[#FFF5F2]" : "border-slate-100 hover:border-[#F0C8BE] hover:bg-slate-50"}`}><input type="checkbox" checked={checked} onChange={() => toggleReferenceFile(item.id)} className="h-4 w-4 rounded border-slate-300 text-[#A8402F] focus:ring-[#D07865]" /><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#FDF3F0] text-[#A8402F]"><FileText className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800">{item.name}</span><span className="mt-0.5 block text-xs text-slate-400">{item.mimeType || "云盘文件"}</span></span></label>; })}</div> : <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">{referenceFiles.length ? "当前文件夹中没有可引用的文件" : "云盘中暂无可引用的文件"}</p>}</div><footer className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-4"><p className="text-xs text-slate-500">已选择 {selectedReferenceIds.length}/{MAX_MESSAGE_ATTACHMENTS} 个文件</p><div className="flex items-center gap-3"><button type="button" onClick={() => setReferencePickerOpen(false)} className="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100">取消</button><button type="button" onClick={() => setReferencePickerOpen(false)} className="rounded-xl bg-[#A8402F] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#8E3425]">确认选择（{selectedReferenceIds.length}）</button></div></footer></section></div> : null}
   </div>;
 }

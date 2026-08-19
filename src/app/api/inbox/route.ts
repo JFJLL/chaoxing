@@ -35,17 +35,21 @@ export async function POST(request: NextRequest) {
     const referenceFileIds = JSON.parse(String(form.get("referenceFileIds") ?? "[]")) as unknown;
     const files = form.getAll("attachments").filter((item): item is File => typeof item !== "string" && item.size > 0);
     if (!receiverId || !subject || !body) return NextResponse.json({ error: "请填写收件人、主题和消息内容" }, { status: 400 });
-    if (files.length > 5) return NextResponse.json({ error: "每条消息最多附带 5 个本地附件" }, { status: 400 });
-    if (!Array.isArray(referenceFileIds) || referenceFileIds.length > 5 || referenceFileIds.some((id) => typeof id !== "string")) {
-      return NextResponse.json({ error: "引用文件参数无效" }, { status: 400 });
+    if (files.length > 10) return NextResponse.json({ error: "每条消息最多附带 10 个本地附件" }, { status: 400 });
+    if (!Array.isArray(referenceFileIds) || referenceFileIds.length > 10 || referenceFileIds.some((id) => typeof id !== "string")) {
+      return NextResponse.json({ error: "每条消息最多引用 10 个云盘文件" }, { status: 400 });
+    }
+    const uniqueReferenceFileIds = [...new Set(referenceFileIds)];
+    if (uniqueReferenceFileIds.length !== referenceFileIds.length) {
+      return NextResponse.json({ error: "云盘引用文件不能重复选择" }, { status: 400 });
     }
     const receiver = await db.user.findFirst({ where: { id: receiverId, institutionId: user.institutionId, role: { not: "ADMIN" } }, select: { id: true } });
     if (!receiver || receiver.id === user.id) return NextResponse.json({ error: "收件人不可用" }, { status: 400 });
-    const references = referenceFileIds.length ? await db.driveFile.findMany({
-      where: { id: { in: referenceFileIds }, ownerId: user.id, kind: "FILE", deletedAt: null },
+    const references = uniqueReferenceFileIds.length ? await db.driveFile.findMany({
+      where: { id: { in: uniqueReferenceFileIds }, ownerId: user.id, kind: "file", deletedAt: null },
       select: { id: true, name: true, mimeType: true, size: true }
     }) : [];
-    if (references.length !== referenceFileIds.length) return NextResponse.json({ error: "只能引用自己云盘中仍可用的文件" }, { status: 400 });
+    if (references.length !== uniqueReferenceFileIds.length) return NextResponse.json({ error: "只能引用自己云盘中仍可用的文件" }, { status: 400 });
 
     const messageId = randomUUID();
     const stored = await Promise.all(files.map(async (file) => {

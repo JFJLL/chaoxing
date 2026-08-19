@@ -26,7 +26,7 @@ export default async function InboxPage({ searchParams }: PageProps) {
       orderBy: { createdAt: "desc" }
     }),
     db.user.findMany({ where: { institutionId: user.institutionId, NOT: [{ id: user.id }, { role: "ADMIN" }] }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
-    db.driveFile.findMany({ where: { ownerId: user.id, kind: "FILE", deletedAt: null }, select: { id: true, name: true, mimeType: true, size: true }, orderBy: { updatedAt: "desc" }, take: 100 })
+    db.driveFile.findMany({ where: { ownerId: user.id, deletedAt: null }, select: { id: true, name: true, mimeType: true, size: true, kind: true, parentId: true }, orderBy: [{ kind: "asc" }, { name: "asc" }], take: 1000 })
   ]);
   return <InboxClient messages={messages} contacts={contacts} referenceFiles={referenceFiles} activeBox={box} initialReceiverId={params.receiverId} />;
 }
