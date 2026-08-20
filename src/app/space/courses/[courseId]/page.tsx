@@ -12,5 +12,5 @@ export default async function CourseDefaultPage({ params }: PageProps) {
   const { courseId } = await params;
   const course = await loadCourseWorkspace(user, courseId);
   const canManage = isCourseManagerRecord(user, course);
-  redirect(`/space/courses/${courseId}/${canManage ? "ai-workbench" : "after-class"}`);
+  redirect(`/space/courses/${courseId}/${canManage ? "ai-workbench" : "ai-assistant"}`);
 }
