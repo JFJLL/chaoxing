@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AtSign, ChevronDown, ChevronUp, Clock3, Download, Eye, FileText, Megaphone, Pencil, Pin, Plus, Send, Trash2, UsersRound } from "lucide-react";
+import { AtSign, ChevronDown, ChevronUp, Clock3, Download, Eye, FileText, Folder, Megaphone, Pencil, Pin, Plus, Send, Trash2, UsersRound, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
+import { CourseDriveFolderPickerModal } from "@/components/course-workspace/CourseDriveFolderPickerModal";
 
 type NoticeAttachment = { id: string; name: string; mimeType: string | null; size: number };
 type NoticeDto = {
@@ -85,6 +86,8 @@ export function NoticesClient({
   const [publishAtDraft, setPublishAtDraft] = useState("");
   const [pinnedDraft, setPinnedDraft] = useState(false);
   const [selectedAttachmentIds, setSelectedAttachmentIds] = useState<string[]>([]);
+  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
+  const [knownFiles, setKnownFiles] = useState<Record<string, { name: string; path?: string }>>({});
 
   useEffect(() => setNoticeItems(notices), [notices]);
   const visible = useMemo(() => canManage ? noticeItems.filter((notice) => effectiveStatus(notice) === activeTab) : noticeItems, [activeTab, canManage, noticeItems]);
@@ -103,6 +106,15 @@ export function NoticesClient({
     setPublishAtDraft(toLocalDateTime(current?.publishAt ?? null));
     setPinnedDraft(current?.pinned ?? false);
     setSelectedAttachmentIds(current?.attachments.map((attachment) => attachment.id) ?? []);
+    if (current?.attachments) {
+      setKnownFiles((prev) => {
+        const next = { ...prev };
+        for (const a of current.attachments) {
+          next[a.id] = { name: a.name };
+        }
+        return next;
+      });
+    }
     setError("");
   }
 
@@ -195,7 +207,51 @@ export function NoticesClient({
         <div className="min-w-0 space-y-4 overflow-x-hidden">
           <label className="block space-y-1 text-sm"><span>通知标题</span><Input required maxLength={200} value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} /></label>
           <label className="relative block space-y-1 text-sm"><span>通知内容</span><Textarea required maxLength={10_000} value={bodyDraft} onChange={(event) => setBodyDraft(event.target.value)} className="min-h-40" placeholder="输入 @ 可引用已向学生开放的课程文件" />{mentionFiles.length ? <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg"><p className="px-2 py-1 text-xs text-slate-400">选择要 @ 的课程文件</p>{mentionFiles.map((file) => <button key={file.id} type="button" onClick={() => addMention(file)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-[#FDF3F0]"><AtSign className="h-4 w-4 text-[#A8402F]" /><span className="min-w-0"><span className="block truncate">{file.name}</span><span className="block truncate text-xs text-slate-400">{file.path}</span></span></button>)}</div> : null}</label>
-          <fieldset className="min-w-0 space-y-2"><legend className="text-sm font-medium text-slate-700">课程文件</legend><p className="text-xs text-slate-500">这里只显示已向学生开放的文件，AI产物不会出现。</p><div className="max-h-48 min-w-0 space-y-2 overflow-x-hidden overflow-y-auto rounded-xl border border-slate-200 p-3">{unavailableEditorAttachments.map((file) => <label key={file.id} className="flex min-w-0 items-start gap-2 overflow-hidden rounded-lg bg-amber-50 p-2 text-sm text-amber-800"><input type="checkbox" className="mt-0.5 shrink-0" checked={selectedAttachmentIds.includes(file.id)} onChange={() => setSelectedAttachmentIds((current) => current.filter((id) => id !== file.id))} /><span className="min-w-0 flex-1"><span className="block truncate font-medium">{file.name}</span><span className="block truncate text-xs">该文件已删除或不再向学生开放，请取消勾选后保存。</span></span></label>)}{driveFiles.map((file) => <label key={file.id} className="flex min-w-0 items-start gap-2 overflow-hidden rounded-lg p-2 text-sm hover:bg-slate-50"><input type="checkbox" className="mt-0.5 shrink-0" checked={selectedAttachmentIds.includes(file.id)} onChange={() => setSelectedAttachmentIds((current) => current.includes(file.id) ? current.filter((id) => id !== file.id) : [...current, file.id])} /><span className="min-w-0 flex-1"><span className="block max-w-full truncate font-medium text-slate-700" title={file.name}>{file.name}</span><span className="block max-w-full truncate text-xs text-slate-400" title={file.path}>{file.path}</span></span></label>)}{!driveFiles.length && !unavailableEditorAttachments.length ? <p className="py-4 text-center text-xs text-slate-500">暂无已向学生开放的课程文件。</p> : null}</div></fieldset>
+          <fieldset className="min-w-0 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <legend className="text-sm font-medium text-slate-700">课程云盘附件</legend>
+                <p className="text-xs text-slate-500">点击进入课程云盘目录，可跨文件夹选择文件作为附件。</p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setDrivePickerOpen(true)}
+              >
+                <Folder className="h-4 w-4 mr-1 text-amber-500" />
+                从课程云盘选择
+              </Button>
+            </div>
+            {selectedAttachmentIds.length > 0 ? (
+              <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                {selectedAttachmentIds.map((id) => {
+                  const file = knownFiles[id] || driveFiles.find((f) => f.id === id) || (editor && editor !== "new" ? editor.attachments.find((a) => a.id === id) : null);
+                  const fileName = file?.name || "已选文件";
+                  return (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#F9ECE7] bg-[#FDF3F0] px-3 py-1.5 text-xs font-medium text-[#8E3425] shadow-sm"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      <span className="max-w-[240px] truncate" title={fileName}>{fileName}</span>
+                      <button
+                        type="button"
+                        aria-label={`移除附件 ${fileName}`}
+                        onClick={() => setSelectedAttachmentIds((current) => current.filter((itemId) => itemId !== id))}
+                        className="rounded p-0.5 hover:bg-rose-100 hover:text-rose-700"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
+                暂未选择任何课程文件作为附件，点击右上角“从课程云盘选择”进行添加。
+              </div>
+            )}
+          </fieldset>
           <label className="block space-y-1 text-sm"><span>定时发布（留空则立即发布）</span><Input type="datetime-local" value={publishAtDraft} onChange={(event) => setPublishAtDraft(event.target.value)} /></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={pinnedDraft} onChange={(event) => setPinnedDraft(event.target.checked)} />置顶通知</label>
           {error ? <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
@@ -204,6 +260,23 @@ export function NoticesClient({
       </Dialog>
 
       <Dialog open={Boolean(withdrawTarget)} title="撤回通知" onClose={() => !busy && setWithdrawTarget(null)}><p className="text-sm leading-6 text-slate-600">撤回“{withdrawTarget?.title}”后，学生端将立即停止展示，教师仍可在“已撤回”中查看记录。</p><div className="mt-5 flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setWithdrawTarget(null)}>取消</Button><Button type="button" variant="danger" disabled={busy} onClick={async () => { if (!withdrawTarget) return; const result = await request(`/api/courses/${courseId}/notices/${withdrawTarget.id}`, { method: "DELETE" }, "通知已撤回"); if (result) { setNoticeItems((current) => current.map((notice) => notice.id === withdrawTarget.id ? { ...notice, status: "WITHDRAWN" } : notice)); setWithdrawTarget(null); } }}>确认撤回</Button></div></Dialog>
+
+      <CourseDriveFolderPickerModal
+        courseId={courseId}
+        open={drivePickerOpen}
+        selectedIds={selectedAttachmentIds}
+        onClose={() => setDrivePickerOpen(false)}
+        onConfirm={(newIds, newItems) => {
+          setSelectedAttachmentIds(newIds);
+          setKnownFiles((prev) => {
+            const next = { ...prev };
+            for (const item of newItems) {
+              next[item.id] = { name: item.name, path: item.path };
+            }
+            return next;
+          });
+        }}
+      />
     </div>
   );
 }
