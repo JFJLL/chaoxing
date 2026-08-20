@@ -1,7 +1,6 @@
 import { requireUser, type SessionUser } from "@/lib/auth";
 import { isCourseManagerRecord, requireCourseAccess } from "@/lib/permissions";
 import { FanyaCourseShell } from "@/components/course-workspace/FanyaCourseShell";
-import { AiTutorHeader } from "@/components/course-workspace/AiTutorWorkspace";
 import { AiTutor } from "@/components/course-workspace/AiTutor";
 import { AiAssistantHub } from "@/components/course-workspace/ai-assistant/AiAssistantHub";
 import { listTutorConversations, toTutorConversationDto } from "@/lib/courseWorkspace/aiConversation";
@@ -37,10 +36,7 @@ export default async function ClassroomAiTutorPage({ params }: PageProps) {
   return (
     <FanyaCourseShell user={user} course={course} activeTab="activities">
       <AiAssistantHub courseId={course.id} courseTitle={course.title} canManage={canManage}>
-        <div className="space-y-5">
-          <AiTutorHeader courseId={course.id} />
-          {conversationContent}
-        </div>
+        {conversationContent}
       </AiAssistantHub>
     </FanyaCourseShell>
   );
