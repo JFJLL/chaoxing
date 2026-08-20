@@ -1,4 +1,4 @@
-export type AiAssistantTab = "tutor" | "scenario-quiz" | "proposal-review" | "roleplay" | "knowledge-cards";
+export type AiAssistantTab = "real-tutor" | "tutor" | "scenario-quiz" | "proposal-review" | "roleplay" | "knowledge-cards";
 
 export interface KnowledgeBaseQaItem {
   id: string;

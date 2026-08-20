@@ -8,9 +8,9 @@ import Link from "next/link";
 
 type PageProps = { params: Promise<{ courseId: string }> };
 
-const teacherTutorActivity = {
+const tutorActivity = {
   title: "AI助教",
-  description: "基于当前课程内容回答课堂问题，并定位到可核对的资料来源。",
+  description: "基于课程知识库答疑、随堂情境测验、方案诊断、角色演练与思维导图。",
   icon: MessagesSquare,
   hrefSegment: "activities/tutor"
 };
@@ -28,14 +28,14 @@ export default async function ActivitiesPage({ params }: PageProps) {
     { title: "知识图谱", description: "查看教师已发布的课程目标、文档结构与知识关系。", icon: Network, hrefSegment: "knowledge-map" }
   ];
   const visibleActivities = canManage
-    ? [teacherTutorActivity, ...sharedActivities]
-    : [...sharedActivities, ...studentOnlyActivities];
+    ? [tutorActivity, ...sharedActivities]
+    : [tutorActivity, ...sharedActivities, ...studentOnlyActivities];
 
   return (
     <FanyaCourseShell user={user} course={course} activeTab="activities">
       <CourseModulePanel
         title="上课"
-        description={canManage ? "使用 AI智能体、AI 助教和签到组织课堂。" : "使用课程 AI智能体，参加签到并查看知识图谱。"}
+        description={canManage ? "使用 AI 助教、AI 智能体和签到组织课堂。" : "使用 AI 助教、AI 智能体，参加签到并查看知识图谱。"}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleActivities.map((activity) => {

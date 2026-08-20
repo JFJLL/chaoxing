@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { clsx } from "clsx";
 import {
   Activity,
@@ -14,6 +14,7 @@ import {
   Layers,
   Lightbulb,
   MessageSquare,
+  MessagesSquare,
   PlayCircle,
   RefreshCw,
   Send,
@@ -38,12 +39,14 @@ interface Props {
   courseId: string;
   courseTitle: string;
   canManage: boolean;
+  children?: ReactNode;
 }
 
-export function AiAssistantHub({ courseId, courseTitle, canManage }: Props) {
-  const [activeTab, setActiveTab] = useState<AiAssistantTab>("tutor");
+export function AiAssistantHub({ courseId, courseTitle, canManage, children }: Props) {
+  const [activeTab, setActiveTab] = useState<AiAssistantTab>("real-tutor");
 
   const tabs = [
+    { id: "real-tutor" as const, label: "课程智能问答", icon: MessagesSquare, badge: "实时交互" },
     { id: "tutor" as const, label: "教材知识答疑", icon: BookOpenCheck, badge: "知识库" },
     { id: "scenario-quiz" as const, label: "随堂情境测验", icon: Activity, badge: "学情诊断" },
     { id: "proposal-review" as const, label: "方案初稿诊断", icon: FileCheck2, badge: "理论对照" },
@@ -62,7 +65,7 @@ export function AiAssistantHub({ courseId, courseTitle, canManage }: Props) {
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-indigo-200 backdrop-blur-sm">
                 <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-                智能助教专栏 · 教材知识中枢
+                上课 · AI 助教工作台
               </span>
               <Badge tone="blue">{canManage ? "教师督导模式" : "学生学习模式"}</Badge>
             </div>
@@ -70,7 +73,7 @@ export function AiAssistantHub({ courseId, courseTitle, canManage }: Props) {
               AI 智能助教与实训工坊
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-              基于《{courseTitle}》知识库构建。集成即时答疑、情境测验诊断、方案结构化反馈、消费者角色演练及知识导图生成。
+              基于《{courseTitle}》知识库构建。集成实时智能问答、教材答疑、情境测验诊断、方案结构化反馈、角色演练及知识导图生成。
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -119,6 +122,11 @@ export function AiAssistantHub({ courseId, courseTitle, canManage }: Props) {
       </div>
 
       {/* Active Tab Content */}
+      {activeTab === "real-tutor" && (
+        <div className="space-y-5">
+          {children}
+        </div>
+      )}
       {activeTab === "tutor" && <KnowledgeQaSection courseTitle={courseTitle} />}
       {activeTab === "scenario-quiz" && <ScenarioQuizSection />}
       {activeTab === "proposal-review" && <ProposalReviewSection />}

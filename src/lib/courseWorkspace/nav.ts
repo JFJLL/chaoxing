@@ -16,7 +16,6 @@ export const courseWorkspaceNav: Array<{
   icon: typeof Bot;
 }> = [
   { id: "ai-workbench", label: "备课中心", hrefSegment: "ai-workbench", icon: Bot },
-  { id: "ai-assistant", label: "AI助教", hrefSegment: "ai-assistant", icon: Sparkles },
   { id: "activities", label: "上课", hrefSegment: "activities", icon: CalendarDays },
   { id: "after-class", label: "课后", hrefSegment: "after-class", icon: ClipboardList },
   { id: "notices", label: "通知", hrefSegment: "notices", icon: Volume2 },
@@ -26,7 +25,7 @@ export const courseWorkspaceNav: Array<{
 
 const courseWorkspaceNavParents: Record<CourseWorkspaceTab, CourseWorkspaceTab> = {
   "ai-workbench": "ai-workbench",
-  "ai-assistant": "ai-assistant",
+  "ai-assistant": "activities",
   "pre-class": "after-class",
   activities: "activities",
   "after-class": "after-class",
