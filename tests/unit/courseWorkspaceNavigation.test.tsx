@@ -62,7 +62,7 @@ describe("course workspace navigation", () => {
     expect(html).not.toContain('data-next-link="true"');
     expect(html).toContain('href="/space/courses/course-1/after-class"');
     expect(html).toContain('href="/space/courses/course-1/analytics"');
-    expect(html.match(/from-\[#5669c9\] to-\[#8b6de0\] text-white shadow-sm/g)).toHaveLength(1);
+    expect(html.match(/from-\[#A8402F\] to-\[#C97B5E\] text-white shadow-sm/g)).toHaveLength(1);
   });
 
   it("removes the invite-code shortcut from both role variants", () => {
