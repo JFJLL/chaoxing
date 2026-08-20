@@ -21,7 +21,6 @@ function coverClass(cover?: string | null) {
 }
 
 function getNavigationLabel(item: CourseNavItem, canManage: boolean) {
-  if (item.id === "ai-workbench" && !canManage) return "AI助教";
   if (item.id === "analytics" && !canManage) return "我的学习";
   if (item.id === "drive" && !canManage) return "课程资料";
   return item.label;
@@ -68,7 +67,11 @@ function CourseNavLink({
 }
 
 export function CourseWorkspaceSidebar({ course, activeTab, canManage, zoviiCredential = null }: Props) {
-  const primaryNav = courseWorkspaceNav.filter((item) => item.id !== "drive");
+  const primaryNav = courseWorkspaceNav.filter((item) => {
+    if (item.id === "drive") return false;
+    if (item.id === "ai-workbench" && !canManage) return false;
+    return true;
+  });
   const driveNav = courseWorkspaceNav.find((item) => item.id === "drive");
   const activeParent = getCourseWorkspaceNavParent(activeTab);
 

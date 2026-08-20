@@ -11,9 +11,14 @@ export type CourseAiAppType =
 
 export type CourseWorkspaceTab =
   | "ai-workbench"
+  | "ai-assistant"
   | "pre-class"
   | "activities"
   | "after-class"
+  | "enterprise-challenges"
+  | "innovation-market"
+  | "field-study"
+  | "mentor-reviews"
   | "analytics"
   | "structure"
   | "knowledge-map"
