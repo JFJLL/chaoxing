@@ -37,7 +37,7 @@ export function CourseCard({ course, mode }: CourseCardProps) {
   const progress = Math.max(0, Math.min(course.progress ?? 0, 100));
 
   return (
-    <article className="group overflow-hidden rounded-2xl border border-[var(--cx-border)] bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#C97B5E] hover:shadow-floating">
+    <article className="group overflow-hidden rounded-2xl border border-[var(--cx-border)] bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#F0C8BE] hover:shadow-floating">
       <Link href={`/space/courses/${course.id}`} className={`cx-focus-ring relative flex h-36 bg-gradient-to-br ${getCoverStyle(course.cover)} p-4 text-white`}>
         <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.25),transparent_44%)]" aria-hidden="true" />
         <div className="relative mt-auto">

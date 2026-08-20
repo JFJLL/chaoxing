@@ -117,7 +117,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
           </>
         ) : null}
         {user.role === "ADMIN" ? (
-          <Link href="/space/admin" className="cx-focus-ring flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#8E3425] hover:bg-[#F9ECE7]">
+          <Link href="/space/admin" className="cx-focus-ring flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#8E3425] hover:bg-[#FDF3F0]">
             <ShieldCheck className="h-4 w-4" />
             管理员控制台
           </Link>

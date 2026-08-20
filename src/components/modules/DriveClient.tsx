@@ -640,12 +640,12 @@ export function DriveClient({
         <form onSubmit={(event) => { event.preventDefault(); void upload(); }} className="space-y-4">
           <p className="text-sm leading-6 text-slate-600">可一次选择多个文件，或选择整个文件夹（保留子文件夹结构，同名文件夹会自动重命名）。上传完成前请保持页面打开。</p>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <label className="cx-tactile flex min-h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-[#C97B5E] hover:bg-[var(--cx-blue-soft)]">
+            <label className="cx-tactile flex min-h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-[#E5A597] hover:bg-[var(--cx-blue-soft)]">
               <input type="file" multiple className="sr-only" onChange={handleFilesChange} disabled={pendingAction !== null} />
               <UploadCloud className="h-4 w-4" aria-hidden="true" />
               上传文件
             </label>
-            <label className="cx-tactile flex min-h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-[#C97B5E] hover:bg-[var(--cx-blue-soft)]">
+            <label className="cx-tactile flex min-h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--cx-border-strong)] bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-[#E5A597] hover:bg-[var(--cx-blue-soft)]">
               <input type="file" {...({ webkitdirectory: "" } as any)} className="sr-only" onChange={handleFolderChange} disabled={pendingAction !== null} />
               <Folder className="h-4 w-4" aria-hidden="true" />
               上传文件夹

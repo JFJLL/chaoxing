@@ -163,7 +163,7 @@ export function AiCourseSearchView({
           type="submit"
           disabled={loading || !query.trim()}
           aria-label={loading ? "正在搜索课程资料" : "搜索课程资料"}
-          className="cx-focus-ring cx-tactile flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--cx-blue)] text-white shadow-sm hover:bg-[var(--cx-blue-dark)] disabled:cursor-not-allowed disabled:bg-[#C97B5E] sm:rounded-full"
+          className="cx-focus-ring cx-tactile flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--cx-blue)] text-white shadow-sm hover:bg-[var(--cx-blue-dark)] disabled:cursor-not-allowed disabled:bg-[#E5A597] sm:rounded-full"
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Wand2 className="h-4 w-4" aria-hidden="true" />}
         </button>
