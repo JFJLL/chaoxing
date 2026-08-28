@@ -302,17 +302,19 @@ export function TeacherOnboarding({ enabled }: { enabled: boolean }) {
         <h2 id="teacher-onboarding-title" className="mt-2 text-base font-semibold text-slate-900">{current.title}</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">{current.body}</p>
         <div className="mt-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <button type="button" disabled={saving} onClick={() => void pause()} className="text-sm font-medium text-slate-500 hover:text-slate-800">跳过</button>
-            <button type="button" disabled={saving || tour.step === 0} onClick={() => void prev()} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400">
-              <ArrowLeft className="h-3.5 w-3.5" />
-              上一步
+          <button type="button" disabled={saving} onClick={() => void pause()} className="text-sm font-medium text-slate-500 hover:text-slate-800">跳过</button>
+          <div className="flex items-center gap-2">
+            {tour.step > 0 ? (
+              <button type="button" disabled={saving} onClick={() => void prev()} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60">
+                <ArrowLeft className="h-3.5 w-3.5" />
+                上一步
+              </button>
+            ) : null}
+            <button type="button" disabled={saving} onClick={() => void next()} className="inline-flex h-9 items-center gap-1 rounded-lg bg-rose-600 px-3 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60">
+              <ArrowRight className="h-3.5 w-3.5" />
+              {saving ? "保存中…" : "下一步"}
             </button>
           </div>
-          <button type="button" disabled={saving} onClick={() => void next()} className="inline-flex h-9 items-center gap-1 rounded-lg bg-rose-600 px-3 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60">
-            <ArrowRight className="h-3.5 w-3.5" />
-            {saving ? "保存中…" : "下一步"}
-          </button>
         </div>
       </section>
     </>
