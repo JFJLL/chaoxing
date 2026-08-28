@@ -304,7 +304,7 @@ export function TeacherOnboarding({ enabled }: { enabled: boolean }) {
         <div className="mt-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <button type="button" disabled={saving} onClick={() => void pause()} className="text-sm font-medium text-slate-500 hover:text-slate-800">跳过</button>
-            <button type="button" disabled={saving || tour.step === 0} onClick={() => void prev()} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+            <button type="button" disabled={saving || tour.step === 0} onClick={() => void prev()} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400">
               <ArrowLeft className="h-3.5 w-3.5" />
               上一步
             </button>
