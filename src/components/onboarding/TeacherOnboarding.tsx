@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 type TourState = {
   step: number;
@@ -273,6 +273,16 @@ export function TeacherOnboarding({ enabled }: { enabled: boolean }) {
     }
   }
 
+  async function prev() {
+    if (!tour || tour.step === 0) return;
+    setSaving(true);
+    try {
+      await moveTo(tour.step - 1, tour.courseId);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (!tour || !position) return null;
   const current = tourSteps[tour.step]!;
 
@@ -292,7 +302,13 @@ export function TeacherOnboarding({ enabled }: { enabled: boolean }) {
         <h2 id="teacher-onboarding-title" className="mt-2 text-base font-semibold text-slate-900">{current.title}</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">{current.body}</p>
         <div className="mt-4 flex items-center justify-between gap-3">
-          <button type="button" disabled={saving} onClick={() => void pause()} className="text-sm font-medium text-slate-500 hover:text-slate-800">跳过</button>
+          <div className="flex items-center gap-3">
+            <button type="button" disabled={saving} onClick={() => void pause()} className="text-sm font-medium text-slate-500 hover:text-slate-800">跳过</button>
+            <button type="button" disabled={saving || tour.step === 0} onClick={() => void prev()} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              上一步
+            </button>
+          </div>
           <button type="button" disabled={saving} onClick={() => void next()} className="inline-flex h-9 items-center gap-1 rounded-lg bg-rose-600 px-3 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60">
             <ArrowRight className="h-3.5 w-3.5" />
             {saving ? "保存中…" : "下一步"}
