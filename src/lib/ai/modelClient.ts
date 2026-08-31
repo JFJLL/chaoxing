@@ -268,7 +268,7 @@ async function createOpenAiCompatibleTextCompletion(config: AiModelConfig, input
       { role: "system", content: input.system },
       { role: "user", content: input.user }
     ]
-  });
+  }, { signal: input.signal });
 
     return {
     content: completion.choices[0]?.message.content || "",
@@ -329,7 +329,8 @@ async function createGeminiTextCompletion(config: AiModelConfig, input: Completi
           parts: [{ text: `${input.system}\n\n${input.user}` }]
         }
       ]
-    })
+    }),
+    signal: input.signal
   });
 
   if (!response.ok) {

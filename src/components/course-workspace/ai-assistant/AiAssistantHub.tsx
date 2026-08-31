@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import React, { useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
 import {
   Activity,
@@ -40,6 +40,25 @@ interface Props {
   courseTitle: string;
   canManage: boolean;
   children?: ReactNode;
+}
+
+type ProposalFeedback = typeof mockAiAssistantData.proposalFeedback;
+
+function responseError(body: unknown, fallback: string) {
+  return body && typeof body === "object" && "error" in body && typeof body.error === "string"
+    ? body.error
+    : fallback;
+}
+
+async function requestAiAssistant<T>(courseId: string, body: unknown): Promise<T> {
+  const response = await fetch(`/api/courses/${courseId}/ai-assistant`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(responseError(result, "AI 服务调用失败，请重试"));
+  return result as T;
 }
 
 export function AiAssistantHub({ courseId, courseTitle, canManage, children }: Props) {
@@ -127,40 +146,39 @@ export function AiAssistantHub({ courseId, courseTitle, canManage, children }: P
           {children}
         </div>
       )}
-      {activeTab === "tutor" && <KnowledgeQaSection courseTitle={courseTitle} />}
+      {activeTab === "tutor" && <KnowledgeQaSection courseId={courseId} courseTitle={courseTitle} />}
       {activeTab === "scenario-quiz" && <ScenarioQuizSection />}
-      {activeTab === "proposal-review" && <ProposalReviewSection />}
-      {activeTab === "roleplay" && <RoleplaySection />}
+      {activeTab === "proposal-review" && <ProposalReviewSection courseId={courseId} />}
+      {activeTab === "roleplay" && <RoleplaySection courseId={courseId} courseTitle={courseTitle} />}
       {activeTab === "knowledge-cards" && <KnowledgeCardsSection />}
     </div>
   );
 }
 
 /* 1. 教材知识库答疑 */
-function KnowledgeQaSection({ courseTitle }: { courseTitle: string }) {
+function KnowledgeQaSection({ courseId, courseTitle }: { courseId: string; courseTitle: string }) {
   const [query, setQuery] = useState("");
   const [qaList, setQaList] = useState<KnowledgeBaseQaItem[]>(mockAiAssistantData.qaItems);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSend = () => {
-    if (!query.trim()) return;
+  const handleSend = async () => {
+    const question = query.trim();
+    if (!question || isSubmitting) return;
     setIsSubmitting(true);
-    setTimeout(() => {
-      setQaList([
-        ...qaList,
-        {
-          id: `qa-${Date.now()}`,
-          question: query,
-          answer: `【AI助教基于课程教材回答】针对问题“${query}”，依据本课程理论体系，重点应关注文化要素的提炼与数字化表达机制。建议结合第三章核心案例进行分析。`,
-          citations: [
-            { source: "课程指定教材与前沿案例集", chapter: "第三章·数字文创实践指南", page: 64 }
-          ],
-          relatedTopics: ["课程核心概念", "知识点延伸"]
-        }
-      ]);
+    setError("");
+    try {
+      const result = await requestAiAssistant<{ item: KnowledgeBaseQaItem }>(courseId, {
+        mode: "knowledge_qa",
+        question
+      });
+      setQaList((current) => [...current, result.item]);
       setQuery("");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "教材答疑失败，请重试");
+    } finally {
       setIsSubmitting(false);
-    }, 400);
+    }
   };
 
   const quickPrompts = [
@@ -198,15 +216,17 @@ function KnowledgeQaSection({ courseTitle }: { courseTitle: string }) {
                   </span>
                   <div className="flex-1 space-y-2.5 text-sm text-slate-700 leading-relaxed">
                     <p>{item.answer}</p>
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      <span className="text-xs text-slate-400">出处溯源:</span>
-                      {item.citations.map((c, idx) => (
-                        <span key={idx} className="inline-flex items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50/80 px-2 py-0.5 text-xs text-indigo-700">
-                          <BookOpenCheck className="h-3 w-3" />
-                          {c.source} · {c.chapter} {c.page ? `(P${c.page})` : ""}
-                        </span>
-                      ))}
-                    </div>
+                    {item.citations.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <span className="text-xs text-slate-400">出处溯源:</span>
+                        {item.citations.map((c, idx) => (
+                          <span key={idx} className="inline-flex items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50/80 px-2 py-0.5 text-xs text-indigo-700">
+                            <BookOpenCheck className="h-3 w-3" />
+                            {c.source} · {c.chapter} {c.page ? `(P${c.page})` : ""}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -215,6 +235,7 @@ function KnowledgeQaSection({ courseTitle }: { courseTitle: string }) {
 
           {/* Input Box */}
           <div className="mt-5 space-y-3">
+            {error && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
             <div className="flex flex-wrap gap-2">
               {quickPrompts.map((prompt) => (
                 <button
@@ -232,13 +253,18 @@ function KnowledgeQaSection({ courseTitle }: { courseTitle: string }) {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleSend();
+                  }
+                }}
                 placeholder="向 AI 助教提问本课程知识点、作业要求或案例分析..."
                 className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[var(--cx-blue)] focus:ring-2 focus:ring-[var(--cx-blue)]/20"
               />
-              <Button onClick={handleSend} disabled={isSubmitting || !query.trim()}>
-                <Send className="h-4 w-4 mr-1" />
-                提问
+              <Button onClick={() => void handleSend()} disabled={isSubmitting || !query.trim()}>
+                {isSubmitting ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+                {isSubmitting ? "回答中" : "提问"}
               </Button>
             </div>
           </div>
@@ -402,10 +428,29 @@ function ScenarioQuizSection() {
 }
 
 /* 3. 小组方案初稿结构化反馈 */
-function ProposalReviewSection() {
-  const { proposalFeedback } = mockAiAssistantData;
+function ProposalReviewSection({ courseId }: { courseId: string }) {
   const [inputText, setInputText] = useState("");
-  const [analyzed, setAnalyzed] = useState(true);
+  const [feedback, setFeedback] = useState<ProposalFeedback | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleReview = async () => {
+    const proposal = inputText.trim();
+    if (proposal.length < 20 || isAnalyzing) return;
+    setIsAnalyzing(true);
+    setError("");
+    try {
+      const result = await requestAiAssistant<{ feedback: ProposalFeedback }>(courseId, {
+        mode: "proposal_review",
+        proposal
+      });
+      setFeedback(result.feedback);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "方案审定失败，请重试");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -423,8 +468,8 @@ function ProposalReviewSection() {
           <div className="mt-4 space-y-4">
             <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
               <Upload className="mx-auto h-8 w-8 text-slate-400" />
-              <p className="mt-2 text-sm font-medium text-slate-700">点击上传或拖拽小组策划案文档 (PDF / Word / Markdown)</p>
-              <p className="mt-1 text-xs text-slate-400">当前已加载示例方案：{proposalFeedback.proposalTitle}</p>
+              <p className="mt-2 text-sm font-medium text-slate-700">请将方案正文粘贴到下方，AI 将读取文本进行真实评审</p>
+              <p className="mt-1 text-xs text-slate-400">支持 20–12,000 字符；文档上传能力后续开放</p>
             </div>
 
             <div>
@@ -437,23 +482,27 @@ function ProposalReviewSection() {
                 className="mt-1.5 w-full rounded-xl border border-slate-200 p-3 text-xs outline-none focus:border-[var(--cx-blue)] focus:ring-2 focus:ring-[var(--cx-blue)]/20"
               />
             </div>
+            {error && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
             <div className="flex justify-end">
-              <Button onClick={() => setAnalyzed(true)}>对照教材理论进行结构化诊断</Button>
+              <Button onClick={() => void handleReview()} disabled={isAnalyzing || inputText.trim().length < 20}>
+                {isAnalyzing && <RefreshCw className="mr-1 h-4 w-4 animate-spin" />}
+                {isAnalyzing ? "正在审定" : "对照教材理论进行结构化诊断"}
+              </Button>
             </div>
           </div>
         </div>
 
         {/* Feedback Details */}
-        {analyzed && (
+        {feedback && (
           <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-panel space-y-6">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
-                <h3 className="font-bold text-slate-900 text-lg">{proposalFeedback.proposalTitle}</h3>
-                <p className="text-xs text-slate-500 mt-0.5">提交方：{proposalFeedback.submitter}</p>
+                <h3 className="font-bold text-slate-900 text-lg">{feedback.proposalTitle}</h3>
+                <p className="text-xs text-slate-500 mt-0.5">提交方：{feedback.submitter}</p>
               </div>
               <div className="flex items-center gap-2 rounded-2xl bg-indigo-50 px-4 py-2">
                 <span className="text-xs text-indigo-700 font-medium">综合得分</span>
-                <span className="text-2xl font-black text-indigo-600">{proposalFeedback.overallScore}</span>
+                <span className="text-2xl font-black text-indigo-600">{feedback.overallScore}</span>
                 <span className="text-xs text-indigo-400">/100</span>
               </div>
             </div>
@@ -462,7 +511,7 @@ function ProposalReviewSection() {
             <div className="space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">理论框架四维打分</h4>
               <div className="grid gap-3 sm:grid-cols-2">
-                {proposalFeedback.rubrics.map((r) => (
+                {feedback.rubrics.map((r) => (
                   <div key={r.dimension} className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-slate-900 text-xs">{r.dimension}</span>
@@ -485,7 +534,7 @@ function ProposalReviewSection() {
                   方案核心亮点
                 </h5>
                 <ul className="mt-3 space-y-2 text-xs text-emerald-950/80">
-                  {proposalFeedback.strengths.map((s, idx) => (
+                  {feedback.strengths.map((s, idx) => (
                     <li key={idx} className="leading-relaxed">• {s}</li>
                   ))}
                 </ul>
@@ -497,7 +546,7 @@ function ProposalReviewSection() {
                   对照教材改进建议
                 </h5>
                 <ul className="mt-3 space-y-2 text-xs text-amber-950/80">
-                  {proposalFeedback.suggestions.map((s, idx) => (
+                  {feedback.suggestions.map((s, idx) => (
                     <li key={idx} className="leading-relaxed">• {s}</li>
                   ))}
                 </ul>
@@ -533,7 +582,7 @@ function ProposalReviewSection() {
 }
 
 /* 4. 角色演练模拟器 */
-function RoleplaySection() {
+function RoleplaySection({ courseId, courseTitle }: { courseId: string; courseTitle: string }) {
   const { roleplayPersonas } = mockAiAssistantData;
   const [selectedPersonaId, setSelectedPersonaId] = useState(roleplayPersonas[0].id);
   const currentPersona = roleplayPersonas.find((p) => p.id === selectedPersonaId) || roleplayPersonas[0];
@@ -541,28 +590,43 @@ function RoleplaySection() {
     { sender: "ai", text: currentPersona.initialGreeting }
   ]);
   const [chatInput, setChatInput] = useState("");
+  const [isReplying, setIsReplying] = useState(false);
+  const [error, setError] = useState("");
+  const requestIdRef = useRef(0);
 
   const handleSwitchPersona = (p: RoleplayPersona) => {
+    requestIdRef.current += 1;
     setSelectedPersonaId(p.id);
     setMessages([{ sender: "ai", text: p.initialGreeting }]);
+    setIsReplying(false);
+    setError("");
   };
 
-  const handleSendChat = (textToSend?: string) => {
+  const handleSendChat = async (textToSend?: string) => {
     const content = textToSend || chatInput;
-    if (!content.trim()) return;
+    if (!content.trim() || isReplying) return;
     const nextMessages = [...messages, { sender: "user" as const, text: content }];
     setMessages(nextMessages);
     setChatInput("");
-
-    setTimeout(() => {
-      setMessages([
-        ...nextMessages,
-        {
-          sender: "ai",
-          text: `【${currentPersona.name} 反馈】你的回复切中了重点。从我的角度来看，这个思路很有启发性，但如果要在实际场景中推进，还需要进一步考虑执行细节。`
-        }
-      ]);
-    }, 500);
+    setIsReplying(true);
+    setError("");
+    const requestId = ++requestIdRef.current;
+    try {
+      const result = await requestAiAssistant<{ reply: string }>(courseId, {
+        mode: "roleplay",
+        personaId: currentPersona.id,
+        messages: nextMessages.slice(-16)
+      });
+      if (requestId === requestIdRef.current) {
+        setMessages((current) => [...current, { sender: "ai", text: result.reply }]);
+      }
+    } catch (requestError) {
+      if (requestId === requestIdRef.current) {
+        setError(requestError instanceof Error ? requestError.message : "角色演练回复失败，请重试");
+      }
+    } finally {
+      if (requestId === requestIdRef.current) setIsReplying(false);
+    }
   };
 
   return (
@@ -628,7 +692,7 @@ function RoleplaySection() {
                 <p className="text-xs text-slate-500">正在与 AI 模拟角色实时对话演练中...</p>
               </div>
             </div>
-            <Button variant="secondary" onClick={() => setMessages([{ sender: "ai", text: currentPersona.initialGreeting }])}>
+            <Button variant="secondary" onClick={() => handleSwitchPersona(currentPersona)}>
               重新开始
             </Button>
           </div>
@@ -658,17 +722,27 @@ function RoleplaySection() {
                 </div>
               </div>
             ))}
+            {isReplying && (
+              <div className="mr-auto flex max-w-[85%] gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm">{currentPersona.avatar}</span>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-xs text-slate-500">
+                  <RefreshCw className="mr-1 inline h-3.5 w-3.5 animate-spin" /> 正在结合你的回答追问...
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Suggested Quick Replies */}
           <div className="border-t border-slate-100 bg-slate-50/50 p-3">
+            {error && <p role="alert" className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
             <p className="text-[11px] text-slate-400 mb-2">推荐演练应答话术：</p>
             <div className="flex flex-wrap gap-2">
               {currentPersona.samplePrompts.map((p, idx) => (
                 <button
                   key={idx}
                   type="button"
-                  onClick={() => handleSendChat(p)}
+                  onClick={() => void handleSendChat(p)}
+                  disabled={isReplying}
                   className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] text-slate-600 hover:border-[var(--cx-blue)] hover:text-[var(--cx-blue)] transition truncate max-w-[280px]"
                 >
                   💬 {p}
@@ -683,11 +757,16 @@ function RoleplaySection() {
               type="text"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSendChat()}
-              placeholder={`输入您对 ${currentPersona.name} 的汇报或演练回答...`}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void handleSendChat();
+                }
+              }}
+              placeholder={`在《${courseTitle}》演练中输入您对 ${currentPersona.name} 的回答...`}
               className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-xs outline-none focus:border-[var(--cx-blue)] focus:ring-2 focus:ring-[var(--cx-blue)]/20"
             />
-            <Button onClick={() => handleSendChat()} disabled={!chatInput.trim()}>
+            <Button onClick={() => void handleSendChat()} disabled={isReplying || !chatInput.trim()}>
               <Send className="h-3.5 w-3.5 mr-1" />
               发送
             </Button>
